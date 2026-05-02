@@ -18,7 +18,7 @@ export function useRoutines(userId) {
   const addRoutine = useCallback(async (name, days) => {
     if (!userId) return;
     const id = genId();
-    await setDoc(doc(db, 'users', userId, 'routines', id), { name, days, completions: {} });
+    await setDoc(doc(db, 'users', userId, 'routines', id), { name, days, completions: {}, createdAt: todayStr() });
   }, [userId]);
 
   const updateRoutine = useCallback(async (id, name, days) => {
@@ -43,7 +43,7 @@ export function useRoutines(userId) {
 
   const forDate = useCallback((dateStr) => {
     const dow = getDOW(dateStr);
-    return routines.filter(r => r.days.includes(dow));
+    return routines.filter(r => r.days.includes(dow) && (!r.createdAt || r.createdAt <= dateStr));
   }, [routines]);
 
   const todayRoutines = useCallback(() => forDate(todayStr()), [forDate]);
