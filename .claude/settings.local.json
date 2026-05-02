@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node *)",
+      "Bash(osascript -e 'tell application \"Google Chrome\" to activate')",
+      "Bash(screencapture -x /tmp/momentum_chrome.png)",
+      "Bash(open -a \"Google Chrome\" http://localhost:5173)",
+      "Bash(screencapture -x /tmp/momentum_final.png)",
+      "Bash(osascript)",
+      "Bash(screencapture -x /tmp/snap.png)",
+      "Bash(screencapture -x /tmp/snap2.png)",
+      "Bash(npx vite *)"
+    ]
+  }
+}
