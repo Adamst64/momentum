@@ -1,20 +1,19 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { todayStr, getYM } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
-const KEY = 'momentum_tasks';
+export function useTasks(userId) {
+  const [tasks, setTasks] = useState([]);
 
-const load = () => {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
-};
-
-export function useTasks() {
-  const [tasks, setTasks] = useState(load);
-
-  const persist = useCallback((next) => {
-    localStorage.setItem(KEY, JSON.stringify(next));
-    setTasks(next);
-  }, []);
+  useEffect(() => {
+    if (!userId) { setTasks([]); return; }
+    const col = collection(db, 'users', userId, 'tasks');
+    return onSnapshot(col, snap => {
+      setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, [userId]);
 
   // ---------- queries ----------
 
@@ -46,9 +45,7 @@ export function useTasks() {
     const dom = new Date().getDate();
     return tasks.filter(t => {
       if (t.type === 'backlog') return !t.completedAt;
-      // one-time past due and not completed
       if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
-      // recurring-monthly: past dayOfMonth this month and not completed this month
       if (t.type === 'recurring-monthly' && t.dayOfMonth < dom && !t.completedOccurrences?.[ym]) return true;
       return false;
     });
@@ -94,52 +91,56 @@ export function useTasks() {
 
   // ---------- mutations ----------
 
-  const addTask = useCallback((data) => {
-    const base = { id: genId(), ...data };
+  const addTask = useCallback(async (data) => {
+    if (!userId) return;
+    const id = genId();
+    const base = { id, ...data };
     if (data.type === 'recurring-monthly') {
       base.completedOccurrences = {};
       base.notifiedMonths = [];
     }
     if (data.type === 'backlog') base.missedDot = false;
-    persist([...tasks, base]);
-  }, [tasks, persist]);
+    await setDoc(doc(db, 'users', userId, 'tasks', id), base);
+  }, [userId]);
 
-  const deleteTask = useCallback((id) => {
-    persist(tasks.filter(t => t.id !== id));
-  }, [tasks, persist]);
+  const deleteTask = useCallback(async (id) => {
+    if (!userId) return;
+    await deleteDoc(doc(db, 'users', userId, 'tasks', id));
+  }, [userId]);
 
-  const completeTask = useCallback((id) => {
+  const completeTask = useCallback(async (id) => {
+    if (!userId) return;
     const today = todayStr();
     const ym = getYM(today);
-    persist(tasks.map(t => {
-      if (t.id !== id) return t;
-      if (t.type === 'one-time') return { ...t, completed: true, completedAt: today };
-      if (t.type === 'recurring-monthly') {
-        return { ...t, completedOccurrences: { ...t.completedOccurrences, [ym]: today } };
-      }
-      // backlog
-      return { ...t, done: true, completedAt: today };
-    }));
-  }, [tasks, persist]);
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    let changes;
+    if (task.type === 'one-time') {
+      changes = { completed: true, completedAt: today };
+    } else if (task.type === 'recurring-monthly') {
+      changes = { completedOccurrences: { ...task.completedOccurrences, [ym]: today } };
+    } else {
+      changes = { done: true, completedAt: today };
+    }
+    await updateDoc(doc(db, 'users', userId, 'tasks', id), changes);
+  }, [userId, tasks]);
 
-  const rescheduleTask = useCallback((id, newDate) => {
-    persist(tasks.map(t => {
-      if (t.id !== id) return t;
-      return {
-        ...t,
-        type: 'one-time',
-        date: newDate,
-        completed: false,
-        completedAt: null,
-        missedDot: false,
-        done: false,
-      };
-    }));
-  }, [tasks, persist]);
+  const rescheduleTask = useCallback(async (id, newDate) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'tasks', id), {
+      type: 'one-time',
+      date: newDate,
+      completed: false,
+      completedAt: null,
+      missedDot: false,
+      done: false,
+    });
+  }, [userId]);
 
-  const updateTask = useCallback((id, changes) => {
-    persist(tasks.map(t => t.id === id ? { ...t, ...changes } : t));
-  }, [tasks, persist]);
+  const updateTask = useCallback(async (id, changes) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'tasks', id), changes);
+  }, [userId]);
 
   return {
     tasks,

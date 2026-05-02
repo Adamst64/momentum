@@ -1,47 +1,45 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { todayStr, getDOW } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
-const KEY = 'momentum_routines';
+export function useRoutines(userId) {
+  const [routines, setRoutines] = useState([]);
 
-const load = () => {
-  try { return JSON.parse(localStorage.getItem(KEY) || '[]'); } catch { return []; }
-};
+  useEffect(() => {
+    if (!userId) { setRoutines([]); return; }
+    const col = collection(db, 'users', userId, 'routines');
+    return onSnapshot(col, snap => {
+      setRoutines(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, [userId]);
 
-export function useRoutines() {
-  const [routines, setRoutines] = useState(load);
+  const addRoutine = useCallback(async (name, days) => {
+    if (!userId) return;
+    const id = genId();
+    await setDoc(doc(db, 'users', userId, 'routines', id), { name, days, completions: {} });
+  }, [userId]);
 
-  const persist = useCallback((next) => {
-    localStorage.setItem(KEY, JSON.stringify(next));
-    setRoutines(next);
-  }, []);
+  const updateRoutine = useCallback(async (id, name, days) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { name, days });
+  }, [userId]);
 
-  const addRoutine = useCallback((name, days) => {
-    persist([...routines, {
-      id: genId(),
-      name,
-      days,           // number[] 0-6
-      completions: {}, // { 'YYYY-MM-DD': true }
-    }]);
-  }, [routines, persist]);
+  const deleteRoutine = useCallback(async (id) => {
+    if (!userId) return;
+    await deleteDoc(doc(db, 'users', userId, 'routines', id));
+  }, [userId]);
 
-  const updateRoutine = useCallback((id, name, days) => {
-    persist(routines.map(r => r.id === id ? { ...r, name, days } : r));
-  }, [routines, persist]);
-
-  const deleteRoutine = useCallback((id) => {
-    persist(routines.filter(r => r.id !== id));
-  }, [routines, persist]);
-
-  const toggleDay = useCallback((id, dateStr = todayStr()) => {
-    persist(routines.map(r => {
-      if (r.id !== id) return r;
-      const c = { ...r.completions };
-      if (c[dateStr]) delete c[dateStr];
-      else c[dateStr] = true;
-      return { ...r, completions: c };
-    }));
-  }, [routines, persist]);
+  const toggleDay = useCallback(async (id, dateStr = todayStr()) => {
+    if (!userId) return;
+    const routine = routines.find(r => r.id === id);
+    if (!routine) return;
+    const completions = { ...routine.completions };
+    if (completions[dateStr]) delete completions[dateStr];
+    else completions[dateStr] = true;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
+  }, [userId, routines]);
 
   const forDate = useCallback((dateStr) => {
     const dow = getDOW(dateStr);
@@ -56,7 +54,6 @@ export function useRoutines() {
     return { total: list.length, done: list.filter(r => r.completions[today]).length };
   }, [todayRoutines]);
 
-  // null → no routines, 0–1 ratio
   const dayRatio = useCallback((dateStr) => {
     const list = forDate(dateStr);
     if (!list.length) return null;

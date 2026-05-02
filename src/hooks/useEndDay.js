@@ -1,22 +1,28 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import { toDateStr } from '../utils/dateUtils';
 
-const KEY = 'momentum_days_ended';
+export function useEndDay(userId) {
+  const [endedDays, setEndedDays] = useState({});
+  const endedDaysRef = useRef({});
 
-const load = () => {
-  try { return JSON.parse(localStorage.getItem(KEY) || '{}'); }
-  catch { return {}; }
-};
+  useEffect(() => {
+    if (!userId) { setEndedDays({}); endedDaysRef.current = {}; return; }
+    const ref = doc(db, 'users', userId, 'meta', 'endedDays');
+    return onSnapshot(ref, snap => {
+      const data = snap.exists() ? snap.data() : {};
+      endedDaysRef.current = data;
+      setEndedDays(data);
+    });
+  }, [userId]);
 
-export function useEndDay() {
-  const [endedDays, setEndedDays] = useState(load);
-  const endedDaysRef = useRef(endedDays);
-
-  const persist = useCallback((next) => {
+  const persist = useCallback(async (next) => {
+    if (!userId) return;
     endedDaysRef.current = next;
-    localStorage.setItem(KEY, JSON.stringify(next));
     setEndedDays(next);
-  }, []);
+    await setDoc(doc(db, 'users', userId, 'meta', 'endedDays'), next);
+  }, [userId]);
 
   const endDay = useCallback((dateStr) => {
     persist({ ...endedDaysRef.current, [dateStr]: true });
@@ -26,7 +32,7 @@ export function useEndDay() {
     return !!endedDays[dateStr];
   }, [endedDays]);
 
-  // Auto-end at 4am if not already ended manually
+  // Auto-end at 4am
   useEffect(() => {
     let timer;
     const schedule = () => {

@@ -4,6 +4,8 @@ import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import AllRoutinesTab from './components/routines/AllRoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
+import AuthScreen from './components/AuthScreen';
+import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
 import { useEndDay } from './hooks/useEndDay';
@@ -11,10 +13,26 @@ import { useEndDay } from './hooks/useEndDay';
 const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks' };
 
 export default function App() {
-  const [tab, setTab]  = useState('routines');
-  const routinesHook   = useRoutines();
-  const tasksHook      = useTasks();
-  const endDayHook     = useEndDay();
+  const { user, signIn, signUp, logOut } = useAuth();
+  const [tab, setTab] = useState('routines');
+
+  const userId = user?.uid ?? null;
+  const routinesHook = useRoutines(userId);
+  const tasksHook    = useTasks(userId);
+  const endDayHook   = useEndDay(userId);
+
+  // Still determining auth state
+  if (user === undefined) {
+    return (
+      <div style={{ background: T.bg, minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive }} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen onSignIn={signIn} onSignUp={signUp} />;
+  }
 
   return (
     <div style={{ background: T.bg, minHeight: '100dvh', maxWidth: 430, margin: '0 auto', position: 'relative' }}>
@@ -30,11 +48,22 @@ export default function App() {
             <span style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>Momentum</span>
             <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive, marginBottom: 2 }} />
           </div>
-          <div style={{
-            fontSize: 12, fontWeight: 600, color: T.khaki,
-            background: '#2A3A1A', padding: '4px 10px', borderRadius: 20,
-          }}>
-            {TAB_LABELS[tab]}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              fontSize: 12, fontWeight: 600, color: T.khaki,
+              background: '#2A3A1A', padding: '4px 10px', borderRadius: 20,
+            }}>
+              {TAB_LABELS[tab]}
+            </div>
+            <button
+              onClick={logOut}
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: T.muted, fontSize: 12, padding: '4px 0',
+              }}
+            >
+              Sign out
+            </button>
           </div>
         </div>
       </header>
