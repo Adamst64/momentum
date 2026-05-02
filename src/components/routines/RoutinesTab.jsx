@@ -12,10 +12,10 @@ export default function RoutinesTab({ hook, endDayHook }) {
   const { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay, todayStats, dayRatio, forDate } = hook;
   const { endDay, isDayEnded } = endDayHook;
 
-  const endedDayRatio = useCallback((dateStr) => {
-    if (!isDayEnded(dateStr)) return null;
+  const calendarDayRatio = useCallback((dateStr) => {
+    if (dateStr > todayStr()) return null;
     return dayRatio(dateStr);
-  }, [isDayEnded, dayRatio]);
+  }, [dayRatio]);
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -183,7 +183,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
           Monthly Overview
         </div>
-        <MonthlyCalendar dayRatio={endedDayRatio} onDayClick={setSelectedDay} />
+        <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} />
       </div>
 
       {/* End Day confirmation modal */}
