@@ -55,7 +55,8 @@ export function useRoutines(userId) {
   }, [todayRoutines]);
 
   const dayRatio = useCallback((dateStr) => {
-    const list = forDate(dateStr);
+    // Exclude routines created on this exact day so they don't appear as missed
+    const list = forDate(dateStr).filter(r => !r.createdAt || r.createdAt < dateStr);
     if (!list.length) return null;
     return list.filter(r => r.completions[dateStr]).length / list.length;
   }, [forDate]);

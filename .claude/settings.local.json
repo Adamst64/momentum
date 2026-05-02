@@ -10,7 +10,9 @@
       "Bash(screencapture -x /tmp/snap.png)",
       "Bash(screencapture -x /tmp/snap2.png)",
       "Bash(npx vite *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git push *)",
+      "Bash(npm install *)"
     ]
   }
 }
