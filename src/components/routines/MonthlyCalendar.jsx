@@ -3,7 +3,7 @@ import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, formatMonthYear, toDateStr, todayStr, parseDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
 
-export default function MonthlyCalendar({ dayRatio }) {
+export default function MonthlyCalendar({ dayRatio, onDayClick }) {
   const today     = todayStr();
   const todayDate = parseDate(today);
   const [year, setYear]   = useState(todayDate.getFullYear());
@@ -57,6 +57,7 @@ export default function MonthlyCalendar({ dayRatio }) {
           return (
             <div
               key={day}
+              onClick={() => onDayClick && onDayClick(dateStr)}
               style={{
                 aspectRatio: '1',
                 borderRadius: 7,
@@ -70,6 +71,7 @@ export default function MonthlyCalendar({ dayRatio }) {
                 justifyContent: 'center',
                 paddingTop: 3,
                 background: T.bg,
+                cursor: 'pointer',
               }}
             >
               {/* Water fill — rises from bottom */}

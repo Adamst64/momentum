@@ -4,6 +4,7 @@ import DonutChart from '../DonutChart';
 import RoutineItem from './RoutineItem';
 import CreateRoutineModal from './CreateRoutineModal';
 import MonthlyCalendar from './MonthlyCalendar';
+import DayDetailModal from './DayDetailModal';
 import Modal from '../Modal';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 
@@ -18,6 +19,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState(null);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(null);
 
   const today      = todayStr();
   const tomorrow   = addDays(today, 1);
@@ -181,7 +183,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
           Monthly Overview
         </div>
-        <MonthlyCalendar dayRatio={endedDayRatio} />
+        <MonthlyCalendar dayRatio={endedDayRatio} onDayClick={setSelectedDay} />
       </div>
 
       {/* End Day confirmation modal */}
@@ -216,6 +218,15 @@ export default function RoutinesTab({ hook, endDayHook }) {
             </button>
           </div>
         </Modal>
+      )}
+
+      {selectedDay && (
+        <DayDetailModal
+          dateStr={selectedDay}
+          forDate={forDate}
+          toggleDay={toggleDay}
+          onClose={() => setSelectedDay(null)}
+        />
       )}
 
       {(showCreate || editing) && (
