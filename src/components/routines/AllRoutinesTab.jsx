@@ -107,7 +107,7 @@ function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDel
 }
 
 export default function AllRoutinesTab({ hook }) {
-  const { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay } = hook;
+  const { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay, forDate } = hook;
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState(null);
 
@@ -124,7 +124,7 @@ export default function AllRoutinesTab({ hook }) {
         const dow         = getDOW(dateStr);
         const isToday     = dateStr === today;
         const isPast      = dateStr < today;
-        const dayRoutines = routines.filter(r => r.days.includes(dow));
+        const dayRoutines = forDate(dateStr);
         const doneCount   = dayRoutines.filter(r => r.completions[dateStr]).length;
 
         const dateLabel = parseDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
