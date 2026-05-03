@@ -19,6 +19,7 @@ export default function App() {
   const { user, signIn, signUp, logOut, changePassword } = useAuth();
   const [tab, setTab] = useState('routines');
   const [showSettings, setShowSettings] = useState(false);
+  const [showManageRoutines, setShowManageRoutines] = useState(false);
 
   const userId = user?.uid ?? null;
   const routinesHook  = useRoutines(userId);
@@ -64,11 +65,9 @@ export default function App() {
               onClick={() => setShowSettings(true)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                <path d="M4 6h16M4 12h16M4 18h16" stroke={T.muted} strokeWidth="1.8" strokeLinecap="round" />
-                <circle cx="8"  cy="6"  r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
-                <circle cx="16" cy="12" r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
-                <circle cx="10" cy="18" r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="3" stroke={T.green} strokeWidth="1.8" />
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" stroke={T.green} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </button>
           </div>
@@ -91,10 +90,42 @@ export default function App() {
             onChangePassword={changePassword}
             onSignOut={() => { logOut(); setShowSettings(false); }}
             onClose={() => setShowSettings(false)}
+            onManageRoutines={() => setShowManageRoutines(true)}
             routines={routinesHook.routines}
             tasks={tasksHook.tasks}
             shopping={shoppingHook.items}
           />
+        )}
+
+        {showManageRoutines && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 60,
+            background: T.bg,
+            display: 'flex', flexDirection: 'column',
+            maxWidth: 430, left: '50%', transform: 'translateX(-50%)',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 14,
+              padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
+              borderBottom: `1px solid ${T.cardBorder}`,
+              background: T.bg, flexShrink: 0,
+            }}>
+              <button
+                onClick={() => setShowManageRoutines(false)}
+                style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}
+              >
+                ←
+              </button>
+              <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Manage Routines</span>
+            </div>
+            <div style={{
+              flex: 1, overflowY: 'auto',
+              paddingTop: 16,
+              paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)`,
+            }}>
+              <AllRoutinesTab hook={routinesHook} />
+            </div>
+          </div>
         )}
       </main>
 

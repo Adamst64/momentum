@@ -13,20 +13,6 @@ const tabs = [
     ),
   },
   {
-    id: 'weekly',
-    label: 'Weekly',
-    icon: (on) => (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <rect x="3" y="5" width="18" height="16" rx="2" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
-        <path d="M3 10h18" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
-        <path d="M8 3v4M16 3v4" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
-        <rect x="6.5"  y="13" width="2" height="4" rx="1" fill={on ? T.khaki : T.muted} opacity="0.7" />
-        <rect x="11"   y="13" width="2" height="4" rx="1" fill={on ? T.khaki : T.muted} opacity="0.7" />
-        <rect x="15.5" y="13" width="2" height="4" rx="1" fill={on ? T.khaki : T.muted} opacity="0.7" />
-      </svg>
-    ),
-  },
-  {
     id: 'tasks',
     label: 'Tasks',
     icon: (on) => (

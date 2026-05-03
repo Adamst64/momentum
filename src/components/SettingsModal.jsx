@@ -5,7 +5,8 @@ import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shopping }) {
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, onManageRoutines, routines, tasks, shopping }) {
+  const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
   const [confirmPw, setConfirmPw]   = useState('');
@@ -95,80 +96,73 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
         style={{
           width: '100%', background: T.card,
           borderRadius: '20px 20px 0 0',
-          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          maxHeight: '85dvh', overflowY: 'auto',
-          display: 'flex', flexDirection: 'column', gap: 28,
+          padding: '20px 0 calc(20px + env(safe-area-inset-bottom))',
+          maxHeight: '88dvh', overflowY: 'auto',
         }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px 20px' }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Settings</span>
           <button onClick={onClose} style={{ color: T.muted, fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
 
-        {/* Change password */}
-        <div>
-          <SectionLabel>Account</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <PwInput placeholder="Current password" value={currentPw} onChange={setCurrentPw} />
-            <PwInput placeholder="New password"     value={newPw}     onChange={setNewPw} />
-            <PwInput placeholder="Confirm new password" value={confirmPw} onChange={setConfirmPw} />
-            {pwStatus && (
-              <div style={{ fontSize: 13, color: pwStatus.ok ? T.green : T.red, paddingLeft: 2 }}>{pwStatus.msg}</div>
-            )}
-            <button
-              onClick={handleChangePassword}
-              disabled={pwLoading || !currentPw || !newPw || !confirmPw}
-              style={{
-                padding: 12, borderRadius: 10,
-                background: (currentPw && newPw && confirmPw) ? T.olive : T.subtle,
-                color: '#fff', fontSize: 14, fontWeight: 600,
-                transition: 'background 0.15s',
-              }}
-            >
-              {pwLoading ? 'Updating…' : 'Update Password'}
-            </button>
-          </div>
-        </div>
+        {/* Routines group */}
+        <Group>
+          <Row label="Manage Routines" onTap={() => { onClose(); onManageRoutines(); }} arrow />
+        </Group>
 
-        {/* Export / Import */}
-        <div>
-          <SectionLabel>Data</SectionLabel>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <button
-              onClick={handleExport}
-              style={{
-                padding: '13px 14px', borderRadius: 10, textAlign: 'left',
-                border: `1px solid ${T.cardBorder}`,
-                color: T.text, fontSize: 14, fontWeight: 500, background: 'transparent',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-              }}
-            >
-              <span>Export as JSON</span>
-              <span style={{ color: T.muted, fontSize: 12 }}>
-                {routines.length}r · {tasks.length}t · {shopping.length}s
-              </span>
-            </button>
-
-            <input ref={fileRef} type="file" accept=".json" onChange={handleFileSelect} style={{ display: 'none' }} />
-
-            {!importConfirm ? (
+        {/* Account group */}
+        <Group>
+          <Row
+            label="Change Password"
+            onTap={() => { setPwOpen(o => !o); setPwStatus(null); }}
+            arrow
+            arrowOpen={pwOpen}
+          />
+          {pwOpen && (
+            <div style={{ padding: '12px 16px 4px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <PwInput placeholder="Current password" value={currentPw} onChange={setCurrentPw} />
+              <PwInput placeholder="New password"     value={newPw}     onChange={setNewPw} />
+              <PwInput placeholder="Confirm new password" value={confirmPw} onChange={setConfirmPw} />
+              {pwStatus && (
+                <div style={{ fontSize: 13, color: pwStatus.ok ? T.green : T.red, paddingLeft: 2 }}>{pwStatus.msg}</div>
+              )}
               <button
-                onClick={() => fileRef.current?.click()}
+                onClick={handleChangePassword}
+                disabled={pwLoading || !currentPw || !newPw || !confirmPw}
                 style={{
-                  padding: '13px 14px', borderRadius: 10, textAlign: 'left',
-                  border: `1px solid ${T.cardBorder}`,
-                  color: T.text, fontSize: 14, fontWeight: 500, background: 'transparent',
+                  padding: 12, borderRadius: 10, marginTop: 2,
+                  background: (currentPw && newPw && confirmPw) ? T.olive : T.subtle,
+                  color: '#fff', fontSize: 14, fontWeight: 600,
+                  transition: 'background 0.15s',
                 }}
               >
-                Import from JSON
+                {pwLoading ? 'Updating…' : 'Update Password'}
               </button>
-            ) : (
-              <div style={{ padding: 12, borderRadius: 10, border: `1px solid ${T.red}55`, background: `${T.red}11` }}>
+            </div>
+          )}
+        </Group>
+
+        {/* Data group */}
+        <Group>
+          <Row
+            label="Export as JSON"
+            detail={`${routines.length}r · ${tasks.length}t · ${shopping.length}s`}
+            onTap={handleExport}
+          />
+          <Row label="Import from JSON" onTap={() => fileRef.current?.click()} />
+          <input ref={fileRef} type="file" accept=".json" onChange={handleFileSelect} style={{ display: 'none' }} />
+
+          {importConfirm && (
+            <div style={{ padding: '0 16px 12px' }}>
+              <div style={{
+                padding: 12, borderRadius: 10,
+                border: `1px solid ${T.red}55`, background: `${T.red}11`,
+              }}>
                 <div style={{ fontSize: 13, color: T.muted, marginBottom: 12 }}>
-                  Replace all current data with:
-                  <span style={{ color: T.text, marginLeft: 6 }}>
-                    {importConfirm.routines?.length || 0} routines · {importConfirm.tasks?.length || 0} tasks · {importConfirm.shopping?.length || 0} shopping items
+                  Replace all current data with:{' '}
+                  <span style={{ color: T.text }}>
+                    {importConfirm.routines?.length || 0}r · {importConfirm.tasks?.length || 0}t · {importConfirm.shopping?.length || 0}s
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -187,36 +181,72 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
                   </button>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
-            {importStatus && (
-              <div style={{ fontSize: 13, color: importStatus.ok ? T.green : T.red, paddingLeft: 2 }}>{importStatus.msg}</div>
-            )}
-          </div>
-        </div>
+          {importStatus && (
+            <div style={{ padding: '0 16px 8px', fontSize: 13, color: importStatus.ok ? T.green : T.red }}>{importStatus.msg}</div>
+          )}
+        </Group>
 
         {/* Sign out */}
-        <button
-          onClick={onSignOut}
-          style={{
-            padding: 13, borderRadius: 12,
-            border: `1px solid ${T.cardBorder}`,
-            color: T.red, fontSize: 15, fontWeight: 500, background: 'transparent',
-          }}
-        >
-          Sign Out
-        </button>
+        <div style={{ padding: '0 16px' }}>
+          <button
+            onClick={onSignOut}
+            style={{
+              width: '100%', padding: 13, borderRadius: 12,
+              border: `1px solid ${T.cardBorder}`,
+              color: T.red, fontSize: 15, fontWeight: 500, background: 'transparent',
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
       </div>
     </div>,
     document.body
   );
 }
 
-function SectionLabel({ children }) {
+function Group({ children }) {
   return (
-    <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+    <div style={{
+      margin: '0 16px 12px',
+      background: '#252527',
+      borderRadius: 12,
+      overflow: 'hidden',
+      border: `1px solid ${T.cardBorder}`,
+    }}>
       {children}
     </div>
+  );
+}
+
+function Row({ label, detail, onTap, arrow, arrowOpen }) {
+  return (
+    <button
+      onClick={onTap}
+      style={{
+        width: '100%', padding: '14px 16px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: `1px solid ${T.cardBorder}`,
+        color: T.text, fontSize: 15, background: 'transparent',
+        textAlign: 'left',
+      }}
+    >
+      <span>{label}</span>
+      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {detail && <span style={{ fontSize: 12, color: T.muted }}>{detail}</span>}
+        {arrow && (
+          <span style={{
+            color: T.muted, fontSize: 16,
+            transform: arrowOpen ? 'rotate(90deg)' : 'none',
+            transition: 'transform 0.2s',
+            display: 'inline-block',
+          }}>›</span>
+        )}
+      </span>
+    </button>
   );
 }
 
