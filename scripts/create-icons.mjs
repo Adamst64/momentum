@@ -26,7 +26,6 @@ function pngChunk(type, data) {
   return Buffer.concat([len, t, data, crcBuf]);
 }
 
-// Blend two RGB colors by alpha [0..1]
 function blend(a, b, alpha) {
   return [
     Math.round(a[0] * (1 - alpha) + b[0] * alpha),
@@ -35,9 +34,16 @@ function blend(a, b, alpha) {
   ];
 }
 
-// Anti-aliased circle coverage: returns 0..1
 function circleCoverage(dist, r, feather = 1.2) {
   return Math.max(0, Math.min(1, (r + feather - dist) / (2 * feather)));
+}
+
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2);
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lenSq));
+  return Math.sqrt((px - (x1 + t * dx)) ** 2 + (py - (y1 + t * dy)) ** 2);
 }
 
 function createPNG(size) {
@@ -47,15 +53,22 @@ function createPNG(size) {
 
   const cx = size / 2, cy = size / 2;
 
-  // Ring: olive annulus
+  // Olive ring (annulus)
   const outerR = size * 0.43;
   const innerR = size * 0.27;
 
-  // Khaki marker dot: centred on the ring at the top
+  // Khaki marker dot at top of ring
   const ringMid  = (outerR + innerR) / 2;
   const markerCx = cx;
   const markerCy = cy - ringMid;
   const markerR  = size * 0.085;
+
+  // Khaki checkmark inside the center circle
+  // Two segments: left-leg A→B, right-leg B→C
+  const ckAx = cx - size * 0.10, ckAy = cy + size * 0.02;
+  const ckBx = cx - size * 0.01, ckBy = cy + size * 0.11;
+  const ckCx = cx + size * 0.14, ckCy = cy - size * 0.08;
+  const ckStroke = size * 0.055;
 
   const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
   const ihdrData = Buffer.alloc(13);
@@ -72,26 +85,28 @@ function createPNG(size) {
     for (let x = 0; x < size; x++) {
       const i = y * rowSize + 1 + x * 3;
 
-      const dx   = x - cx,        dy   = y - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist  = Math.sqrt((x - cx) ** 2 + (y - cy) ** 2);
+      const mdist = Math.sqrt((x - markerCx) ** 2 + (y - markerCy) ** 2);
 
-      const mdx   = x - markerCx, mdy   = y - markerCy;
-      const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-
-      // Layer bottom-up, blending with anti-aliasing
-
-      // Start with bg
       let color = bg;
 
       // Olive ring
-      const outerA = circleCoverage(dist, outerR);
-      const innerA = circleCoverage(dist, innerR);
-      const ringA  = outerA * (1 - innerA);
+      const ringA = circleCoverage(dist, outerR) * (1 - circleCoverage(dist, innerR));
       if (ringA > 0) color = blend(color, olive, ringA);
 
-      // Khaki marker dot (renders on top of ring)
+      // Khaki marker dot (top of ring)
       const dotA = circleCoverage(mdist, markerR);
       if (dotA > 0) color = blend(color, khaki, dotA);
+
+      // Khaki checkmark (only inside the center circle)
+      if (dist < innerR + 2) {
+        const ckDist = Math.min(
+          distToSegment(x, y, ckAx, ckAy, ckBx, ckBy),
+          distToSegment(x, y, ckBx, ckBy, ckCx, ckCy),
+        );
+        const ckA = circleCoverage(ckDist, ckStroke / 2, 0.9);
+        if (ckA > 0) color = blend(color, khaki, ckA);
+      }
 
       raw[i] = color[0]; raw[i + 1] = color[1]; raw[i + 2] = color[2];
     }
