@@ -5,6 +5,7 @@ import RoutinesTab from './components/routines/RoutinesTab';
 import AllRoutinesTab from './components/routines/AllRoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
+import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
@@ -15,8 +16,9 @@ import { useShoppingList } from './hooks/useShoppingList';
 const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping' };
 
 export default function App() {
-  const { user, signIn, signUp, logOut } = useAuth();
+  const { user, signIn, signUp, logOut, changePassword } = useAuth();
   const [tab, setTab] = useState('routines');
+  const [showSettings, setShowSettings] = useState(false);
 
   const userId = user?.uid ?? null;
   const routinesHook  = useRoutines(userId);
@@ -59,13 +61,15 @@ export default function App() {
               {TAB_LABELS[tab]}
             </div>
             <button
-              onClick={logOut}
-              style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                color: T.muted, fontSize: 12, padding: '4px 0',
-              }}
+              onClick={() => setShowSettings(true)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
             >
-              Sign out
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <path d="M4 6h16M4 12h16M4 18h16" stroke={T.muted} strokeWidth="1.8" strokeLinecap="round" />
+                <circle cx="8"  cy="6"  r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
+                <circle cx="16" cy="12" r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
+                <circle cx="10" cy="18" r="2" fill={T.bg} stroke={T.muted} strokeWidth="1.8" />
+              </svg>
             </button>
           </div>
         </div>
@@ -80,6 +84,18 @@ export default function App() {
         {tab === 'weekly'    && <AllRoutinesTab hook={routinesHook} />}
         {tab === 'tasks'     && <TasksTab       hook={tasksHook} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} />}
+
+        {showSettings && (
+          <SettingsModal
+            user={user}
+            onChangePassword={changePassword}
+            onSignOut={() => { logOut(); setShowSettings(false); }}
+            onClose={() => setShowSettings(false)}
+            routines={routinesHook.routines}
+            tasks={tasksHook.tasks}
+            shopping={shoppingHook.items}
+          />
+        )}
       </main>
 
       <BottomNav active={tab} onChange={setTab} />
