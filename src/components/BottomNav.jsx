@@ -37,6 +37,18 @@ const tabs = [
       </svg>
     ),
   },
+  {
+    id: 'shopping',
+    label: 'Shopping',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M6 2H3" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
+        <path d="M3 2l2.5 10.5A2 2 0 007.46 14H17.5a2 2 0 001.96-1.6L21 6H6" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx="9" cy="19" r="1.5" fill={on ? T.khaki : T.muted} />
+        <circle cx="17" cy="19" r="1.5" fill={on ? T.khaki : T.muted} />
+      </svg>
+    ),
+  },
 ];
 
 export default function BottomNav({ active, onChange }) {

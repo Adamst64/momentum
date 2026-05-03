@@ -4,22 +4,25 @@ import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import AllRoutinesTab from './components/routines/AllRoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
+import ShoppingTab from './components/shopping/ShoppingTab';
 import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
 import { useEndDay } from './hooks/useEndDay';
+import { useShoppingList } from './hooks/useShoppingList';
 
-const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks' };
+const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping' };
 
 export default function App() {
   const { user, signIn, signUp, logOut } = useAuth();
   const [tab, setTab] = useState('routines');
 
   const userId = user?.uid ?? null;
-  const routinesHook = useRoutines(userId);
-  const tasksHook    = useTasks(userId);
-  const endDayHook   = useEndDay(userId);
+  const routinesHook  = useRoutines(userId);
+  const tasksHook     = useTasks(userId);
+  const endDayHook    = useEndDay(userId);
+  const shoppingHook  = useShoppingList(userId);
 
   // Still determining auth state
   if (user === undefined) {
@@ -73,9 +76,10 @@ export default function App() {
         paddingBottom: `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
         overflowY: 'auto',
       }}>
-        {tab === 'routines' && <RoutinesTab    hook={routinesHook} endDayHook={endDayHook} />}
-        {tab === 'weekly'   && <AllRoutinesTab hook={routinesHook} />}
-        {tab === 'tasks'    && <TasksTab       hook={tasksHook} />}
+        {tab === 'routines'  && <RoutinesTab    hook={routinesHook} endDayHook={endDayHook} />}
+        {tab === 'weekly'    && <AllRoutinesTab hook={routinesHook} />}
+        {tab === 'tasks'     && <TasksTab       hook={tasksHook} />}
+        {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} />}
       </main>
 
       <BottomNav active={tab} onChange={setTab} />
