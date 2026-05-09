@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
 
-export default function RoutineItem({ routine, onToggle, onEdit, onDelete, onShowCalendar }) {
+export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete, onShowCalendar }) {
   const [expanded, setExpanded] = useState(false);
   const today          = todayStr();
   const done           = !!routine.completions[today];
@@ -84,7 +84,7 @@ export default function RoutineItem({ routine, onToggle, onEdit, onDelete, onSho
             Edit
           </button>
           <button
-            onClick={() => { onDelete(routine.id); setExpanded(false); }}
+            onClick={() => { onRequestDelete(routine); setExpanded(false); }}
             style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, background: '#3A1C1C', color: T.red }}
           >
             Delete

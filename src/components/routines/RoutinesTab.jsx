@@ -7,11 +7,17 @@ import MonthlyCalendar from './MonthlyCalendar';
 import DayDetailModal from './DayDetailModal';
 import AllRoutinesTab from './AllRoutinesTab';
 import RoutineCalendarModal from './RoutineCalendarModal';
+import DeleteRoutineSheet from './DeleteRoutineSheet';
+import UndoToast from '../UndoToast';
 import Modal from '../Modal';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 
 export default function RoutinesTab({ hook, endDayHook }) {
-  const { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay, todayStats, dayRatio, forDate } = hook;
+  const {
+    routines, addRoutine, updateRoutine,
+    deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
+    toggleDay, todayStats, dayRatio, forDate,
+  } = hook;
   const { endDay, isDayEnded } = endDayHook;
 
   const calendarDayRatio = useCallback((dateStr) => {
@@ -19,29 +25,52 @@ export default function RoutinesTab({ hook, endDayHook }) {
     return dayRatio(dateStr);
   }, [dayRatio]);
 
-  const [showCreate, setShowCreate]         = useState(false);
-  const [editing, setEditing]               = useState(null);
-  const [showConfirm, setShowConfirm]       = useState(false);
-  const [selectedDay, setSelectedDay]       = useState(null);
+  const [showCreate, setShowCreate]           = useState(false);
+  const [editing, setEditing]                 = useState(null);
+  const [showConfirm, setShowConfirm]         = useState(false);
+  const [selectedDay, setSelectedDay]         = useState(null);
   const [showAllRoutines, setShowAllRoutines] = useState(false);
   const [calendarRoutine, setCalendarRoutine] = useState(null);
+  const [pendingDelete, setPendingDelete]     = useState(null);
+  const [undoState, setUndoState]             = useState(null);
 
-  const today          = todayStr();
-  const tomorrow       = addDays(today, 1);
-  const dayEnded       = isDayEnded(today);
-  const stats          = todayStats();
-  const dow            = getDOW(today);
+  const today    = todayStr();
+  const tomorrow = addDays(today, 1);
+  const dayEnded = isDayEnded(today);
+  const stats    = todayStats();
+  const dow      = getDOW(today);
 
   const sorted = [...routines]
-    .filter(r => r.days.includes(dow))
+    .filter(r => !r.archived && r.days.includes(dow))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const tomorrowRoutines = forDate(tomorrow)
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const handleEndDay = () => {
-    endDay(today);
-    setShowConfirm(false);
+  const handleEndDay = () => { endDay(today); setShowConfirm(false); };
+
+  const handleRequestDelete = (routine) => setPendingDelete(routine);
+
+  const handleConfirmDelete = async (keepHistory) => {
+    const routine = pendingDelete;
+    setPendingDelete(null);
+    if (keepHistory) {
+      await archiveRoutine(routine.id);
+      setUndoState({ type: 'archived', routine });
+    } else {
+      await deleteRoutine(routine.id);
+      setUndoState({ type: 'deleted', routine });
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoState) return;
+    if (undoState.type === 'archived') {
+      await unarchiveRoutine(undoState.routine.id);
+    } else {
+      await restoreDeletedRoutine(undoState.routine);
+    }
+    setUndoState(null);
   };
 
   return (
@@ -64,21 +93,6 @@ export default function RoutinesTab({ hook, endDayHook }) {
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatLongDate(today)}</div>
         </div>
       </div>
-
-      {/* All Routines nav row */}
-      <button
-        type="button"
-        onClick={() => setShowAllRoutines(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '13px 16px', borderRadius: 12,
-          background: T.card, border: `1px solid ${T.cardBorder}`,
-          color: T.text, fontSize: 14, fontWeight: 500,
-        }}
-      >
-        <span>All Routines</span>
-        <span style={{ color: T.muted, fontSize: 18 }}>›</span>
-      </button>
 
       {!dayEnded ? (
         <>
@@ -107,7 +121,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
                     routine={r}
                     onToggle={id => toggleDay(id, today)}
                     onEdit={setEditing}
-                    onDelete={deleteRoutine}
+                    onRequestDelete={handleRequestDelete}
                     onShowCalendar={setCalendarRoutine}
                   />
                 ))}
@@ -115,7 +129,22 @@ export default function RoutinesTab({ hook, endDayHook }) {
             )}
           </div>
 
-          {/* Add routine button */}
+          {/* All Routines nav — below today's list */}
+          <button
+            type="button"
+            onClick={() => setShowAllRoutines(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '13px 16px', borderRadius: 12,
+              background: T.card, border: `1px solid ${T.cardBorder}`,
+              color: T.text, fontSize: 14, fontWeight: 500,
+            }}
+          >
+            <span>All Routines</span>
+            <span style={{ color: T.muted, fontSize: 18 }}>›</span>
+          </button>
+
+          {/* Add routine */}
           <button
             type="button"
             onClick={() => setShowCreate(true)}
@@ -129,7 +158,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
             <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Routine
           </button>
 
-          {/* End Day button */}
+          {/* End Day */}
           <button
             type="button"
             onClick={() => setShowConfirm(true)}
@@ -156,16 +185,14 @@ export default function RoutinesTab({ hook, endDayHook }) {
               background: T.olive + '30',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 15, color: T.oliveLight, flexShrink: 0,
-            }}>
-              ✓
-            </div>
+            }}>✓</div>
             <div>
               <div style={{ fontSize: 14, fontWeight: 600, color: T.oliveLight }}>Day complete</div>
               <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>Progress saved to monthly calendar</div>
             </div>
           </div>
 
-          {/* Tomorrow's routines preview */}
+          {/* Tomorrow preview */}
           <div>
             <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
               Tomorrow — {formatLongDate(tomorrow)}
@@ -193,6 +220,21 @@ export default function RoutinesTab({ hook, endDayHook }) {
               </div>
             )}
           </div>
+
+          {/* All Routines nav — also available when day ended */}
+          <button
+            type="button"
+            onClick={() => setShowAllRoutines(true)}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '13px 16px', borderRadius: 12,
+              background: T.card, border: `1px solid ${T.cardBorder}`,
+              color: T.text, fontSize: 14, fontWeight: 500,
+            }}
+          >
+            <span>All Routines</span>
+            <span style={{ color: T.muted, fontSize: 18 }}>›</span>
+          </button>
         </>
       )}
 
@@ -204,7 +246,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
         <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
       </div>
 
-      {/* All Routines full-screen overlay */}
+      {/* All Routines overlay */}
       {showAllRoutines && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
           <div style={{
@@ -212,12 +254,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
             padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
             borderBottom: `1px solid ${T.cardBorder}`,
           }}>
-            <button
-              onClick={() => setShowAllRoutines(false)}
-              style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}
-            >
-              ←
-            </button>
+            <button onClick={() => setShowAllRoutines(false)} style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
             <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>All Routines</span>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', paddingTop: 16, paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)` }}>
@@ -233,18 +270,10 @@ export default function RoutinesTab({ hook, endDayHook }) {
             This will close out today and show tomorrow's routines. Your progress is already saved.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <button
-              type="button"
-              onClick={handleEndDay}
-              style={{ padding: '14px 20px', borderRadius: 14, background: T.olive, color: '#fff', fontSize: 16, fontWeight: 600 }}
-            >
+            <button type="button" onClick={handleEndDay} style={{ padding: '14px 20px', borderRadius: 14, background: T.olive, color: '#fff', fontSize: 16, fontWeight: 600 }}>
               End Day
             </button>
-            <button
-              type="button"
-              onClick={() => setShowConfirm(false)}
-              style={{ padding: '14px 20px', borderRadius: 14, background: 'transparent', border: `1.5px solid ${T.cardBorder}`, color: T.muted, fontSize: 15 }}
-            >
+            <button type="button" onClick={() => setShowConfirm(false)} style={{ padding: '14px 20px', borderRadius: 14, background: 'transparent', border: `1.5px solid ${T.cardBorder}`, color: T.muted, fontSize: 15 }}>
               Cancel
             </button>
           </div>
@@ -252,11 +281,23 @@ export default function RoutinesTab({ hook, endDayHook }) {
       )}
 
       {selectedDay && (
-        <DayDetailModal
-          dateStr={selectedDay}
-          forDate={forDate}
-          toggleDay={toggleDay}
-          onClose={() => setSelectedDay(null)}
+        <DayDetailModal dateStr={selectedDay} forDate={forDate} toggleDay={toggleDay} onClose={() => setSelectedDay(null)} />
+      )}
+
+      {pendingDelete && (
+        <DeleteRoutineSheet
+          routine={pendingDelete}
+          onKeepHistory={() => handleConfirmDelete(true)}
+          onDeleteAll={() => handleConfirmDelete(false)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {undoState && (
+        <UndoToast
+          message={undoState.type === 'archived' ? `"${undoState.routine.name}" removed` : `"${undoState.routine.name}" deleted`}
+          onUndo={handleUndo}
+          onDismiss={() => setUndoState(null)}
         />
       )}
 

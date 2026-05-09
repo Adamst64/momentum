@@ -4,8 +4,6 @@ import { db } from '../firebase';
 import { todayStr, getDOW } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
-// Returns the applicable scheduled days for a routine on a given date,
-// accounting for schedule history (edits don't retroactively change past days).
 export function getScheduleForDate(routine, dateStr) {
   const history = routine.scheduleHistory;
   if (!history || !history.length) return routine.days;
@@ -40,25 +38,40 @@ export function useRoutines(userId) {
     if (!userId) return;
     const routine = routines.find(r => r.id === id);
     const update  = { name, days };
-
     if (routine) {
-      const prevDays     = routine.days || [];
-      const daysChanged  = days.length !== prevDays.length || !days.every(d => prevDays.includes(d));
+      const prevDays    = routine.days || [];
+      const daysChanged = days.length !== prevDays.length || !days.every(d => prevDays.includes(d));
       if (daysChanged) {
-        const today   = todayStr();
+        const today    = todayStr();
         const existing = routine.scheduleHistory || [{ days: prevDays, from: routine.createdAt || today }];
-        // Replace any existing entry from today (avoid duplicates from same-day edits)
         const filtered = existing.filter(h => h.from !== today);
         update.scheduleHistory = [...filtered, { days, from: today }];
       }
     }
-
     await updateDoc(doc(db, 'users', userId, 'routines', id), update);
   }, [userId, routines]);
 
   const deleteRoutine = useCallback(async (id) => {
     if (!userId) return;
     await deleteDoc(doc(db, 'users', userId, 'routines', id));
+  }, [userId]);
+
+  // Soft-delete: hides from active views but keeps completion history in monthly calendar
+  const archiveRoutine = useCallback(async (id) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { archived: true });
+  }, [userId]);
+
+  const unarchiveRoutine = useCallback(async (id) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { archived: false });
+  }, [userId]);
+
+  // Restores a previously deleted routine document (for undo)
+  const restoreDeletedRoutine = useCallback(async (routine) => {
+    if (!userId) return;
+    const { id, ...data } = routine;
+    await setDoc(doc(db, 'users', userId, 'routines', id), data);
   }, [userId]);
 
   const toggleDay = useCallback(async (id, dateStr = todayStr()) => {
@@ -71,8 +84,10 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
+  // Active views: exclude archived routines
   const forDate = useCallback((dateStr) => {
     return routines.filter(r => {
+      if (r.archived) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
@@ -86,11 +101,19 @@ export function useRoutines(userId) {
     return { total: list.length, done: list.filter(r => r.completions[today]).length };
   }, [todayRoutines]);
 
+  // Day ratio includes archived routines so historical calendar stays accurate
   const dayRatio = useCallback((dateStr) => {
-    const list = forDate(dateStr).filter(r => !r.createdAt || r.createdAt < dateStr);
+    const list = routines.filter(r => {
+      if (r.createdAt && r.createdAt >= dateStr) return false;
+      return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
+    });
     if (!list.length) return null;
-    return list.filter(r => r.completions[dateStr]).length / list.length;
-  }, [forDate]);
+    return list.filter(r => r.completions?.[dateStr]).length / list.length;
+  }, [routines]);
 
-  return { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay, forDate, todayRoutines, todayStats, dayRatio };
+  return {
+    routines, addRoutine, updateRoutine,
+    deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
+    toggleDay, forDate, todayRoutines, todayStats, dayRatio,
+  };
 }

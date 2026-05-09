@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import CreateRoutineModal from './CreateRoutineModal';
 import RoutineCalendarModal from './RoutineCalendarModal';
+import DeleteRoutineSheet from './DeleteRoutineSheet';
+import UndoToast from '../UndoToast';
 import { DAYS_SHORT } from '../../utils/dateUtils';
 
-function RoutineListRow({ routine, onShowCalendar, onEdit, onDelete }) {
+function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
   const [showMenu, setShowMenu] = useState(false);
 
   return (
@@ -15,9 +17,7 @@ function RoutineListRow({ routine, onShowCalendar, onEdit, onDelete }) {
         display: 'flex', alignItems: 'center', gap: 12,
       }}>
         <div style={{ flex: 1, minWidth: 0 }} onClick={() => onShowCalendar(routine)}>
-          <div style={{ fontSize: 15, fontWeight: 500, color: T.text }}>
-            {routine.name}
-          </div>
+          <div style={{ fontSize: 15, fontWeight: 500, color: T.text }}>{routine.name}</div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
             {DAYS_SHORT.map((label, i) => (
               <span key={i} style={{
@@ -55,7 +55,7 @@ function RoutineListRow({ routine, onShowCalendar, onEdit, onDelete }) {
           </button>
           <button
             type="button"
-            onClick={() => { onDelete(); setShowMenu(false); }}
+            onClick={() => { onRequestDelete(routine); setShowMenu(false); }}
             style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red }}
           >
             Delete
@@ -67,12 +67,36 @@ function RoutineListRow({ routine, onShowCalendar, onEdit, onDelete }) {
 }
 
 export default function AllRoutinesTab({ hook }) {
-  const { routines, addRoutine, updateRoutine, deleteRoutine } = hook;
+  const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine } = hook;
   const [showCreate, setShowCreate]    = useState(false);
   const [editing, setEditing]          = useState(null);
   const [calendarRoutine, setCalendar] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [undoState, setUndoState]        = useState(null);
 
-  const sorted = [...routines].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...routines].filter(r => !r.archived).sort((a, b) => a.name.localeCompare(b.name));
+
+  const handleConfirmDelete = async (keepHistory) => {
+    const routine = pendingDelete;
+    setPendingDelete(null);
+    if (keepHistory) {
+      await archiveRoutine(routine.id);
+      setUndoState({ type: 'archived', routine });
+    } else {
+      await deleteRoutine(routine.id);
+      setUndoState({ type: 'deleted', routine });
+    }
+  };
+
+  const handleUndo = async () => {
+    if (!undoState) return;
+    if (undoState.type === 'archived') {
+      await unarchiveRoutine(undoState.routine.id);
+    } else {
+      await restoreDeletedRoutine(undoState.routine);
+    }
+    setUndoState(null);
+  };
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -91,8 +115,8 @@ export default function AllRoutinesTab({ hook }) {
           key={r.id}
           routine={r}
           onShowCalendar={setCalendar}
+          onRequestDelete={setPendingDelete}
           onEdit={() => setEditing(r)}
-          onDelete={() => deleteRoutine(r.id)}
         />
       ))}
 
@@ -122,6 +146,23 @@ export default function AllRoutinesTab({ hook }) {
 
       {calendarRoutine && (
         <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendar(null)} />
+      )}
+
+      {pendingDelete && (
+        <DeleteRoutineSheet
+          routine={pendingDelete}
+          onKeepHistory={() => handleConfirmDelete(true)}
+          onDeleteAll={() => handleConfirmDelete(false)}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
+
+      {undoState && (
+        <UndoToast
+          message={undoState.type === 'archived' ? `"${undoState.routine.name}" removed` : `"${undoState.routine.name}" deleted`}
+          onUndo={handleUndo}
+          onDismiss={() => setUndoState(null)}
+        />
       )}
     </div>
   );
