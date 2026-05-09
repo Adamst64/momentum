@@ -1,9 +1,22 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
+
+const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const h = i % 12 || 12;
+  const ampm = i < 12 ? 'AM' : 'PM';
+  return { value: i, label: `${h}:00 ${ampm}` };
+});
+
+function utcToLocal(utcH) {
+  return (utcH - Math.round(new Date().getTimezoneOffset() / 60) + 24) % 24;
+}
+function localToUtc(localH) {
+  return (localH + Math.round(new Date().getTimezoneOffset() / 60) + 24) % 24;
+}
 
 export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, onManageRoutines, routines, tasks, shopping }) {
   const [pwOpen, setPwOpen]         = useState(false);
@@ -12,6 +25,22 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
   const [confirmPw, setConfirmPw]   = useState('');
   const [pwStatus, setPwStatus]     = useState(null);
   const [pwLoading, setPwLoading]   = useState(false);
+
+  const [notifyHour, setNotifyHour] = useState(9); // local hour
+
+  useEffect(() => {
+    if (!user) return;
+    getDoc(doc(db, 'users', user.uid)).then(snap => {
+      if (snap.exists() && snap.data().notifyHourUTC !== undefined) {
+        setNotifyHour(utcToLocal(snap.data().notifyHourUTC));
+      }
+    });
+  }, [user]);
+
+  const handleNotifyHourChange = async (localH) => {
+    setNotifyHour(localH);
+    await setDoc(doc(db, 'users', user.uid), { notifyHourUTC: localToUtc(localH) }, { merge: true });
+  };
 
   const [importConfirm, setImportConfirm] = useState(null);
   const [importStatus, setImportStatus]   = useState(null);
@@ -109,6 +138,31 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
         {/* Routines group */}
         <Group>
           <Row label="Manage Routines" onTap={() => { onClose(); onManageRoutines(); }} arrow />
+        </Group>
+
+        {/* Notifications group */}
+        <Group>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            padding: '14px 16px',
+            borderBottom: `1px solid ${T.cardBorder}`,
+          }}>
+            <span style={{ fontSize: 15, color: T.text }}>Birthday Reminder Time</span>
+            <select
+              value={notifyHour}
+              onChange={e => handleNotifyHourChange(Number(e.target.value))}
+              style={{
+                padding: '6px 10px', borderRadius: 8,
+                background: T.bg, border: `1px solid ${T.cardBorder}`,
+                color: T.khaki, fontSize: 14, fontWeight: 600,
+                outline: 'none', colorScheme: 'dark',
+              }}
+            >
+              {HOURS.map(h => (
+                <option key={h.value} value={h.value}>{h.label}</option>
+              ))}
+            </select>
+          </div>
         </Group>
 
         {/* Account group */}

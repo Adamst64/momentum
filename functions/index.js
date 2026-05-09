@@ -5,27 +5,36 @@ const { getMessaging } = require('firebase-admin/messaging');
 
 initializeApp();
 
-// Runs every day at 9:00 AM Eastern time
+const DEFAULT_NOTIFY_HOUR_UTC = 13; // 9 AM Eastern (EDT)
+
+// Runs every hour on the hour
 exports.sendBirthdayNotifications = onSchedule(
-  { schedule: '0 9 * * *', timeZone: 'America/New_York' },
+  { schedule: '0 * * * *', timeZone: 'UTC' },
   async () => {
-    const db        = getFirestore();
-    const messaging = getMessaging();
+    const db             = getFirestore();
+    const messaging      = getMessaging();
+    const currentHourUTC = new Date().getUTCHours();
 
     const today    = new Date();
-    const todayM   = today.getMonth() + 1;
-    const todayD   = today.getDate();
+    const todayM   = today.getUTCMonth() + 1;
+    const todayD   = today.getUTCDate();
 
     const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    const tomorrowM = tomorrow.getMonth() + 1;
-    const tomorrowD = tomorrow.getDate();
+    tomorrow.setUTCDate(today.getUTCDate() + 1);
+    const tomorrowM = tomorrow.getUTCMonth() + 1;
+    const tomorrowD = tomorrow.getUTCDate();
 
     const usersSnap = await db.collection('users').get();
 
     await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
-      const uid      = userDoc.id;
-      const tokens   = userDoc.data().fcmTokens || [];
+      const data           = userDoc.data();
+      const userNotifyHour = data.notifyHourUTC ?? DEFAULT_NOTIFY_HOUR_UTC;
+
+      // Only send for users whose preferred hour matches now
+      if (userNotifyHour !== currentHourUTC) return;
+
+      const uid    = userDoc.id;
+      const tokens = data.fcmTokens || [];
       if (!tokens.length) return;
 
       const birthdaysSnap = await db.collection('users').doc(uid).collection('birthdays').get();
@@ -53,7 +62,7 @@ exports.sendBirthdayNotifications = onSchedule(
               notification: { title, body },
               webpush: {
                 notification: {
-                  icon: 'https://adamst64.github.io/momentum/icon-192.png',
+                  icon:  'https://adamst64.github.io/momentum/icon-192.png',
                   badge: 'https://adamst64.github.io/momentum/icon-192.png',
                 },
               },
