@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../firebase';
 
 export function useAuth() {
@@ -19,5 +19,7 @@ export function useAuth() {
     await updatePassword(auth.currentUser, newPassword);
   };
 
-  return { user, signIn, signUp, logOut, changePassword };
+  const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+
+  return { user, signIn, signUp, logOut, changePassword, resetPassword };
 }

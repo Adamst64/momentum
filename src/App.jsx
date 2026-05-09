@@ -18,7 +18,7 @@ import { registerPushToken, getNotificationPermission } from './utils/pushNotifi
 const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays' };
 
 export default function App() {
-  const { user, signIn, signUp, logOut, changePassword } = useAuth();
+  const { user, signIn, signUp, logOut, changePassword, resetPassword } = useAuth();
   const [tab, setTab] = useState('routines');
   const [showSettings, setShowSettings] = useState(false);
 
@@ -46,7 +46,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <AuthScreen onSignIn={signIn} onSignUp={signUp} />;
+    return <AuthScreen onSignIn={signIn} onSignUp={signUp} onResetPassword={resetPassword} />;
   }
 
   return (
