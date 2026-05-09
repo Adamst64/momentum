@@ -201,7 +201,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
           Monthly Overview
         </div>
-        <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} />
+        <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
       </div>
 
       {/* All Routines full-screen overlay */}

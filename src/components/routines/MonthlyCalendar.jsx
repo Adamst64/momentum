@@ -3,7 +3,7 @@ import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, formatMonthYear, toDateStr, todayStr, parseDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
 
-export default function MonthlyCalendar({ dayRatio, onDayClick }) {
+export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate }) {
   const today     = todayStr();
   const todayDate = parseDate(today);
   const [year, setYear]   = useState(todayDate.getFullYear());
@@ -40,10 +40,11 @@ export default function MonthlyCalendar({ dayRatio, onDayClick }) {
         {cells.map((day, i) => {
           if (!day) return <div key={`e${i}`} />;
 
-          const dateStr  = toDateStr(new Date(year, month, day));
-          const isToday  = dateStr === today;
-          const isFuture = dateStr > today;
-          const ratio    = isFuture ? null : dayRatio(dateStr);
+          const dateStr   = toDateStr(new Date(year, month, day));
+          const isToday   = dateStr === today;
+          const isFuture  = dateStr > today;
+          const isEditable = !isFuture && (!minEditableDate || dateStr >= minEditableDate);
+          const ratio     = isFuture ? null : dayRatio(dateStr);
           const hasData  = ratio !== null;
 
           // Fill height: 0% completion = 0px (empty), 1-100% = proportional
@@ -57,7 +58,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick }) {
           return (
             <div
               key={day}
-              onClick={() => onDayClick && onDayClick(dateStr)}
+              onClick={() => isEditable && onDayClick && onDayClick(dateStr)}
               style={{
                 aspectRatio: '1',
                 borderRadius: 7,
@@ -71,7 +72,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick }) {
                 justifyContent: 'center',
                 paddingTop: 3,
                 background: T.bg,
-                cursor: 'pointer',
+                cursor: isEditable ? 'pointer' : 'default',
               }}
             >
               {/* Water fill — rises from bottom */}
