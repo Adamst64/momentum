@@ -5,81 +5,87 @@ const { getMessaging } = require('firebase-admin/messaging');
 
 initializeApp();
 
-const DEFAULT_NOTIFY_HOUR_UTC = 13; // 9 AM Eastern (EDT)
+async function sendToUsers(db, messaging, checkMonth, checkDay, title, body) {
+  const usersSnap = await db.collection('users').get();
 
-// Runs every hour on the hour
-exports.sendBirthdayNotifications = onSchedule(
-  { schedule: '0 * * * *', timeZone: 'UTC' },
-  async () => {
-    const db             = getFirestore();
-    const messaging      = getMessaging();
-    const currentHourUTC = new Date().getUTCHours();
+  await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
+    const uid    = userDoc.id;
+    const tokens = userDoc.data().fcmTokens || [];
+    if (!tokens.length) return;
 
-    const today    = new Date();
-    const todayM   = today.getUTCMonth() + 1;
-    const todayD   = today.getUTCDate();
+    const birthdaysSnap = await db.collection('users').doc(uid).collection('birthdays').get();
 
-    const tomorrow = new Date(today);
-    tomorrow.setUTCDate(today.getUTCDate() + 1);
-    const tomorrowM = tomorrow.getUTCMonth() + 1;
-    const tomorrowD = tomorrow.getUTCDate();
+    for (const bDoc of birthdaysSnap.docs) {
+      const b = bDoc.data();
+      if (b.month !== checkMonth || b.day !== checkDay) continue;
 
-    const usersSnap = await db.collection('users').get();
+      const notifTitle = typeof title === 'function' ? title(b.name) : title;
+      const notifBody  = typeof body  === 'function' ? body(b.name)  : body;
 
-    await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
-      const data           = userDoc.data();
-      const userNotifyHour = data.notifyHourUTC ?? DEFAULT_NOTIFY_HOUR_UTC;
-
-      // Only send for users whose preferred hour matches now
-      if (userNotifyHour !== currentHourUTC) return;
-
-      const uid    = userDoc.id;
-      const tokens = data.fcmTokens || [];
-      if (!tokens.length) return;
-
-      const birthdaysSnap = await db.collection('users').doc(uid).collection('birthdays').get();
-
-      for (const bDoc of birthdaysSnap.docs) {
-        const b = bDoc.data();
-        let title, body;
-
-        if (b.month === todayM && b.day === todayD) {
-          title = `🎂 ${b.name}'s Birthday!`;
-          body  = `Today is ${b.name}'s birthday — don't forget to reach out!`;
-        } else if (b.month === tomorrowM && b.day === tomorrowD) {
-          title = '🎂 Birthday Tomorrow';
-          body  = `${b.name}'s birthday is tomorrow!`;
-        } else {
-          continue;
-        }
-
-        const staleTokens = [];
-
-        await Promise.allSettled(tokens.map(async (token) => {
-          try {
-            await messaging.send({
-              token,
-              notification: { title, body },
-              webpush: {
-                notification: {
-                  icon:  'https://adamst64.github.io/momentum/icon-192.png',
-                  badge: 'https://adamst64.github.io/momentum/icon-192.png',
-                },
+      const staleTokens = [];
+      await Promise.allSettled(tokens.map(async (token) => {
+        try {
+          await messaging.send({
+            token,
+            notification: { title: notifTitle, body: notifBody },
+            webpush: {
+              notification: {
+                icon:  'https://adamst64.github.io/momentum/icon-192.png',
+                badge: 'https://adamst64.github.io/momentum/icon-192.png',
               },
-            });
-          } catch (err) {
-            if (err.code === 'messaging/registration-token-not-registered') {
-              staleTokens.push(token);
-            }
-          }
-        }));
-
-        if (staleTokens.length) {
-          await db.collection('users').doc(uid).update({
-            fcmTokens: FieldValue.arrayRemove(...staleTokens),
+            },
           });
+        } catch (err) {
+          if (err.code === 'messaging/registration-token-not-registered') {
+            staleTokens.push(token);
+          }
         }
+      }));
+
+      if (staleTokens.length) {
+        await db.collection('users').doc(uid).update({
+          fcmTokens: FieldValue.arrayRemove(...staleTokens),
+        });
       }
-    }));
+    }
+  }));
+}
+
+// 2:00 PM Eastern — day-before reminder
+exports.sendDayBeforeReminders = onSchedule(
+  { schedule: '0 14 * * *', timeZone: 'America/New_York' },
+  async () => {
+    const db        = getFirestore();
+    const messaging = getMessaging();
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const m = tomorrow.getMonth() + 1;
+    const d = tomorrow.getDate();
+
+    await sendToUsers(
+      db, messaging, m, d,
+      '🎂 Birthday Tomorrow',
+      (name) => `${name}'s birthday is tomorrow — don't forget to reach out!`
+    );
+  }
+);
+
+// 8:00 AM Eastern — day-of reminder
+exports.sendDayOfReminders = onSchedule(
+  { schedule: '0 8 * * *', timeZone: 'America/New_York' },
+  async () => {
+    const db        = getFirestore();
+    const messaging = getMessaging();
+
+    const today = new Date();
+    const m = today.getMonth() + 1;
+    const d = today.getDate();
+
+    await sendToUsers(
+      db, messaging, m, d,
+      (name) => `🎂 ${name}'s Birthday!`,
+      (name) => `Today is ${name}'s birthday — wish them well!`
+    );
   }
 );
