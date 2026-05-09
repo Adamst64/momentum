@@ -6,6 +6,7 @@ import { T } from '../../theme';
 import { registerPushToken, getNotificationPermission } from '../../utils/pushNotifications';
 
 const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 function daysUntil(month, day) {
@@ -29,8 +30,9 @@ export default function BirthdaysTab({ hook, userId }) {
   const { birthdays, addBirthday, updateBirthday, deleteBirthday } = hook;
   const [showForm, setShowForm]       = useState(false);
   const [editing, setEditing]         = useState(null);
+  const [view, setView]               = useState('list');
   const [permission, setPermission]   = useState(getNotificationPermission());
-  const [tokenSaved, setTokenSaved]   = useState(null); // null=checking, true=ok, false=missing
+  const [tokenSaved, setTokenSaved]   = useState(null);
   const [pushError, setPushError]     = useState(null);
   const [pushLoading, setPushLoading] = useState(false);
 
@@ -62,10 +64,12 @@ export default function BirthdaysTab({ hook, userId }) {
     }
   };
 
+  const openEdit = (b) => { setEditing(b); setShowForm(true); };
+
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* Notification banner — show if permission not granted OR token not saved */}
+      {/* Notification banner */}
       {(permission !== 'granted' || tokenSaved === false) && tokenSaved !== null && (
         <div style={{
           background: '#1A2010', border: `1px solid ${T.olive}44`,
@@ -82,7 +86,7 @@ export default function BirthdaysTab({ hook, userId }) {
                 {tokenSaved === false && permission === 'granted' ? 'Finish notification setup' : 'Get birthday reminders'}
               </div>
               <div style={{ fontSize: 13, color: T.muted }}>
-                You'll be notified at 2 PM the day before and at 8 AM on the day of each birthday.
+                You'll be notified at 9:30 PM the day before and at 7 AM on the day of each birthday.
               </div>
               <button
                 onClick={handleEnableNotifications}
@@ -102,30 +106,59 @@ export default function BirthdaysTab({ hook, userId }) {
         </div>
       )}
 
-      {/* Empty state */}
-      {birthdays.length === 0 && (
-        <div style={{
-          background: T.card, border: `1px solid ${T.cardBorder}`,
-          borderRadius: 14, padding: '32px 16px', textAlign: 'center', color: T.muted, fontSize: 14,
-        }}>
-          No birthdays added yet
-        </div>
-      )}
+      {/* View toggle */}
+      <div style={{
+        display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2,
+      }}>
+        {['list', 'calendar'].map(v => (
+          <button
+            key={v}
+            onClick={() => setView(v)}
+            style={{
+              flex: 1, padding: '7px 0', borderRadius: 8,
+              background: view === v ? T.card : 'transparent',
+              color: view === v ? T.text : T.muted,
+              fontSize: 13, fontWeight: 600,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >
+            {v === 'list' ? 'Upcoming' : 'Calendar'}
+          </button>
+        ))}
+      </div>
 
-      {/* Birthday list */}
-      {sorted.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {sorted.map(b => (
-            <BirthdayRow
-              key={b.id}
-              birthday={b}
-              days={daysUntil(b.month, b.day)}
-              age={turningAge(b.year, b.month, b.day)}
-              onEdit={() => { setEditing(b); setShowForm(true); }}
-              onDelete={() => deleteBirthday(b.id)}
-            />
-          ))}
-        </div>
+      {view === 'list' ? (
+        <>
+          {birthdays.length === 0 && (
+            <div style={{
+              background: T.card, border: `1px solid ${T.cardBorder}`,
+              borderRadius: 14, padding: '32px 16px', textAlign: 'center', color: T.muted, fontSize: 14,
+            }}>
+              No birthdays added yet
+            </div>
+          )}
+
+          {sorted.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {sorted.map(b => (
+                <BirthdayRow
+                  key={b.id}
+                  birthday={b}
+                  days={daysUntil(b.month, b.day)}
+                  age={turningAge(b.year, b.month, b.day)}
+                  onEdit={() => openEdit(b)}
+                  onDelete={() => deleteBirthday(b.id)}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <CalendarView
+          birthdays={birthdays}
+          onEdit={openEdit}
+          onDelete={deleteBirthday}
+        />
       )}
 
       {/* Add button */}
@@ -150,6 +183,132 @@ export default function BirthdaysTab({ hook, userId }) {
           }}
           onClose={() => { setShowForm(false); setEditing(null); }}
         />
+      )}
+    </div>
+  );
+}
+
+function CalendarView({ birthdays, onEdit, onDelete }) {
+  const today = new Date();
+  const [year, setYear]   = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth() + 1);
+
+  const prevMonth = () => {
+    if (month === 1) { setMonth(12); setYear(y => y - 1); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 12) { setMonth(1); setYear(y => y + 1); }
+    else setMonth(m => m + 1);
+  };
+
+  const firstDow   = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayDay   = today.getMonth() + 1 === month && today.getFullYear() === year ? today.getDate() : null;
+
+  // Map day → birthdays for this month
+  const bdMap = {};
+  birthdays.forEach(b => {
+    if (b.month === month) {
+      if (!bdMap[b.day]) bdMap[b.day] = [];
+      bdMap[b.day].push(b);
+    }
+  });
+
+  const cells = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const thisMonthBirthdays = Object.entries(bdMap)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .flatMap(([, bds]) => bds);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* Month navigation */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <button onClick={prevMonth} style={{ color: T.muted, fontSize: 24, padding: '4px 10px', lineHeight: 1 }}>‹</button>
+        <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+          {MONTH_FULL[month - 1]} {year}
+        </span>
+        <button onClick={nextMonth} style={{ color: T.muted, fontSize: 24, padding: '4px 10px', lineHeight: 1 }}>›</button>
+      </div>
+
+      {/* Day-of-week headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+          <div key={d} style={{ textAlign: 'center', fontSize: 11, color: T.muted, fontWeight: 600, paddingBottom: 6 }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+        {cells.map((day, i) => {
+          if (!day) return <div key={i} />;
+          const bds     = bdMap[day] || [];
+          const isToday = day === todayDay;
+          const hasBd   = bds.length > 0;
+          return (
+            <div
+              key={i}
+              style={{
+                minHeight: 46, padding: '5px 3px 4px',
+                borderRadius: 8, textAlign: 'center',
+                background: isToday ? T.khaki + '22' : hasBd ? T.olive + '18' : 'transparent',
+                border: `1px solid ${isToday ? T.khaki + '55' : hasBd ? T.olive + '44' : 'transparent'}`,
+              }}
+            >
+              <div style={{
+                fontSize: 13, lineHeight: 1,
+                color: isToday ? T.khaki : hasBd ? T.oliveLight : T.text,
+                fontWeight: isToday || hasBd ? 700 : 400,
+              }}>
+                {day}
+              </div>
+              {bds.slice(0, 2).map(b => (
+                <div key={b.id} style={{
+                  fontSize: 8, color: T.oliveLight, marginTop: 3,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  lineHeight: 1.2,
+                }}>
+                  {b.name.split(' ')[0]}
+                </div>
+              ))}
+              {bds.length > 2 && (
+                <div style={{ fontSize: 8, color: T.muted, marginTop: 2 }}>+{bds.length - 2}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* This month's birthdays list */}
+      {thisMonthBirthdays.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            This month
+          </div>
+          {thisMonthBirthdays.map(b => (
+            <BirthdayRow
+              key={b.id}
+              birthday={b}
+              days={daysUntil(b.month, b.day)}
+              age={turningAge(b.year, b.month, b.day)}
+              onEdit={() => onEdit(b)}
+              onDelete={() => onDelete(b.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {thisMonthBirthdays.length === 0 && (
+        <div style={{
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 12, padding: '20px 16px', textAlign: 'center',
+          color: T.muted, fontSize: 13,
+        }}>
+          No birthdays in {MONTH_FULL[month - 1]}
+        </div>
       )}
     </div>
   );
@@ -267,7 +426,6 @@ function BirthdayForm({ initial, onSave, onClose }) {
           }}
         />
 
-        {/* Month + Day */}
         <div style={{ display: 'flex', gap: 8 }}>
           <select
             value={month}
@@ -296,7 +454,6 @@ function BirthdayForm({ initial, onSave, onClose }) {
           </select>
         </div>
 
-        {/* Optional year */}
         <input
           placeholder="Birth year (optional — shows age)"
           value={year}
