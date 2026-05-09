@@ -35,6 +35,19 @@ const tabs = [
       </svg>
     ),
   },
+  {
+    id: 'birthdays',
+    label: 'Birthdays',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <rect x="2" y="13" width="20" height="8" rx="2" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <path d="M6 13v-3M12 13v-3M18 13v-3" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="6"  cy="8" r="1.8" fill={on ? T.khaki : T.muted} />
+        <circle cx="12" cy="8" r="1.8" fill={on ? T.khaki : T.muted} />
+        <circle cx="18" cy="8" r="1.8" fill={on ? T.khaki : T.muted} />
+      </svg>
+    ),
+  },
 ];
 
 export default function BottomNav({ active, onChange }) {

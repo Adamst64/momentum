@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { T } from './theme';
 import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import AllRoutinesTab from './components/routines/AllRoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
+import BirthdaysTab from './components/birthdays/BirthdaysTab';
 import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
@@ -12,8 +13,10 @@ import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
 import { useEndDay } from './hooks/useEndDay';
 import { useShoppingList } from './hooks/useShoppingList';
+import { useBirthdays } from './hooks/useBirthdays';
+import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
-const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping' };
+const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays' };
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword } = useAuth();
@@ -26,6 +29,14 @@ export default function App() {
   const tasksHook     = useTasks(userId);
   const endDayHook    = useEndDay(userId);
   const shoppingHook  = useShoppingList(userId);
+  const birthdaysHook = useBirthdays(userId);
+
+  // Re-register push token on load if permission was already granted
+  useEffect(() => {
+    if (userId && getNotificationPermission() === 'granted') {
+      registerPushToken(userId).catch(() => {});
+    }
+  }, [userId]);
 
   // Still determining auth state
   if (user === undefined) {
@@ -83,6 +94,7 @@ export default function App() {
         {tab === 'weekly'    && <AllRoutinesTab hook={routinesHook} />}
         {tab === 'tasks'     && <TasksTab       hook={tasksHook} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} />}
+        {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
 
         {showSettings && (
           <SettingsModal
