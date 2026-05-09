@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { T } from '../../theme';
 import { registerPushToken, getNotificationPermission } from '../../utils/pushNotifications';
 
@@ -25,22 +27,46 @@ function turningAge(birthYear, month, day) {
 
 export default function BirthdaysTab({ hook, userId }) {
   const { birthdays, addBirthday, updateBirthday, deleteBirthday } = hook;
-  const [showForm, setShowForm]     = useState(false);
-  const [editing, setEditing]       = useState(null);
-  const [permission, setPermission] = useState(getNotificationPermission());
+  const [showForm, setShowForm]       = useState(false);
+  const [editing, setEditing]         = useState(null);
+  const [permission, setPermission]   = useState(getNotificationPermission());
+  const [tokenSaved, setTokenSaved]   = useState(null); // null=checking, true=ok, false=missing
+  const [pushError, setPushError]     = useState(null);
+  const [pushLoading, setPushLoading] = useState(false);
+
+  useEffect(() => {
+    if (!userId) return;
+    getDoc(doc(db, 'users', userId)).then(snap => {
+      const tokens = snap.data()?.fcmTokens;
+      setTokenSaved(Array.isArray(tokens) && tokens.length > 0);
+    });
+  }, [userId]);
 
   const sorted = [...birthdays].sort((a, b) => daysUntil(a.month, a.day) - daysUntil(b.month, b.day));
 
   const handleEnableNotifications = async () => {
-    await registerPushToken(userId);
-    setPermission(getNotificationPermission());
+    setPushError(null);
+    setPushLoading(true);
+    try {
+      const ok = await registerPushToken(userId);
+      setPermission(getNotificationPermission());
+      if (ok) {
+        setTokenSaved(true);
+      } else {
+        setPushError('Setup failed. Make sure the app is added to your home screen and notifications are allowed in iPhone Settings → Notifications → Momentum.');
+      }
+    } catch (e) {
+      setPushError(e.message || 'Unknown error.');
+    } finally {
+      setPushLoading(false);
+    }
   };
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* Notification permission banner */}
-      {permission !== 'granted' && (
+      {/* Notification banner — show if permission not granted OR token not saved */}
+      {(permission !== 'granted' || tokenSaved === false) && tokenSaved !== null && (
         <div style={{
           background: '#1A2010', border: `1px solid ${T.olive}44`,
           borderRadius: 14, padding: '14px 16px',
@@ -48,23 +74,29 @@ export default function BirthdaysTab({ hook, userId }) {
         }}>
           {permission === 'denied' ? (
             <div style={{ fontSize: 13, color: T.muted }}>
-              Notifications are blocked. To get birthday reminders, enable them in your device Settings → Notifications → Momentum.
+              Notifications are blocked. Enable them in iPhone Settings → Notifications → Momentum, then tap the button below.
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 14, color: T.text, fontWeight: 500 }}>Get birthday reminders</div>
+              <div style={{ fontSize: 14, color: T.text, fontWeight: 500 }}>
+                {tokenSaved === false && permission === 'granted' ? 'Finish notification setup' : 'Get birthday reminders'}
+              </div>
               <div style={{ fontSize: 13, color: T.muted }}>
-                You'll be notified the day before and on the day of each birthday.
+                You'll be notified at 2 PM the day before and at 8 AM on the day of each birthday.
               </div>
               <button
                 onClick={handleEnableNotifications}
+                disabled={pushLoading}
                 style={{
                   alignSelf: 'flex-start', padding: '9px 16px', borderRadius: 10,
                   background: T.olive, color: '#fff', fontSize: 13, fontWeight: 600,
                 }}
               >
-                Enable Notifications
+                {pushLoading ? 'Setting up…' : tokenSaved === false && permission === 'granted' ? 'Complete Setup' : 'Enable Notifications'}
               </button>
+              {pushError && (
+                <div style={{ fontSize: 12, color: T.red }}>{pushError}</div>
+              )}
             </>
           )}
         </div>
