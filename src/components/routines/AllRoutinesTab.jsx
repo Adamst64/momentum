@@ -1,21 +1,22 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import CreateRoutineModal from './CreateRoutineModal';
+import RoutineCalendarModal from './RoutineCalendarModal';
 import { todayStr, parseDate, toDateStr, getDOW, DAYS_FULL } from '../../utils/dateUtils';
 
 function getWeekDates(virtualToday) {
-  const base = parseDate(virtualToday);
-  const dow  = base.getDay(); // 0=Sun
+  const base   = parseDate(virtualToday);
+  const dow    = base.getDay();
   const monday = new Date(base);
   monday.setDate(base.getDate() + (dow === 0 ? -6 : 1 - dow));
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     return toDateStr(d);
-  }); // [Mon…Sun] as 'YYYY-MM-DD'
+  });
 }
 
-function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDelete }) {
+function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDelete, onShowCalendar }) {
   const [showMenu, setShowMenu] = useState(false);
   const done = !!routine.completions[dateStr];
 
@@ -52,23 +53,21 @@ function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDel
             border: `1px solid ${done ? T.olive : T.red}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <div style={{
-              width: 6, height: 6, borderRadius: '50%',
-              background: done ? T.olive : T.red,
-            }} />
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: done ? T.olive : T.red }} />
           </div>
         ) : (
-          <div style={{
-            width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-            border: `1px dashed ${T.subtle}`,
-          }} />
+          <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, border: `1px dashed ${T.subtle}` }} />
         )}
 
-        <span style={{
-          flex: 1, fontSize: 14,
-          color: done && isPast ? T.muted : T.text,
-          textDecoration: done && isPast ? 'line-through' : 'none',
-        }}>
+        {/* Name — tap to open calendar */}
+        <span
+          style={{
+            flex: 1, fontSize: 14,
+            color: done && isPast ? T.muted : T.text,
+            textDecoration: done && isPast ? 'line-through' : 'none',
+          }}
+          onClick={() => onShowCalendar(routine)}
+        >
           {routine.name}
         </span>
 
@@ -86,10 +85,7 @@ function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDel
           <button
             type="button"
             onClick={() => { onEdit(); setShowMenu(false); }}
-            style={{
-              width: '100%', padding: '10px 14px', textAlign: 'left',
-              fontSize: 14, color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
-            }}
+            style={{ width: '100%', padding: '10px 14px', textAlign: 'left', fontSize: 14, color: T.text, borderBottom: `1px solid ${T.cardBorder}` }}
           >
             Edit
           </button>
@@ -108,8 +104,9 @@ function RoutineRow({ routine, dateStr, isToday, isPast, onToggle, onEdit, onDel
 
 export default function AllRoutinesTab({ hook }) {
   const { routines, addRoutine, updateRoutine, deleteRoutine, toggleDay, forDate } = hook;
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing]       = useState(null);
+  const [showCreate, setShowCreate]     = useState(false);
+  const [editing, setEditing]           = useState(null);
+  const [calendarRoutine, setCalendar]  = useState(null);
 
   const today     = todayStr();
   const weekDates = getWeekDates(today);
@@ -126,8 +123,7 @@ export default function AllRoutinesTab({ hook }) {
         const isPast      = dateStr < today;
         const dayRoutines = forDate(dateStr);
         const doneCount   = dayRoutines.filter(r => r.completions[dateStr]).length;
-
-        const dateLabel = parseDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const dateLabel   = parseDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
         return (
           <div
@@ -135,11 +131,9 @@ export default function AllRoutinesTab({ hook }) {
             style={{
               background: T.card,
               border: `1.5px solid ${isToday ? T.khaki : T.cardBorder}`,
-              borderRadius: 14,
-              overflow: 'hidden',
+              borderRadius: 14, overflow: 'hidden',
             }}
           >
-            {/* Day header */}
             <div style={{
               padding: '10px 14px',
               background: isToday ? '#1E2E10' : 'transparent',
@@ -152,20 +146,15 @@ export default function AllRoutinesTab({ hook }) {
                 <span style={{ fontSize: 11, color: T.muted }}>{dateLabel}</span>
               </div>
               {dayRoutines.length > 0 && (
-                <span style={{
-                  fontSize: 11, color: isToday ? T.khaki : T.muted,
-                  fontWeight: isToday ? 600 : 400,
-                }}>
+                <span style={{ fontSize: 11, color: isToday ? T.khaki : T.muted, fontWeight: isToday ? 600 : 400 }}>
                   {doneCount}/{dayRoutines.length}
                 </span>
               )}
             </div>
 
-            {/* Routines */}
             {dayRoutines.length === 0 ? (
               <div style={{
-                padding: '10px 14px',
-                borderTop: `1px solid ${T.cardBorder}`,
+                padding: '10px 14px', borderTop: `1px solid ${T.cardBorder}`,
                 color: T.subtle, fontSize: 13, fontStyle: 'italic',
               }}>
                 Rest day
@@ -181,6 +170,7 @@ export default function AllRoutinesTab({ hook }) {
                   onToggle={() => toggleDay(r.id, dateStr)}
                   onEdit={() => setEditing(r)}
                   onDelete={() => deleteRoutine(r.id)}
+                  onShowCalendar={setCalendar}
                 />
               ))
             )}
@@ -210,6 +200,10 @@ export default function AllRoutinesTab({ hook }) {
           }}
           onClose={() => { setShowCreate(false); setEditing(null); }}
         />
+      )}
+
+      {calendarRoutine && (
+        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendar(null)} />
       )}
     </div>
   );

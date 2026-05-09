@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, onManageRoutines, routines, tasks, shopping }) {
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shopping }) {
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
@@ -105,11 +105,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Settings</span>
           <button onClick={onClose} style={{ color: T.muted, fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
-
-        {/* Routines group */}
-        <Group>
-          <Row label="Manage Routines" onTap={() => { onClose(); onManageRoutines(); }} arrow />
-        </Group>
 
 
 

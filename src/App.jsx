@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { T } from './theme';
 import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
-import AllRoutinesTab from './components/routines/AllRoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
 import BirthdaysTab from './components/birthdays/BirthdaysTab';
@@ -22,7 +21,6 @@ export default function App() {
   const { user, signIn, signUp, logOut, changePassword } = useAuth();
   const [tab, setTab] = useState('routines');
   const [showSettings, setShowSettings] = useState(false);
-  const [showManageRoutines, setShowManageRoutines] = useState(false);
 
   const userId = user?.uid ?? null;
   const routinesHook  = useRoutines(userId);
@@ -90,9 +88,8 @@ export default function App() {
         paddingBottom: `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
         overflowY: 'auto',
       }}>
-        {tab === 'routines'  && <RoutinesTab    hook={routinesHook} endDayHook={endDayHook} />}
-        {tab === 'weekly'    && <AllRoutinesTab hook={routinesHook} />}
-        {tab === 'tasks'     && <TasksTab       hook={tasksHook} />}
+        {tab === 'routines'  && <RoutinesTab hook={routinesHook} endDayHook={endDayHook} />}
+        {tab === 'tasks'     && <TasksTab    hook={tasksHook} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
 
@@ -102,42 +99,12 @@ export default function App() {
             onChangePassword={changePassword}
             onSignOut={() => { logOut(); setShowSettings(false); }}
             onClose={() => setShowSettings(false)}
-            onManageRoutines={() => setShowManageRoutines(true)}
             routines={routinesHook.routines}
             tasks={tasksHook.tasks}
             shopping={shoppingHook.items}
           />
         )}
 
-        {showManageRoutines && (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 60,
-            background: T.bg,
-            display: 'flex', flexDirection: 'column',
-          }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 14,
-              padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
-              borderBottom: `1px solid ${T.cardBorder}`,
-              background: T.bg, flexShrink: 0,
-            }}>
-              <button
-                onClick={() => setShowManageRoutines(false)}
-                style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}
-              >
-                ←
-              </button>
-              <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Manage Routines</span>
-            </div>
-            <div style={{
-              flex: 1, overflowY: 'auto',
-              paddingTop: 16,
-              paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)`,
-            }}>
-              <AllRoutinesTab hook={routinesHook} />
-            </div>
-          </div>
-        )}
       </main>
 
       <BottomNav active={tab} onChange={setTab} />

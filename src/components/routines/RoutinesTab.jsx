@@ -5,6 +5,8 @@ import RoutineItem from './RoutineItem';
 import CreateRoutineModal from './CreateRoutineModal';
 import MonthlyCalendar from './MonthlyCalendar';
 import DayDetailModal from './DayDetailModal';
+import AllRoutinesTab from './AllRoutinesTab';
+import RoutineCalendarModal from './RoutineCalendarModal';
 import Modal from '../Modal';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 
@@ -16,16 +18,19 @@ export default function RoutinesTab({ hook, endDayHook }) {
     if (dateStr > todayStr()) return null;
     return dayRatio(dateStr);
   }, [dayRatio]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing]       = useState(null);
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(null);
 
-  const today      = todayStr();
-  const tomorrow   = addDays(today, 1);
-  const dayEnded   = isDayEnded(today);
-  const stats      = todayStats();
-  const dow        = getDOW(today);
+  const [showCreate, setShowCreate]         = useState(false);
+  const [editing, setEditing]               = useState(null);
+  const [showConfirm, setShowConfirm]       = useState(false);
+  const [selectedDay, setSelectedDay]       = useState(null);
+  const [showAllRoutines, setShowAllRoutines] = useState(false);
+  const [calendarRoutine, setCalendarRoutine] = useState(null);
+
+  const today          = todayStr();
+  const tomorrow       = addDays(today, 1);
+  const dayEnded       = isDayEnded(today);
+  const stats          = todayStats();
+  const dow            = getDOW(today);
 
   const sorted = [...routines]
     .filter(r => r.days.includes(dow))
@@ -56,11 +61,24 @@ export default function RoutinesTab({ hook, endDayHook }) {
             {stats.done}/{stats.total}
             <span style={{ fontSize: 14, color: T.muted, fontWeight: 400, marginLeft: 6 }}>done</span>
           </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-            {formatLongDate(today)}
-          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatLongDate(today)}</div>
         </div>
       </div>
+
+      {/* All Routines nav row */}
+      <button
+        type="button"
+        onClick={() => setShowAllRoutines(true)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '13px 16px', borderRadius: 12,
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          color: T.text, fontSize: 14, fontWeight: 500,
+        }}
+      >
+        <span>All Routines</span>
+        <span style={{ color: T.muted, fontSize: 18 }}>›</span>
+      </button>
 
       {!dayEnded ? (
         <>
@@ -90,6 +108,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
                     onToggle={id => toggleDay(id, today)}
                     onEdit={setEditing}
                     onDelete={deleteRoutine}
+                    onShowCalendar={setCalendarRoutine}
                   />
                 ))}
               </div>
@@ -165,8 +184,7 @@ export default function RoutinesTab({ hook, endDayHook }) {
                   <div key={r.id} style={{
                     background: T.card, border: `1px solid ${T.cardBorder}`,
                     borderRadius: 14, padding: '14px 16px',
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    opacity: 0.55,
+                    display: 'flex', alignItems: 'center', gap: 12, opacity: 0.55,
                   }}>
                     <div style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${T.subtle}`, flexShrink: 0 }} />
                     <span style={{ fontSize: 15, color: T.text }}>{r.name}</span>
@@ -186,7 +204,29 @@ export default function RoutinesTab({ hook, endDayHook }) {
         <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} />
       </div>
 
-      {/* End Day confirmation modal */}
+      {/* All Routines full-screen overlay */}
+      {showAllRoutines && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
+            padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
+            borderBottom: `1px solid ${T.cardBorder}`,
+          }}>
+            <button
+              onClick={() => setShowAllRoutines(false)}
+              style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}
+            >
+              ←
+            </button>
+            <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>All Routines</span>
+          </div>
+          <div style={{ flex: 1, overflowY: 'auto', paddingTop: 16, paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)` }}>
+            <AllRoutinesTab hook={hook} />
+          </div>
+        </div>
+      )}
+
+      {/* End Day confirmation */}
       {showConfirm && (
         <Modal title="End Day?" onClose={() => setShowConfirm(false)}>
           <div style={{ fontSize: 14, color: T.muted, marginBottom: 24, lineHeight: 1.6 }}>
@@ -196,23 +236,14 @@ export default function RoutinesTab({ hook, endDayHook }) {
             <button
               type="button"
               onClick={handleEndDay}
-              style={{
-                padding: '14px 20px', borderRadius: 14,
-                background: T.olive, color: '#fff',
-                fontSize: 16, fontWeight: 600, border: 'none',
-              }}
+              style={{ padding: '14px 20px', borderRadius: 14, background: T.olive, color: '#fff', fontSize: 16, fontWeight: 600 }}
             >
               End Day
             </button>
             <button
               type="button"
               onClick={() => setShowConfirm(false)}
-              style={{
-                padding: '14px 20px', borderRadius: 14,
-                background: 'transparent',
-                border: `1.5px solid ${T.cardBorder}`,
-                color: T.muted, fontSize: 15,
-              }}
+              style={{ padding: '14px 20px', borderRadius: 14, background: 'transparent', border: `1.5px solid ${T.cardBorder}`, color: T.muted, fontSize: 15 }}
             >
               Cancel
             </button>
@@ -227,6 +258,10 @@ export default function RoutinesTab({ hook, endDayHook }) {
           toggleDay={toggleDay}
           onClose={() => setSelectedDay(null)}
         />
+      )}
+
+      {calendarRoutine && (
+        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendarRoutine(null)} />
       )}
 
       {(showCreate || editing) && (

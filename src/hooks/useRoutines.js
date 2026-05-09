@@ -4,6 +4,17 @@ import { db } from '../firebase';
 import { todayStr, getDOW } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
+// Returns the applicable scheduled days for a routine on a given date,
+// accounting for schedule history (edits don't retroactively change past days).
+export function getScheduleForDate(routine, dateStr) {
+  const history = routine.scheduleHistory;
+  if (!history || !history.length) return routine.days;
+  const applicable = [...history]
+    .sort((a, b) => b.from.localeCompare(a.from))
+    .find(h => h.from <= dateStr);
+  return applicable ? applicable.days : routine.days;
+}
+
 export function useRoutines(userId) {
   const [routines, setRoutines] = useState([]);
 
@@ -17,14 +28,33 @@ export function useRoutines(userId) {
 
   const addRoutine = useCallback(async (name, days) => {
     if (!userId) return;
-    const id = genId();
-    await setDoc(doc(db, 'users', userId, 'routines', id), { name, days, completions: {}, createdAt: todayStr() });
+    const id    = genId();
+    const today = todayStr();
+    await setDoc(doc(db, 'users', userId, 'routines', id), {
+      name, days, completions: {}, createdAt: today,
+      scheduleHistory: [{ days, from: today }],
+    });
   }, [userId]);
 
   const updateRoutine = useCallback(async (id, name, days) => {
     if (!userId) return;
-    await updateDoc(doc(db, 'users', userId, 'routines', id), { name, days });
-  }, [userId]);
+    const routine = routines.find(r => r.id === id);
+    const update  = { name, days };
+
+    if (routine) {
+      const prevDays     = routine.days || [];
+      const daysChanged  = days.length !== prevDays.length || !days.every(d => prevDays.includes(d));
+      if (daysChanged) {
+        const today   = todayStr();
+        const existing = routine.scheduleHistory || [{ days: prevDays, from: routine.createdAt || today }];
+        // Replace any existing entry from today (avoid duplicates from same-day edits)
+        const filtered = existing.filter(h => h.from !== today);
+        update.scheduleHistory = [...filtered, { days, from: today }];
+      }
+    }
+
+    await updateDoc(doc(db, 'users', userId, 'routines', id), update);
+  }, [userId, routines]);
 
   const deleteRoutine = useCallback(async (id) => {
     if (!userId) return;
@@ -42,20 +72,21 @@ export function useRoutines(userId) {
   }, [userId, routines]);
 
   const forDate = useCallback((dateStr) => {
-    const dow = getDOW(dateStr);
-    return routines.filter(r => r.days.includes(dow) && (!r.createdAt || r.createdAt <= dateStr));
+    return routines.filter(r => {
+      if (r.createdAt && r.createdAt > dateStr) return false;
+      return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
+    });
   }, [routines]);
 
   const todayRoutines = useCallback(() => forDate(todayStr()), [forDate]);
 
   const todayStats = useCallback(() => {
     const today = todayStr();
-    const list = todayRoutines();
+    const list  = todayRoutines();
     return { total: list.length, done: list.filter(r => r.completions[today]).length };
   }, [todayRoutines]);
 
   const dayRatio = useCallback((dateStr) => {
-    // Exclude routines created on this exact day so they don't appear as missed
     const list = forDate(dateStr).filter(r => !r.createdAt || r.createdAt < dateStr);
     if (!list.length) return null;
     return list.filter(r => r.completions[dateStr]).length / list.length;
