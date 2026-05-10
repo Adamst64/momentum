@@ -32,6 +32,11 @@ service cloud.firestore {
           && request.auth.uid in
              get(/databases/$(database)/documents/lists/$(listId)).data.members;
       }
+      match /inventory/{itemId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid in
+             get(/databases/$(database)/documents/lists/$(listId)).data.members;
+      }
     }
   }
 }
