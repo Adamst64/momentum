@@ -1,0 +1,206 @@
+import React, { useState, useEffect } from 'react';
+import { T } from '../../theme';
+
+function Counter({ label, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0' }}>
+      <span style={{ fontSize: 15, color: T.text }}>{label}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          onClick={() => onChange(Math.max(0, value - 1))}
+          style={{ width: 36, height: 36, borderRadius: 10, background: T.subtle, color: T.text, fontSize: 22, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >−</button>
+        <span style={{ minWidth: 30, textAlign: 'center', fontSize: 18, fontWeight: 700, color: T.text }}>{value}</span>
+        <button
+          onClick={() => onChange(value + 1)}
+          style={{ width: 36, height: 36, borderRadius: 10, background: T.subtle, color: T.text, fontSize: 22, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >+</button>
+      </div>
+    </div>
+  );
+}
+
+function Toggle({ label, value, onChange }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0' }}>
+      <span style={{ fontSize: 15, color: T.text }}>{label}</span>
+      <button
+        onClick={() => onChange(!value)}
+        style={{ width: 50, height: 28, borderRadius: 14, background: value ? T.olive : T.subtle, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+      >
+        <div style={{ position: 'absolute', top: 3, left: value ? 25 : 3, width: 22, height: 22, borderRadius: 11, background: '#fff', transition: 'left 0.2s' }} />
+      </button>
+    </div>
+  );
+}
+
+const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '' };
+
+export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
+  const [form, setForm]                   = useState({ ...EMPTY, ...initial });
+  const [saved, setSaved]                 = useState(false);
+  const [saving, setSaving]               = useState(false);
+  const [showCrewPicker, setShowCrewPicker]     = useState(false);
+  const [showMemberPicker, setShowMemberPicker] = useState(false);
+
+  useEffect(() => {
+    setForm({ ...EMPTY, ...initial });
+    setSaved(false);
+  }, [dateStr]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave(dateStr, form);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const isEmpty = form.windows === 0 && form.doors === 0 && !form.crewId && form.memberIds.length === 0 && !form.comment;
+  const selectedCrew = crews.find(c => c.id === form.crewId);
+  const availableMembers = members.filter(m => !form.memberIds.includes(m.id));
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* Windows & Doors */}
+      <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
+        <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
+        <div style={{ height: 1, background: T.cardBorder }} />
+        <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
+      </div>
+
+      {/* Crew & Lead */}
+      <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
+        <button
+          onClick={() => setShowCrewPicker(true)}
+          style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+        >
+          <span style={{ fontSize: 15, color: T.text }}>Crew</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15, color: selectedCrew ? T.text : T.muted }}>
+              {selectedCrew ? selectedCrew.name : 'None'}
+            </span>
+            <span style={{ color: T.muted, fontSize: 13 }}>›</span>
+          </div>
+        </button>
+        <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
+        <div style={{ padding: '0 16px' }}>
+          <Toggle label="Crew Lead" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
+        </div>
+      </div>
+
+      {/* Members */}
+      <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.memberIds.length > 0 ? 10 : 0 }}>
+          <span style={{ fontSize: 15, color: T.text }}>Members on site</span>
+          <button onClick={() => setShowMemberPicker(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>+ Add</button>
+        </div>
+        {form.memberIds.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {form.memberIds.map(id => {
+              const m = members.find(x => x.id === id);
+              if (!m) return null;
+              return (
+                <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.subtle, borderRadius: 8, padding: '5px 10px' }}>
+                  <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
+                  <button onClick={() => set('memberIds', form.memberIds.filter(mid => mid !== id))} style={{ color: T.muted, fontSize: 16, lineHeight: 1, marginLeft: 2 }}>×</button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Comment */}
+      <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+        <textarea
+          value={form.comment}
+          onChange={e => set('comment', e.target.value)}
+          placeholder="Notes…"
+          rows={3}
+          style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+        />
+      </div>
+
+      {/* Save / Clear */}
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          style={{
+            flex: 1, padding: '14px 0', borderRadius: 14,
+            background: saved ? T.green + '33' : T.olive,
+            color: saved ? T.green : '#fff',
+            fontSize: 15, fontWeight: 600,
+            transition: 'background 0.2s, color 0.2s',
+            opacity: saving ? 0.6 : 1,
+          }}
+        >
+          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Day'}
+        </button>
+        {!isEmpty && onDelete && (
+          <button
+            onClick={() => onDelete(dateStr)}
+            style={{ padding: '14px 18px', borderRadius: 14, background: T.red + '22', color: T.red, fontSize: 14 }}
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
+      {/* Crew picker sheet */}
+      {showCrewPicker && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000000AA' }} onClick={() => setShowCrewPicker(false)}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, padding: '20px 20px 10px' }}>Select Crew</div>
+            <button
+              onClick={() => { set('crewId', null); setShowCrewPicker(false); }}
+              style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: !form.crewId ? T.khaki : T.text, fontWeight: !form.crewId ? 700 : 400 }}
+            >None</button>
+            {crews.map(c => (
+              <button
+                key={c.id}
+                onClick={() => { set('crewId', c.id); setShowCrewPicker(false); }}
+                style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: form.crewId === c.id ? T.khaki : T.text, fontWeight: form.crewId === c.id ? 700 : 400 }}
+              >{c.name}</button>
+            ))}
+            {crews.length === 0 && (
+              <div style={{ padding: '8px 20px 16px', fontSize: 14, color: T.muted }}>No crews yet — add them in Manage Crews.</div>
+            )}
+            <div style={{ height: 20 }} />
+          </div>
+        </div>
+      )}
+
+      {/* Member picker sheet */}
+      {showMemberPicker && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, background: '#000000AA' }} onClick={() => setShowMemberPicker(false)}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, padding: '20px 20px 10px' }}>Add Members</div>
+            {availableMembers.length === 0 ? (
+              <div style={{ padding: '8px 20px 16px', fontSize: 14, color: T.muted }}>
+                {members.length === 0 ? 'No members saved yet — add them in Manage Crews.' : 'All members already added.'}
+              </div>
+            ) : (
+              availableMembers.map(m => (
+                <button
+                  key={m.id}
+                  onClick={() => set('memberIds', [...form.memberIds, m.id])}
+                  style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: T.text }}
+                >+ {m.name}</button>
+              ))
+            )}
+            <button onClick={() => setShowMemberPicker(false)} style={{ width: '100%', padding: '14px 20px', textAlign: 'center', fontSize: 14, color: T.muted, marginTop: 4 }}>Done</button>
+            <div style={{ height: 8 }} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

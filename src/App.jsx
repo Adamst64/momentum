@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { T } from './theme';
+import { FEATURE_FLAGS } from './config';
 import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
 import BirthdaysTab from './components/birthdays/BirthdaysTab';
+import WorkTab from './components/work/WorkTab';
 import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
@@ -12,9 +14,10 @@ import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
+import { useWork } from './hooks/useWork';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
-const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays' };
+const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays', work: 'Work' };
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword } = useAuth();
@@ -22,10 +25,13 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   const userId = user?.uid ?? null;
+  const showWork = FEATURE_FLAGS.workTab.includes(userId);
+
   const routinesHook  = useRoutines(userId);
   const tasksHook     = useTasks(userId);
   const shoppingHook  = useShoppingLists(userId);
   const birthdaysHook = useBirthdays(userId);
+  const workHook      = useWork(showWork ? userId : null);
 
   // Re-register push token on load if permission was already granted
   useEffect(() => {
@@ -90,6 +96,7 @@ export default function App() {
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
+        {tab === 'work'      && showWork && <WorkTab hook={workHook} />}
 
         {showSettings && (
           <SettingsModal
@@ -105,7 +112,7 @@ export default function App() {
 
       </main>
 
-      <BottomNav active={tab} onChange={setTab} />
+      <BottomNav active={tab} onChange={setTab} showWork={showWork} />
     </div>
   );
 }

@@ -1,6 +1,18 @@
 import React from 'react';
 import { T } from '../theme';
 
+const WORK_TAB = {
+  id: 'work',
+  label: 'Work',
+  icon: (on) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+      <line x1="3" y1="12" x2="21" y2="12" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+      <line x1="12" y1="3" x2="12" y2="21" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+    </svg>
+  ),
+};
+
 const tabs = [
   {
     id: 'routines',
@@ -50,7 +62,8 @@ const tabs = [
   },
 ];
 
-export default function BottomNav({ active, onChange }) {
+export default function BottomNav({ active, onChange, showWork }) {
+  const visibleTabs = showWork ? [...tabs, WORK_TAB] : tabs;
   return (
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
@@ -60,7 +73,7 @@ export default function BottomNav({ active, onChange }) {
       paddingBottom: 'env(safe-area-inset-bottom)',
       height: `calc(${T.navH}px + env(safe-area-inset-bottom))`,
     }}>
-      {tabs.map(tab => {
+      {visibleTabs.map(tab => {
         const on = active === tab.id;
         return (
           <button
