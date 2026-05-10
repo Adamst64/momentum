@@ -104,7 +104,7 @@ export function useRoutines(userId) {
   // Day ratio includes archived routines so historical calendar stays accurate
   const dayRatio = useCallback((dateStr) => {
     const list = routines.filter(r => {
-      if (r.createdAt && r.createdAt >= dateStr) return false;
+      if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
     if (!list.length) return null;
