@@ -23,6 +23,18 @@ function genInviteCode() {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
 
+async function syncInventoryTags(listId, inventory, normalizedName, tagIds) {
+  const inv = inventory.find(i => i.name.toLowerCase() === normalizedName);
+  if (!inv) return;
+  const existing = inv.tagIds || [];
+  const added = tagIds.filter(t => !existing.includes(t));
+  if (added.length > 0) {
+    await updateDoc(doc(db, 'lists', listId, 'inventory', inv.id), {
+      tagIds: [...existing, ...added],
+    });
+  }
+}
+
 async function initPersonalList(userId) {
   const listId = genId();
   await setDoc(doc(db, 'lists', listId), {
@@ -105,28 +117,73 @@ export function useShoppingLists(userId) {
   // ── Items ──────────────────────────────────────────────────────────────────
   const addItem = useCallback(async (name, tagIds = []) => {
     if (!userId || !name.trim() || !activeListId) return;
+    const normalizedName = name.trim().toLowerCase();
+
+    // If item with same name already exists in the list, update it instead of duplicating
+    const existingItem = items.find(i => i.name.toLowerCase() === normalizedName);
+    if (existingItem) {
+      const mergedTags = [...new Set([...(existingItem.tagIds || []), ...tagIds])];
+      await updateDoc(doc(db, 'lists', activeListId, 'items', existingItem.id), {
+        checked: false, tagIds: mergedTags,
+      });
+      await syncInventoryTags(activeListId, inventory, normalizedName, mergedTags);
+      return;
+    }
+
     const id = genId();
     await setDoc(doc(db, 'lists', activeListId, 'items', id), {
       name: name.trim(), checked: false, order: Date.now(), tagIds,
     });
     // Upsert to inventory (case-insensitive dedup by name)
-    const normalizedName = name.trim().toLowerCase();
     const existingInv = inventory.find(i => i.name.toLowerCase() === normalizedName);
     if (!existingInv) {
       await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
         name: name.trim(), tagIds,
       });
     } else {
-      // Merge tags: union of existing and new
-      const existingTagIds = existingInv.tagIds || [];
-      const added = tagIds.filter(t => !existingTagIds.includes(t));
-      if (added.length > 0) {
-        await updateDoc(doc(db, 'lists', activeListId, 'inventory', existingInv.id), {
-          tagIds: [...existingTagIds, ...added],
+      await syncInventoryTags(activeListId, inventory, normalizedName, tagIds);
+    }
+  }, [userId, activeListId, items, inventory]);
+
+  const updateItemTags = useCallback(async (id, tagIds) => {
+    if (!activeListId) return;
+    const item = items.find(i => i.id === id);
+    await updateDoc(doc(db, 'lists', activeListId, 'items', id), { tagIds });
+    if (item) await syncInventoryTags(activeListId, inventory, item.name.toLowerCase(), tagIds);
+  }, [activeListId, items, inventory]);
+
+  const renameItem = useCallback(async (id, name) => {
+    if (!activeListId || !name.trim()) return;
+    const item = items.find(i => i.id === id);
+    await updateDoc(doc(db, 'lists', activeListId, 'items', id), { name: name.trim() });
+    if (!item) return;
+
+    const oldNorm = item.name.toLowerCase();
+    const newNorm = name.trim().toLowerCase();
+    if (oldNorm === newNorm) return;
+
+    const oldInv = inventory.find(i => i.name.toLowerCase() === oldNorm);
+    const newInv = inventory.find(i => i.name.toLowerCase() === newNorm);
+
+    if (oldInv) {
+      if (!newInv) {
+        // Rename the inventory entry
+        await updateDoc(doc(db, 'lists', activeListId, 'inventory', oldInv.id), { name: name.trim() });
+      } else {
+        // New name already in inventory: merge tags into it, delete old entry
+        const mergedTags = [...new Set([...(newInv.tagIds || []), ...(oldInv.tagIds || [])])];
+        await updateDoc(doc(db, 'lists', activeListId, 'inventory', newInv.id), { tagIds: mergedTags });
+        await deleteDoc(doc(db, 'lists', activeListId, 'inventory', oldInv.id));
+      }
+    } else {
+      // No inventory entry for old name — create one for the new name if missing
+      if (!newInv) {
+        await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
+          name: name.trim(), tagIds: item.tagIds || [],
         });
       }
     }
-  }, [userId, activeListId, inventory]);
+  }, [activeListId, items, inventory]);
 
   const toggleItem = useCallback(async (id) => {
     if (!activeListId) return;
@@ -134,16 +191,6 @@ export function useShoppingLists(userId) {
     if (!item) return;
     await updateDoc(doc(db, 'lists', activeListId, 'items', id), { checked: !item.checked });
   }, [activeListId, items]);
-
-  const updateItemTags = useCallback(async (id, tagIds) => {
-    if (!activeListId) return;
-    await updateDoc(doc(db, 'lists', activeListId, 'items', id), { tagIds });
-  }, [activeListId]);
-
-  const renameItem = useCallback(async (id, name) => {
-    if (!activeListId || !name.trim()) return;
-    await updateDoc(doc(db, 'lists', activeListId, 'items', id), { name: name.trim() });
-  }, [activeListId]);
 
   const deleteItem = useCallback(async (id) => {
     if (!activeListId) return;
