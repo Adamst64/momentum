@@ -5,16 +5,19 @@ import TagBadge from './TagBadge';
 import ShoppingItem from './ShoppingItem';
 import TagPickerSheet from './TagPickerSheet';
 import ShareSheet from './ShareSheet';
+import InventoryTab from './InventoryTab';
 
 export default function ShoppingTab({ hook, userId }) {
   const {
     lists, activeList, activeListId, setActiveListId,
-    items, tags,
+    items, tags, inventory,
     addItem, toggleItem, updateItemTags, renameItem, deleteItem, clearFinished, clearAll,
     addTag, updateTag, deleteTag,
+    updateInventoryItem, deleteInventoryItem, addItemFromInventory,
     createList, renameList, leaveOrDeleteList, regenerateCode, joinList,
   } = hook;
 
+  const [view, setView]                 = useState('list');
   const [input, setInput]               = useState('');
   const [pendingTagIds, setPendingTagIds] = useState([]);
   const [filterTagId, setFilterTagId]   = useState(null);
@@ -24,7 +27,7 @@ export default function ShoppingTab({ hook, userId }) {
   const [newListName, setNewListName]   = useState('');
   const inputRef = useRef(null);
 
-  useEffect(() => { setFilterTagId(null); }, [activeListId]);
+  useEffect(() => { setFilterTagId(null); setView('list'); }, [activeListId]);
 
   const handleAdd = () => {
     if (!input.trim()) return;
@@ -84,6 +87,33 @@ export default function ShoppingTab({ hook, userId }) {
         </div>
       )}
 
+      {/* List / Inventory toggle */}
+      <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2, margin: '0 16px 12px' }}>
+        {['list', 'inventory'].map(v => (
+          <button key={v} onClick={() => setView(v)} style={{
+            flex: 1, padding: '7px 0', borderRadius: 8,
+            background: view === v ? T.card : 'transparent',
+            color: view === v ? T.text : T.muted,
+            fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
+            textTransform: 'capitalize',
+          }}>
+            {v === 'inventory' ? `Inventory${inventory.length > 0 ? ` (${inventory.length})` : ''}` : 'List'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'inventory' ? (
+        <InventoryTab
+          inventory={inventory}
+          tags={tags}
+          onEdit={updateInventoryItem}
+          onDelete={deleteInventoryItem}
+          onAddToList={(invItem) => { addItemFromInventory(invItem); setView('list'); }}
+          onAddTag={addTag}
+          onUpdateTag={updateTag}
+          onDeleteTag={deleteTag}
+        />
+      ) : (
       <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 12 }}>
 
         {/* Tag filter chips */}
@@ -213,8 +243,9 @@ export default function ShoppingTab({ hook, userId }) {
           </div>
         )}
       </div>
+      )}
 
-      {tagPickerItem !== null && (
+      {view === 'list' && tagPickerItem !== null && (
         <TagPickerSheet
           tags={tags}
           selectedIds={tagPickerItem === 'new' ? pendingTagIds : (tagPickerItem?.tagIds || [])}

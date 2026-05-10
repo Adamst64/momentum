@@ -49,11 +49,12 @@ export function useShoppingLists(userId) {
   const [activeListId, setActiveListId] = useState(null);
   const [items, setItems]               = useState([]);
   const [tags, setTags]                 = useState([]);
+  const [inventory, setInventory]       = useState([]);
   const initRef = useRef(false);
 
   // Listen to all lists the user is a member of
   useEffect(() => {
-    if (!userId) { setLists([]); setItems([]); setTags([]); setActiveListId(null); return; }
+    if (!userId) { setLists([]); setItems([]); setTags([]); setInventory([]); setActiveListId(null); return; }
     initRef.current = false;
 
     const q = query(collection(db, 'lists'), where('members', 'array-contains', userId));
@@ -75,9 +76,9 @@ export function useShoppingLists(userId) {
     });
   }, [userId]);
 
-  // Listen to items + tags for the active list
+  // Listen to items, tags, and inventory for the active list
   useEffect(() => {
-    if (!activeListId) { setItems([]); setTags([]); return; }
+    if (!activeListId) { setItems([]); setTags([]); setInventory([]); return; }
 
     const itemsUnsub = onSnapshot(collection(db, 'lists', activeListId, 'items'), snap => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -92,7 +93,13 @@ export function useShoppingLists(userId) {
       setTags(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    return () => { itemsUnsub(); tagsUnsub(); };
+    const invUnsub = onSnapshot(collection(db, 'lists', activeListId, 'inventory'), snap => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a, b) => a.name.localeCompare(b.name));
+      setInventory(docs);
+    });
+
+    return () => { itemsUnsub(); tagsUnsub(); invUnsub(); };
   }, [activeListId]);
 
   // ── Items ──────────────────────────────────────────────────────────────────
@@ -102,7 +109,15 @@ export function useShoppingLists(userId) {
     await setDoc(doc(db, 'lists', activeListId, 'items', id), {
       name: name.trim(), checked: false, order: Date.now(), tagIds,
     });
-  }, [userId, activeListId]);
+    // Upsert to inventory (case-insensitive dedup by name)
+    const normalizedName = name.trim().toLowerCase();
+    const existingInv = inventory.find(i => i.name.toLowerCase() === normalizedName);
+    if (!existingInv) {
+      await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
+        name: name.trim(), tagIds,
+      });
+    }
+  }, [userId, activeListId, inventory]);
 
   const toggleItem = useCallback(async (id) => {
     if (!activeListId) return;
@@ -163,9 +178,33 @@ export function useShoppingLists(userId) {
         tagIds: (item.tagIds || []).filter(t => t !== tagId),
       });
     });
+    inventory.filter(i => i.tagIds?.includes(tagId)).forEach(item => {
+      batch.update(doc(db, 'lists', activeListId, 'inventory', item.id), {
+        tagIds: (item.tagIds || []).filter(t => t !== tagId),
+      });
+    });
     batch.delete(doc(db, 'lists', activeListId, 'tags', tagId));
     await batch.commit();
-  }, [activeListId, items]);
+  }, [activeListId, items, inventory]);
+
+  // ── Inventory ──────────────────────────────────────────────────────────────
+  const updateInventoryItem = useCallback(async (id, changes) => {
+    if (!activeListId) return;
+    await updateDoc(doc(db, 'lists', activeListId, 'inventory', id), changes);
+  }, [activeListId]);
+
+  const deleteInventoryItem = useCallback(async (id) => {
+    if (!activeListId) return;
+    await deleteDoc(doc(db, 'lists', activeListId, 'inventory', id));
+  }, [activeListId]);
+
+  const addItemFromInventory = useCallback(async (invItem) => {
+    if (!userId || !activeListId) return;
+    const id = genId();
+    await setDoc(doc(db, 'lists', activeListId, 'items', id), {
+      name: invItem.name, checked: false, order: Date.now(), tagIds: invItem.tagIds || [],
+    });
+  }, [userId, activeListId]);
 
   // ── List management ────────────────────────────────────────────────────────
   const createList = useCallback(async (name) => {
@@ -190,10 +229,10 @@ export function useShoppingLists(userId) {
     if (!list) return;
 
     if (list.members.length <= 1) {
-      // Last member — delete everything
       const batch = writeBatch(db);
       items.forEach(i => batch.delete(doc(db, 'lists', activeListId, 'items', i.id)));
       tags.forEach(t => batch.delete(doc(db, 'lists', activeListId, 'tags', t.id)));
+      inventory.forEach(i => batch.delete(doc(db, 'lists', activeListId, 'inventory', i.id)));
       batch.delete(doc(db, 'lists', activeListId));
       await batch.commit();
     } else {
@@ -203,7 +242,7 @@ export function useShoppingLists(userId) {
     }
     const remaining = lists.filter(l => l.id !== activeListId);
     setActiveListId(remaining[0]?.id || null);
-  }, [userId, activeListId, lists, items, tags]);
+  }, [userId, activeListId, lists, items, tags, inventory]);
 
   const regenerateCode = useCallback(async () => {
     if (!activeListId) return;
@@ -221,9 +260,10 @@ export function useShoppingLists(userId) {
 
   return {
     lists, activeList, activeListId, setActiveListId,
-    items, tags,
+    items, tags, inventory,
     addItem, toggleItem, updateItemTags, renameItem, deleteItem, clearFinished, clearAll,
     addTag, updateTag, deleteTag,
+    updateInventoryItem, deleteInventoryItem, addItemFromInventory,
     createList, renameList, leaveOrDeleteList, regenerateCode, joinList,
   };
 }
