@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { db } from './firebase';
 import { T } from './theme';
-import { FEATURE_FLAGS } from './config';
 import BottomNav from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
@@ -25,7 +26,22 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   const userId = user?.uid ?? null;
-  const showWork = FEATURE_FLAGS.workTab.includes(userId);
+  const [features, setFeatures] = useState({});
+
+  useEffect(() => {
+    if (!userId) { setFeatures({}); return; }
+    getDoc(doc(db, 'users', userId)).then(snap => {
+      setFeatures(snap.data()?.features || {});
+    });
+  }, [userId]);
+
+  const handleUnlockFeature = async (featureKey) => {
+    const updated = { ...features, [featureKey]: true };
+    await setDoc(doc(db, 'users', userId), { features: updated }, { merge: true });
+    setFeatures(updated);
+  };
+
+  const showWork = features.workTab === true;
 
   const routinesHook  = useRoutines(userId);
   const tasksHook     = useTasks(userId);
@@ -107,6 +123,8 @@ export default function App() {
             routines={routinesHook.routines}
             tasks={tasksHook.tasks}
             shoppingLists={shoppingHook.lists}
+            features={features}
+            onUnlockFeature={handleUnlockFeature}
           />
         )}
 

@@ -5,13 +5,27 @@ import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists }) {
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature }) {
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
   const [confirmPw, setConfirmPw]   = useState('');
   const [pwStatus, setPwStatus]     = useState(null);
   const [pwLoading, setPwLoading]   = useState(false);
+
+  const [featureCode, setFeatureCode]     = useState('');
+  const [featureStatus, setFeatureStatus] = useState(null);
+
+  const handleFeatureCode = async () => {
+    const code = featureCode.trim().toUpperCase();
+    if (code === 'RBA') {
+      await onUnlockFeature('workTab');
+      setFeatureCode('');
+      setFeatureStatus({ ok: true, msg: 'Work tab unlocked!' });
+    } else {
+      setFeatureStatus({ ok: false, msg: 'Invalid code' });
+    }
+  };
 
   const [importConfirm, setImportConfirm] = useState(null);
   const [importStatus, setImportStatus]   = useState(null);
@@ -228,6 +242,36 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
 
           {importStatus && (
             <div style={{ padding: '0 16px 8px', fontSize: 13, color: importStatus.ok ? T.green : T.red }}>{importStatus.msg}</div>
+          )}
+        </Group>
+
+        <Group>
+          {features?.workTab ? (
+            <div style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 15, color: T.text }}>Work tab</span>
+              <span style={{ fontSize: 13, color: T.green, fontWeight: 600 }}>Active ✓</span>
+            </div>
+          ) : (
+            <div style={{ padding: '14px 16px' }}>
+              <div style={{ fontSize: 13, color: T.muted, marginBottom: 10 }}>Feature code</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={featureCode}
+                  onChange={e => { setFeatureCode(e.target.value); setFeatureStatus(null); }}
+                  onKeyDown={e => e.key === 'Enter' && handleFeatureCode()}
+                  placeholder="Enter code…"
+                  autoCapitalize="characters"
+                  style={{ flex: 1, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '11px 14px', color: T.text, fontSize: 15, outline: 'none', colorScheme: 'dark' }}
+                />
+                <button
+                  onClick={handleFeatureCode}
+                  style={{ padding: '11px 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}
+                >Apply</button>
+              </div>
+              {featureStatus && (
+                <div style={{ fontSize: 13, color: featureStatus.ok ? T.green : T.red, marginTop: 8 }}>{featureStatus.msg}</div>
+              )}
+            </div>
           )}
         </Group>
 
