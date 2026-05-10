@@ -20,21 +20,21 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
   const [name,         setName]         = useState(initial?.name || '');
   const [type,         setType]         = useState(initial?.type || 'one-time');
   const [date,         setDate]         = useState(initial?.date || todayStr());
-  const [dom,          setDom]          = useState(initial?.dayOfMonth || 1);
+  const [dom,          setDom]          = useState(String(initial?.dayOfMonth || 1));
   const [notifyOn,     setNotifyOn]     = useState(initial?.notify?.enabled || false);
   const [notifyTime,   setNotifyTime]   = useState(initial?.notify?.time || '09:00');
 
   const valid = name.trim() && (
     type === 'backlog' ||
     (type === 'one-time' && date) ||
-    (type === 'recurring-monthly' && dom >= 1 && dom <= 31)
+    (type === 'recurring-monthly' && parseInt(dom, 10) >= 1 && parseInt(dom, 10) <= 31)
   );
 
   const save = () => {
     if (!valid) return;
     const data = { name: name.trim(), type };
     if (type === 'one-time')          data.date       = date;
-    if (type === 'recurring-monthly') data.dayOfMonth = Number(dom);
+    if (type === 'recurring-monthly') data.dayOfMonth = Math.min(31, Math.max(1, parseInt(dom, 10) || 1));
     if (type === 'one-time' || type === 'recurring-monthly') {
       if (notifyOn) {
         data.notify = {
@@ -105,7 +105,7 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
                 type="number"
                 min="1" max="31"
                 value={dom}
-                onChange={e => setDom(Math.min(31, Math.max(1, Number(e.target.value))))}
+                onChange={e => setDom(e.target.value)}
                 style={{ ...inputStyle, width: 100, textAlign: 'center' }}
               />
               <span style={{ color: T.muted, fontSize: 14 }}>of every month</span>
