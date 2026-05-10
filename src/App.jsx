@@ -30,9 +30,9 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) { setFeatures({}); return; }
-    getDoc(doc(db, 'users', userId)).then(snap => {
-      setFeatures(snap.data()?.features || {});
-    });
+    getDoc(doc(db, 'users', userId))
+      .then(snap => setFeatures(snap.data()?.features || {}))
+      .catch(() => {});
   }, [userId]);
 
   const handleUnlockFeature = async (featureKey) => {
