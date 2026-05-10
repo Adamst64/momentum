@@ -29,11 +29,10 @@ export function useWork(userId) {
     await deleteDoc(doc(db, 'users', userId, 'workDays', ds));
   }, [userId]);
 
-  // paid: boolean — toggles per-crew payment status within a week doc
-  const setWeekPaid = useCallback(async (mondayId, crewId, paid) => {
+  const setWeekPayment = useCallback(async (mondayId, crewId, paid, amount) => {
     await setDoc(
       doc(db, 'users', userId, 'workWeeks', mondayId),
-      { [crewId]: paid },
+      { [crewId]: { paid, amount: Number(amount) || 0 } },
       { merge: true },
     );
   }, [userId]);
@@ -58,5 +57,5 @@ export function useWork(userId) {
     await deleteDoc(doc(db, 'users', userId, 'workMembers', id));
   }, [userId]);
 
-  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPaid, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember };
+  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember };
 }

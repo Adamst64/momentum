@@ -1,17 +1,81 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { T } from '../../theme';
 import { getMondayId, formatWeekRange } from '../../utils/workUtils';
 
-export default function WorkPaySection({ days, weeks, crews, onSetPaid }) {
-  if (days.length === 0) {
-    return (
-      <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: '24px 16px', textAlign: 'center', color: T.muted, fontSize: 13 }}>
-        No work days logged yet
-      </div>
-    );
-  }
+// Backward-compat: old format stored boolean, new stores { paid, amount }
+function parseEntry(val) {
+  if (typeof val === 'boolean') return { paid: val, amount: 0 };
+  if (val && typeof val === 'object') return { paid: val.paid === true, amount: Number(val.amount) || 0 };
+  return { paid: false, amount: 0 };
+}
 
-  // Group: weekId → crewId → { days[], windows, doors }
+function fmt(n) {
+  if (!n) return '—';
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment }) {
+  const { paid, amount: savedAmount } = parseEntry(rawEntry);
+  const crew = crews.find(c => c.id === crewId);
+  const [localAmt, setLocalAmt] = useState(savedAmount > 0 ? String(savedAmount) : '');
+
+  const save = (newPaid = paid) => {
+    onSetPayment(mondayId, crewId, newPaid, parseFloat(localAmt) || 0);
+  };
+
+  const dc = stats.days.length;
+
+  return (
+    <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {crew?.color && <div style={{ width: 8, height: 8, borderRadius: '50%', background: crew.color, flexShrink: 0 }} />}
+            <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{crew?.name || 'No crew'}</span>
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+            {dc} day{dc !== 1 ? 's' : ''} · {stats.windows} win · {stats.doors} doors
+          </div>
+        </div>
+        <button
+          onClick={() => save(!paid)}
+          style={{
+            padding: '6px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, flexShrink: 0,
+            background: paid ? T.green + '22' : T.subtle,
+            color: paid ? T.green : T.muted,
+            border: `1px solid ${paid ? T.green + '44' : T.cardBorder}`,
+          }}
+        >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 14, color: T.muted }}>$</span>
+        <input
+          value={localAmt}
+          onChange={e => setLocalAmt(e.target.value.replace(/[^0-9.]/g, ''))}
+          onBlur={() => save()}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          placeholder="Amount…"
+          inputMode="decimal"
+          style={{
+            flex: 1, background: T.bg, border: `1px solid ${T.cardBorder}`,
+            borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 15,
+            outline: 'none', colorScheme: 'dark',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
+  const currentYear = String(new Date().getFullYear());
+  const [summaryYear, setSummaryYear] = useState(currentYear);
+
+  const weeksMap = {};
+  weeks.forEach(w => { weeksMap[w.id] = w; });
+
+  // Group work days (exclude off) by week → crew
   const grouped = {};
   days.filter(d => !d.isOff).forEach(day => {
     const wk  = getMondayId(day.id);
@@ -23,57 +87,115 @@ export default function WorkPaySection({ days, weeks, crews, onSetPaid }) {
     grouped[wk][cid].doors   += day.doors   || 0;
   });
 
-  const weeksMap = {};
-  weeks.forEach(w => { weeksMap[w.id] = w; });
+  // Earnings per year → crewId → sum of paid amounts
+  const earnings = {};
+  weeks.forEach(w => {
+    const yr = w.id.slice(0, 4);
+    Object.entries(w).forEach(([key, val]) => {
+      if (key === 'id') return;
+      const { paid, amount } = parseEntry(val);
+      if (paid && amount > 0) {
+        if (!earnings[yr]) earnings[yr] = {};
+        earnings[yr][key] = (earnings[yr][key] || 0) + amount;
+      }
+    });
+  });
+
+  // Available years: any year with weeks, plus current if user has work days
+  const yearSet = new Set(weeks.map(w => w.id.slice(0, 4)));
+  if (days.filter(d => !d.isOff).length > 0) yearSet.add(currentYear);
+  const availableYears = [...yearSet].sort((a, b) => b.localeCompare(a));
 
   const sortedWeekIds = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
+  const yearData  = earnings[summaryYear] || {};
+  const yearTotal = Object.values(yearData).reduce((s, v) => s + v, 0);
+  const crewRows  = Object.entries(yearData).sort(([, a], [, b]) => b - a);
+
+  const hasAnyData = days.filter(d => !d.isOff).length > 0 || weeks.length > 0;
+  if (!hasAnyData) {
+    return (
+      <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: '24px 16px', textAlign: 'center', color: T.muted, fontSize: 13 }}>
+        No work days logged yet
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+      {/* ── Yearly earnings summary ── */}
+      {availableYears.length > 0 && (
+        <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
+          {/* Year tabs */}
+          <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', gap: 6, overflowX: 'auto' }}>
+            {availableYears.map(y => (
+              <button
+                key={y}
+                onClick={() => setSummaryYear(y)}
+                style={{
+                  padding: '5px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, flexShrink: 0,
+                  background: summaryYear === y ? T.olive : T.subtle,
+                  color: summaryYear === y ? '#fff' : T.muted,
+                  transition: 'background 0.15s',
+                }}
+              >{y}</button>
+            ))}
+          </div>
+
+          {/* Crew breakdown */}
+          {crewRows.length === 0 ? (
+            <div style={{ padding: '14px 16px', fontSize: 13, color: T.muted }}>
+              No paid amounts recorded for {summaryYear} yet.
+            </div>
+          ) : (
+            crewRows.map(([crewId, amount]) => {
+              const crew = crews.find(c => c.id === crewId);
+              return (
+                <div key={crewId} style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {crew?.color && <div style={{ width: 8, height: 8, borderRadius: '50%', background: crew.color }} />}
+                    <span style={{ fontSize: 14, color: T.text }}>{crew?.name || 'No crew'}</span>
+                  </div>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: T.khaki }}>{fmt(amount)}</span>
+                </div>
+              );
+            })
+          )}
+
+          {/* Total row */}
+          <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle + '55' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Total {summaryYear}</span>
+            <span style={{ fontSize: 19, fontWeight: 800, color: T.khaki }}>{fmt(yearTotal)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Weekly rows ── */}
       {sortedWeekIds.map(mondayId => {
         const crewEntries = grouped[mondayId];
         const weekDoc     = weeksMap[mondayId] || {};
 
-        // Week totals
         let totalW = 0, totalD = 0, totalDays = 0;
         Object.values(crewEntries).forEach(s => { totalW += s.windows; totalD += s.doors; totalDays += s.days.length; });
 
         return (
           <div key={mondayId} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
-            {/* Week header */}
-            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{formatWeekRange(mondayId)}</span>
               <span style={{ fontSize: 12, color: T.muted }}>{totalDays}d · {totalW}w · {totalD}dr</span>
             </div>
-
-            {/* Crew rows */}
-            {Object.entries(crewEntries).map(([crewId, stats]) => {
-              const crew     = crews.find(c => c.id === crewId);
-              const crewName = crew ? crew.name : 'No crew';
-              const paid     = weekDoc[crewId] === true;
-              const dc       = stats.days.length;
-
-              return (
-                <div key={crewId} style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${T.cardBorder}` }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{crewName}</div>
-                    <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-                      {dc} day{dc !== 1 ? 's' : ''} · {stats.windows} win · {stats.doors} doors
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => onSetPaid(mondayId, crewId, !paid)}
-                    style={{
-                      padding: '7px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                      background: paid ? T.green + '22' : T.subtle,
-                      color: paid ? T.green : T.muted,
-                      border: `1px solid ${paid ? T.green + '44' : T.cardBorder}`,
-                      flexShrink: 0,
-                    }}
-                  >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
-                </div>
-              );
-            })}
+            {Object.entries(crewEntries).map(([crewId, stats]) => (
+              <WeekCrewRow
+                key={crewId}
+                mondayId={mondayId}
+                crewId={crewId}
+                stats={stats}
+                rawEntry={weekDoc[crewId]}
+                crews={crews}
+                onSetPayment={onSetPayment}
+              />
+            ))}
           </div>
         );
       })}
