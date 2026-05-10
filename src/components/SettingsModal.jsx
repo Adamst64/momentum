@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, doc, getDocs, query, where, setDoc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
@@ -28,11 +28,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
       setFeatureStatus({ ok: false, msg: 'Invalid code' });
     }
   };
-
-  const [importConfirm, setImportConfirm] = useState(null);
-  const [importStatus, setImportStatus]   = useState(null);
-  const [importLoading, setImportLoading] = useState(false);
-  const fileRef = useRef(null);
 
   const handleChangePassword = async () => {
     if (newPw !== confirmPw) { setPwStatus({ ok: false, msg: "New passwords don't match" }); return; }
@@ -75,82 +70,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     a.download = `momentum-${todayStr()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  };
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target.result);
-        if (!Array.isArray(parsed.routines) || !Array.isArray(parsed.tasks)) throw new Error();
-        setImportConfirm(parsed);
-        setImportStatus(null);
-      } catch {
-        setImportStatus({ ok: false, msg: 'Invalid file — must be a Momentum export' });
-      }
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  };
-
-  const handleImport = async () => {
-    if (!importConfirm || !user) return;
-    setImportLoading(true);
-    setImportStatus(null);
-    try {
-      const uid = user.uid;
-
-      // Clear routines + tasks
-      for (const col of ['routines', 'tasks']) {
-        const snap = await getDocs(collection(db, 'users', uid, col));
-        await runBatch(snap.docs.map(d => b => b.delete(d.ref)));
-      }
-
-      // Clear user-owned shopping lists (v2) or old path (v1)
-      const ownedListsSnap = await getDocs(query(collection(db, 'lists'), where('ownerId', '==', uid)));
-      for (const listDoc of ownedListsSnap.docs) {
-        const [iSnap, tSnap] = await Promise.all([
-          getDocs(collection(db, 'lists', listDoc.id, 'items')),
-          getDocs(collection(db, 'lists', listDoc.id, 'tags')),
-        ]);
-        await runBatch([
-          ...iSnap.docs.map(d => b => b.delete(d.ref)),
-          ...tSnap.docs.map(d => b => b.delete(d.ref)),
-          b => b.delete(listDoc.ref),
-        ]);
-      }
-
-      // Write routines + tasks
-      await runBatch([
-        ...(importConfirm.routines || []).map(item => b => b.set(doc(db, 'users', uid, 'routines', item.id), item)),
-        ...(importConfirm.tasks    || []).map(item => b => b.set(doc(db, 'users', uid, 'tasks',    item.id), item)),
-      ]);
-
-      // Write shopping lists (v2 format: array of {id, name, items, tags})
-      const shoppingData = importConfirm.shopping || [];
-      if (Array.isArray(shoppingData) && shoppingData[0]?.items !== undefined) {
-        for (const list of shoppingData) {
-          await setDoc(doc(db, 'lists', list.id), {
-            name: list.name, ownerId: uid, members: [uid],
-            inviteCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
-            createdAt: new Date().toISOString(),
-          });
-          await runBatch([
-            ...(list.items || []).map(item => b => b.set(doc(db, 'lists', list.id, 'items', item.id), item)),
-            ...(list.tags  || []).map(tag  => b => b.set(doc(db, 'lists', list.id, 'tags',  tag.id),  tag)),
-          ]);
-        }
-      }
-
-      setImportStatus({ ok: true, msg: 'Import successful' });
-      setImportConfirm(null);
-    } catch (e) {
-      setImportStatus({ ok: false, msg: 'Import failed: ' + e.message });
-    } finally {
-      setImportLoading(false);
-    }
   };
 
   return ReactDOM.createPortal(
@@ -205,46 +124,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
             detail={`${routines.length}r · ${tasks.length}t · ${(shoppingLists || []).length} lists`}
             onTap={handleExport}
           />
-          <Row label="Import from JSON" onTap={() => fileRef.current?.click()} />
-          <input ref={fileRef} type="file" accept=".json" onChange={handleFileSelect} style={{ display: 'none' }} />
-
-          {importConfirm && (
-            <div style={{ padding: '0 16px 12px' }}>
-              <div style={{
-                padding: 12, borderRadius: 10,
-                border: `1px solid ${T.red}55`, background: `${T.red}11`,
-              }}>
-                <div style={{ fontSize: 13, color: T.muted, marginBottom: 12 }}>
-                  Replace all current data with:{' '}
-                  <span style={{ color: T.text }}>
-                    {importConfirm.routines?.length || 0}r · {importConfirm.tasks?.length || 0}t
-                    {Array.isArray(importConfirm.shopping) && importConfirm.shopping[0]?.items !== undefined
-                      ? ` · ${importConfirm.shopping.length} lists`
-                      : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button
-                    onClick={() => { setImportConfirm(null); setImportStatus(null); }}
-                    style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13, background: 'transparent' }}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleImport}
-                    disabled={importLoading}
-                    style={{ flex: 1, padding: 10, borderRadius: 8, background: T.red, color: '#fff', fontSize: 13, fontWeight: 600 }}
-                  >
-                    {importLoading ? 'Importing…' : 'Replace & Import'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {importStatus && (
-            <div style={{ padding: '0 16px 8px', fontSize: 13, color: importStatus.ok ? T.green : T.red }}>{importStatus.msg}</div>
-          )}
         </Group>
 
         {tabOrder && (
@@ -389,10 +268,3 @@ function PwInput({ placeholder, value, onChange }) {
   );
 }
 
-async function runBatch(ops) {
-  for (let i = 0; i < ops.length; i += 400) {
-    const batch = writeBatch(db);
-    ops.slice(i, i + 400).forEach(op => op(batch));
-    await batch.commit();
-  }
-}
