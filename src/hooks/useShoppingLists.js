@@ -116,6 +116,11 @@ export function useShoppingLists(userId) {
     await updateDoc(doc(db, 'lists', activeListId, 'items', id), { tagIds });
   }, [activeListId]);
 
+  const renameItem = useCallback(async (id, name) => {
+    if (!activeListId || !name.trim()) return;
+    await updateDoc(doc(db, 'lists', activeListId, 'items', id), { name: name.trim() });
+  }, [activeListId]);
+
   const deleteItem = useCallback(async (id) => {
     if (!activeListId) return;
     await deleteDoc(doc(db, 'lists', activeListId, 'items', id));
@@ -143,6 +148,11 @@ export function useShoppingLists(userId) {
     const id = genId();
     await setDoc(doc(db, 'lists', activeListId, 'tags', id), { name: name.trim(), color });
     return id;
+  }, [activeListId]);
+
+  const updateTag = useCallback(async (tagId, updates) => {
+    if (!activeListId) return;
+    await updateDoc(doc(db, 'lists', activeListId, 'tags', tagId), updates);
   }, [activeListId]);
 
   const deleteTag = useCallback(async (tagId) => {
@@ -212,8 +222,8 @@ export function useShoppingLists(userId) {
   return {
     lists, activeList, activeListId, setActiveListId,
     items, tags,
-    addItem, toggleItem, updateItemTags, deleteItem, clearFinished, clearAll,
-    addTag, deleteTag,
+    addItem, toggleItem, updateItemTags, renameItem, deleteItem, clearFinished, clearAll,
+    addTag, updateTag, deleteTag,
     createList, renameList, leaveOrDeleteList, regenerateCode, joinList,
   };
 }

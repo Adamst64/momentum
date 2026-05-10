@@ -1,11 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { TAG_COLORS } from '../../hooks/useShoppingLists';
 
 // ── TagPickerSheet ─────────────────────────────────────────────────────────────
-function TagPickerSheet({ tags, selectedIds, onAddTag, onConfirm, onClose }) {
+function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
   const [selected, setSelected] = useState(new Set(selectedIds));
+  const [editingTagId, setEditingTagId] = useState(null); // tag being renamed/recolored
+  const [editName, setEditName] = useState('');
+  const [editColor, setEditColor] = useState(TAG_COLORS[0]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newColor, setNewColor] = useState(TAG_COLORS[0]);
@@ -13,6 +16,26 @@ function TagPickerSheet({ tags, selectedIds, onAddTag, onConfirm, onClose }) {
 
   const toggle = (id) =>
     setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+
+  const startEdit = (tag, e) => {
+    e.stopPropagation();
+    setEditingTagId(tag.id);
+    setEditName(tag.name);
+    setEditColor(tag.color);
+  };
+
+  const saveTagEdit = async (e) => {
+    e?.stopPropagation();
+    if (!editName.trim()) return;
+    await onUpdateTag(editingTagId, { name: editName.trim(), color: editColor });
+    setEditingTagId(null);
+  };
+
+  const handleDelete = async (tagId, e) => {
+    e.stopPropagation();
+    await onDeleteTag(tagId);
+    setSelected(prev => { const s = new Set(prev); s.delete(tagId); return s; });
+  };
 
   const handleCreate = async () => {
     if (!newName.trim() || saving) return;
@@ -31,34 +54,78 @@ function TagPickerSheet({ tags, selectedIds, onAddTag, onConfirm, onClose }) {
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         background: T.card, borderRadius: '20px 20px 0 0',
-        padding: '20px 20px 32px', maxHeight: '70vh', overflowY: 'auto',
+        padding: '20px 20px 32px', maxHeight: '75vh', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Tags</span>
-          <button
-            onClick={() => onConfirm([...selected])}
-            style={{ background: T.olive, color: T.text, fontSize: 14, fontWeight: 600, padding: '6px 18px', borderRadius: 8 }}
-          >
+          <button onClick={() => onConfirm([...selected])}
+            style={{ background: T.olive, color: T.text, fontSize: 14, fontWeight: 600, padding: '6px 18px', borderRadius: 8 }}>
             Done
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
           {tags.map(tag => (
-            <button key={tag.id} onClick={() => toggle(tag.id)} style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              padding: '10px 14px', borderRadius: 10,
-              background: selected.has(tag.id) ? '#1A2410' : T.bg,
-              border: `1px solid ${selected.has(tag.id) ? T.olive : T.cardBorder}`,
-            }}>
-              <div style={{ width: 14, height: 14, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 14, color: T.text, textAlign: 'left' }}>{tag.name}</span>
-              {selected.has(tag.id) && (
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                  <path d="M3 8l4 4 6-6" stroke={T.oliveLight} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+            <div key={tag.id}>
+              {editingTagId === tag.id ? (
+                <div style={{ background: T.bg, borderRadius: 10, padding: 12, border: `1px solid ${T.olive}` }}>
+                  <input
+                    value={editName}
+                    onChange={e => setEditName(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveTagEdit(); if (e.key === 'Escape') setEditingTagId(null); }}
+                    autoFocus
+                    style={{
+                      width: '100%', padding: '8px 10px', borderRadius: 7, marginBottom: 10,
+                      background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text,
+                      fontSize: 14, outline: 'none', boxSizing: 'border-box',
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                    {TAG_COLORS.map(c => (
+                      <button key={c} onClick={() => setEditColor(c)} style={{
+                        width: 26, height: 26, borderRadius: '50%', background: c,
+                        border: editColor === c ? `3px solid ${T.text}` : '3px solid transparent',
+                        outline: editColor === c ? `2px solid ${T.olive}` : 'none',
+                        outlineOffset: 1,
+                      }} />
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => setEditingTagId(null)} style={{
+                      flex: 1, padding: '8px', borderRadius: 7, background: 'transparent',
+                      border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13,
+                    }}>Cancel</button>
+                    <button onClick={saveTagEdit} disabled={!editName.trim()} style={{
+                      flex: 1, padding: '8px', borderRadius: 7,
+                      background: editName.trim() ? T.olive : T.subtle, color: T.text, fontSize: 13, fontWeight: 600,
+                    }}>Save</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => toggle(tag.id)} style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 12px', borderRadius: 10,
+                  background: selected.has(tag.id) ? '#1A2410' : T.bg,
+                  border: `1px solid ${selected.has(tag.id) ? T.olive : T.cardBorder}`,
+                }}>
+                  <div style={{ width: 14, height: 14, borderRadius: '50%', background: tag.color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 14, color: T.text, textAlign: 'left' }}>{tag.name}</span>
+                  {selected.has(tag.id) && (
+                    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                      <path d="M3 8l4 4 6-6" stroke={T.oliveLight} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
+                  <button onClick={(e) => startEdit(tag, e)} style={{
+                    padding: '2px 6px', borderRadius: 5, background: T.subtle,
+                    color: T.muted, fontSize: 12, lineHeight: 1, flexShrink: 0,
+                  }}>✎</button>
+                  <button onClick={(e) => handleDelete(tag.id, e)} style={{
+                    padding: '2px 6px', borderRadius: 5, background: 'transparent',
+                    color: T.red, fontSize: 15, lineHeight: 1, flexShrink: 0,
+                  }}>×</button>
+                </button>
               )}
-            </button>
+            </div>
           ))}
         </div>
 
@@ -81,8 +148,7 @@ function TagPickerSheet({ tags, selectedIds, onAddTag, onConfirm, onClose }) {
                 <button key={c} onClick={() => setNewColor(c)} style={{
                   width: 28, height: 28, borderRadius: '50%', background: c,
                   border: newColor === c ? `3px solid ${T.text}` : '3px solid transparent',
-                  outline: newColor === c ? `2px solid ${T.olive}` : 'none',
-                  outlineOffset: 1,
+                  outline: newColor === c ? `2px solid ${T.olive}` : 'none', outlineOffset: 1,
                 }} />
               ))}
             </div>
@@ -164,6 +230,7 @@ function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenera
             <input
               value={newName}
               onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) { onRename(newName); setRenaming(false); } }}
               autoFocus
               style={{
                 width: '100%', padding: '11px 14px', borderRadius: 10, boxSizing: 'border-box',
@@ -176,8 +243,9 @@ function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenera
                 flex: 1, padding: '9px', borderRadius: 8, background: 'transparent',
                 border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 14,
               }}>Cancel</button>
-              <button onClick={() => { onRename(newName); setRenaming(false); }} style={{
-                flex: 1, padding: '9px', borderRadius: 8, background: T.olive, color: T.text, fontSize: 14, fontWeight: 600,
+              <button onClick={() => { onRename(newName); setRenaming(false); }} disabled={!newName.trim()} style={{
+                flex: 1, padding: '9px', borderRadius: 8,
+                background: newName.trim() ? T.olive : T.subtle, color: T.text, fontSize: 14, fontWeight: 600,
               }}>Save</button>
             </div>
           </div>
@@ -188,7 +256,7 @@ function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenera
             background: T.bg, border: `1px solid ${T.cardBorder}`,
           }}>
             <span style={{ fontSize: 15, color: T.text }}>{list?.name}</span>
-            <span style={{ color: T.muted, fontSize: 13 }}>Rename</span>
+            <span style={{ color: T.muted, fontSize: 13 }}>Rename ✎</span>
           </button>
         )}
 
@@ -239,15 +307,11 @@ function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenera
                 color: T.text, fontSize: 15, outline: 'none', letterSpacing: 3, fontWeight: 700,
               }}
             />
-            <button
-              onClick={handleJoin}
-              disabled={joining || !joinCode.trim()}
-              style={{
-                padding: '11px 18px', borderRadius: 10,
-                background: joinCode.trim() ? T.olive : T.subtle,
-                color: T.text, fontSize: 14, fontWeight: 600,
-              }}
-            >
+            <button onClick={handleJoin} disabled={joining || !joinCode.trim()} style={{
+              padding: '11px 18px', borderRadius: 10,
+              background: joinCode.trim() ? T.olive : T.subtle,
+              color: T.text, fontSize: 14, fontWeight: 600,
+            }}>
               {joining ? '...' : 'Join'}
             </button>
           </div>
@@ -282,8 +346,55 @@ function TagBadge({ tag }) {
 }
 
 // ── ShoppingItem ───────────────────────────────────────────────────────────────
-function ShoppingItem({ item, tags, onToggle, onDelete, onEditTags }) {
+function ShoppingItem({ item, tags, onToggle, onDelete, onEditTags, onRename }) {
+  const [editing, setEditing] = useState(false);
+  const [editVal, setEditVal] = useState(item.name);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
+
+  const saveEdit = () => {
+    if (editVal.trim()) onRename(item.id, editVal.trim());
+    setEditing(false);
+  };
+
+  const cancelEdit = () => {
+    setEditVal(item.name);
+    setEditing(false);
+  };
+
   const itemTags = tags.filter(t => item.tagIds?.includes(t.id));
+
+  if (editing) {
+    return (
+      <div style={{
+        background: T.card, border: `1px solid ${T.olive}`,
+        borderRadius: 12, padding: '10px 12px',
+      }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <input
+            ref={inputRef}
+            value={editVal}
+            onChange={e => setEditVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+            style={{
+              flex: 1, padding: '7px 10px', borderRadius: 8,
+              background: T.bg, border: `1px solid ${T.cardBorder}`, color: T.text,
+              fontSize: 15, outline: 'none',
+            }}
+          />
+          <button onClick={saveEdit} style={{
+            padding: '7px 14px', borderRadius: 8,
+            background: T.olive, color: T.text, fontSize: 13, fontWeight: 600,
+          }}>Save</button>
+          <button onClick={cancelEdit} style={{ color: T.muted, fontSize: 20, padding: '0 4px', lineHeight: 1 }}>×</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{
       background: T.card, border: `1px solid ${T.cardBorder}`,
@@ -306,20 +417,40 @@ function ShoppingItem({ item, tags, onToggle, onDelete, onEditTags }) {
             </svg>
           )}
         </button>
-        <span
-          onClick={() => !item.checked && onEditTags(item)}
-          style={{
-            flex: 1, fontSize: 15, color: T.text, fontWeight: 500,
-            textDecoration: item.checked ? 'line-through' : 'none',
-            cursor: item.checked ? 'default' : 'pointer',
-          }}
-        >
+
+        <span style={{
+          flex: 1, fontSize: 15, color: T.text, fontWeight: 500,
+          textDecoration: item.checked ? 'line-through' : 'none',
+        }}>
           {item.name}
         </span>
-        <button onClick={() => onDelete(item.id)} style={{ color: T.subtle, fontSize: 20, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>
-          ×
-        </button>
+
+        {!item.checked && (
+          <button onClick={() => { setEditVal(item.name); setEditing(true); }} style={{
+            color: T.muted, fontSize: 13, padding: '2px 7px', borderRadius: 6,
+            background: T.subtle, border: 'none', lineHeight: 1, flexShrink: 0,
+          }}>✎</button>
+        )}
+
+        {!item.checked && (
+          <button onClick={() => onEditTags(item)} style={{
+            padding: '2px 7px', borderRadius: 6, background: T.subtle, border: 'none',
+            color: T.muted, flexShrink: 0, display: 'flex', alignItems: 'center',
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+              <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"
+                stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <line x1="7" y1="7" x2="7.01" y2="7" stroke={T.muted} strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
+          </button>
+        )}
+
+        <button onClick={() => onDelete(item.id)} style={{
+          color: T.red, fontSize: 18, padding: '2px 4px', lineHeight: 1, flexShrink: 0,
+          background: 'none', border: 'none',
+        }}>×</button>
       </div>
+
       {itemTags.length > 0 && (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6, paddingLeft: 32 }}>
           {itemTags.map(t => <TagBadge key={t.id} tag={t} />)}
@@ -334,8 +465,8 @@ export default function ShoppingTab({ hook, userId }) {
   const {
     lists, activeList, activeListId, setActiveListId,
     items, tags,
-    addItem, toggleItem, updateItemTags, deleteItem, clearFinished, clearAll,
-    addTag,
+    addItem, toggleItem, updateItemTags, renameItem, deleteItem, clearFinished, clearAll,
+    addTag, updateTag, deleteTag,
     createList, renameList, leaveOrDeleteList, regenerateCode, joinList,
   } = hook;
 
@@ -368,11 +499,10 @@ export default function ShoppingTab({ hook, userId }) {
   const filteredItems = filterTagId ? items.filter(i => i.tagIds?.includes(filterTagId)) : items;
   const unchecked = filteredItems.filter(i => !i.checked);
   const checked   = filteredItems.filter(i => i.checked);
-
   const pendingTags = pendingTagIds.map(id => tags.find(t => t.id === id)).filter(Boolean);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* List tabs */}
       {lists.length > 0 && (
@@ -467,8 +597,7 @@ export default function ShoppingTab({ hook, userId }) {
             <button onClick={handleAdd} disabled={!input.trim()} style={{
               padding: '12px 18px', borderRadius: 12,
               background: input.trim() ? T.olive : T.subtle,
-              color: T.text, fontSize: 15, fontWeight: 600,
-              transition: 'background 0.15s',
+              color: T.text, fontSize: 15, fontWeight: 600, transition: 'background 0.15s',
             }}>Add</button>
           </div>
           {pendingTags.length > 0 && (
@@ -493,7 +622,8 @@ export default function ShoppingTab({ hook, userId }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {unchecked.map(item => (
               <ShoppingItem key={item.id} item={item} tags={tags}
-                onToggle={toggleItem} onDelete={deleteItem} onEditTags={setTagPickerItem} />
+                onToggle={toggleItem} onDelete={deleteItem}
+                onEditTags={setTagPickerItem} onRename={renameItem} />
             ))}
           </div>
         )}
@@ -507,7 +637,8 @@ export default function ShoppingTab({ hook, userId }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {checked.map(item => (
                 <ShoppingItem key={item.id} item={item} tags={tags}
-                  onToggle={toggleItem} onDelete={deleteItem} onEditTags={setTagPickerItem} />
+                  onToggle={toggleItem} onDelete={deleteItem}
+                  onEditTags={setTagPickerItem} onRename={renameItem} />
               ))}
             </div>
           </div>
@@ -542,6 +673,8 @@ export default function ShoppingTab({ hook, userId }) {
           tags={tags}
           selectedIds={tagPickerItem === 'new' ? pendingTagIds : (tagPickerItem?.tagIds || [])}
           onAddTag={addTag}
+          onUpdateTag={updateTag}
+          onDeleteTag={deleteTag}
           onConfirm={handleTagPickerConfirm}
           onClose={() => setTagPickerItem(null)}
         />
@@ -591,15 +724,12 @@ export default function ShoppingTab({ hook, userId }) {
                 flex: 1, padding: '12px', borderRadius: 10, background: 'transparent',
                 border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 15,
               }}>Cancel</button>
-              <button
-                onClick={() => { createList(newListName); setShowNewList(false); setNewListName(''); }}
-                disabled={!newListName.trim()}
-                style={{
+              <button onClick={() => { createList(newListName); setShowNewList(false); setNewListName(''); }}
+                disabled={!newListName.trim()} style={{
                   flex: 1, padding: '12px', borderRadius: 10,
                   background: newListName.trim() ? T.olive : T.subtle,
                   color: T.text, fontSize: 15, fontWeight: 600,
-                }}
-              >Create</button>
+                }}>Create</button>
             </div>
           </div>
         </div>,
