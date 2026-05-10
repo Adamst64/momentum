@@ -10,7 +10,6 @@ import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
-import { useEndDay } from './hooks/useEndDay';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
@@ -25,7 +24,6 @@ export default function App() {
   const userId = user?.uid ?? null;
   const routinesHook  = useRoutines(userId);
   const tasksHook     = useTasks(userId);
-  const endDayHook    = useEndDay(userId);
   const shoppingHook  = useShoppingLists(userId);
   const birthdaysHook = useBirthdays(userId);
 
@@ -88,7 +86,7 @@ export default function App() {
         paddingBottom: `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
         overflowY: 'auto',
       }}>
-        {tab === 'routines'  && <RoutinesTab hook={routinesHook} endDayHook={endDayHook} />}
+        {tab === 'routines'  && <RoutinesTab hook={routinesHook} />}
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}

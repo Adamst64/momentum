@@ -201,7 +201,7 @@ function TaskCalendar({ today, tasksForDate, toggleTaskForDate, deleteTask, resc
 
       {/* Grid */}
       <div style={{
-        background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 8,
+        background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 8,
         display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4,
       }}>
         {cells.map((dateStr, i) => {
