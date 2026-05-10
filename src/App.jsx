@@ -11,7 +11,7 @@ import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
 import { useTasks } from './hooks/useTasks';
 import { useEndDay } from './hooks/useEndDay';
-import { useShoppingList } from './hooks/useShoppingList';
+import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
@@ -26,7 +26,7 @@ export default function App() {
   const routinesHook  = useRoutines(userId);
   const tasksHook     = useTasks(userId);
   const endDayHook    = useEndDay(userId);
-  const shoppingHook  = useShoppingList(userId);
+  const shoppingHook  = useShoppingLists(userId);
   const birthdaysHook = useBirthdays(userId);
 
   // Re-register push token on load if permission was already granted
@@ -90,7 +90,7 @@ export default function App() {
       }}>
         {tab === 'routines'  && <RoutinesTab hook={routinesHook} endDayHook={endDayHook} />}
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} />}
-        {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} />}
+        {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
 
         {showSettings && (
