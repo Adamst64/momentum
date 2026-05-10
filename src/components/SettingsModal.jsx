@@ -137,8 +137,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     }
   };
 
-  const totalShoppingItems = (shoppingLists || []).reduce((n, l) => n, 0);
-
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
       <div

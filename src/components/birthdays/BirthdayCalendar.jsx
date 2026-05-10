@@ -1,25 +1,9 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import BirthdayRow from './BirthdayRow';
+import { daysUntil, turningAge } from '../../utils/birthdayUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-function daysUntil(month, day) {
-  const today     = new Date();
-  const todayFlat = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let   next      = new Date(today.getFullYear(), month - 1, day);
-  if (next < todayFlat) next = new Date(today.getFullYear() + 1, month - 1, day);
-  return Math.round((next - todayFlat) / 864e5);
-}
-
-function turningAge(birthYear, month, day) {
-  if (!birthYear) return null;
-  const today     = new Date();
-  const todayFlat = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let   next      = new Date(today.getFullYear(), month - 1, day);
-  if (next < todayFlat) next = new Date(today.getFullYear() + 1, month - 1, day);
-  return next.getFullYear() - birthYear;
-}
 
 export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
   const today = new Date();

@@ -6,23 +6,7 @@ import { registerPushToken, getNotificationPermission } from '../../utils/pushNo
 import BirthdayRow from './BirthdayRow';
 import BirthdayForm from './BirthdayForm';
 import BirthdayCalendar from './BirthdayCalendar';
-
-function daysUntil(month, day) {
-  const today     = new Date();
-  const todayFlat = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let   next      = new Date(today.getFullYear(), month - 1, day);
-  if (next < todayFlat) next = new Date(today.getFullYear() + 1, month - 1, day);
-  return Math.round((next - todayFlat) / 864e5);
-}
-
-function turningAge(birthYear, month, day) {
-  if (!birthYear) return null;
-  const today     = new Date();
-  const todayFlat = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-  let   next      = new Date(today.getFullYear(), month - 1, day);
-  if (next < todayFlat) next = new Date(today.getFullYear() + 1, month - 1, day);
-  return next.getFullYear() - birthYear;
-}
+import { daysUntil, turningAge } from '../../utils/birthdayUtils';
 
 export default function BirthdaysTab({ hook, userId }) {
   const { birthdays, addBirthday, updateBirthday, deleteBirthday } = hook;
