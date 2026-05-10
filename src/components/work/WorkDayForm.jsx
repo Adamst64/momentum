@@ -41,6 +41,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   const [form, setForm]                   = useState(() => norm(initial));
   const [lastSaved, setLastSaved]         = useState(() => initial ? norm(initial) : null);
   const [saving, setSaving]               = useState(false);
+  const [confirmClear, setConfirmClear]   = useState(false);
   const [showCrewPicker, setShowCrewPicker]     = useState(false);
   const [showMemberPicker, setShowMemberPicker] = useState(false);
 
@@ -164,15 +165,30 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
         >
           {saving ? 'Saving…' : showSaved ? 'Saved ✓' : 'Save Day'}
         </button>
-        {!isEmpty && onDelete && (
+        {!isEmpty && onDelete && !confirmClear && (
           <button
-            onClick={() => onDelete(dateStr)}
+            onClick={() => setConfirmClear(true)}
             style={{ padding: '14px 18px', borderRadius: 14, background: T.red + '22', color: T.red, fontSize: 14 }}
           >
             Clear
           </button>
         )}
       </div>
+
+      {/* Clear confirmation */}
+      {confirmClear && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: T.red + '11', border: `1px solid ${T.red + '44'}`, borderRadius: 14, padding: '12px 16px' }}>
+          <span style={{ flex: 1, fontSize: 14, color: T.text }}>Clear this day's data?</span>
+          <button
+            onClick={() => setConfirmClear(false)}
+            style={{ padding: '8px 14px', borderRadius: 10, background: T.subtle, color: T.muted, fontSize: 13, fontWeight: 600 }}
+          >Cancel</button>
+          <button
+            onClick={() => { setConfirmClear(false); onDelete(dateStr); }}
+            style={{ padding: '8px 14px', borderRadius: 10, background: T.red + '33', color: T.red, fontSize: 13, fontWeight: 700 }}
+          >Clear</button>
+        </div>
+      )}
 
       {/* Crew picker sheet */}
       {showCrewPicker && (
