@@ -19,14 +19,53 @@ export function useTasks(userId) {
 
   const todayTasks = useCallback(() => {
     const today = todayStr();
-    const ym = getYM(today);
-    const dom = new Date().getDate();
+    const dom = parseInt(today.slice(-2), 10);
     return tasks.filter(t => {
-      if (t.type === 'one-time') return t.date === today && !t.completedAt;
-      if (t.type === 'recurring-monthly') return t.dayOfMonth === dom && !t.completedOccurrences?.[ym];
+      if (t.type === 'one-time') return t.date === today;
+      if (t.type === 'recurring-monthly') return t.dayOfMonth === dom;
       return false;
     });
   }, [tasks]);
+
+  const tasksForDate = useCallback((dateStr) => {
+    const ym = dateStr.slice(0, 7);
+    const dom = parseInt(dateStr.slice(-2), 10);
+    return tasks
+      .filter(t => {
+        if (t.type === 'one-time') return t.date === dateStr;
+        if (t.type === 'recurring-monthly') return t.dayOfMonth === dom;
+        if (t.type === 'backlog') return t.completedAt === dateStr;
+        return false;
+      })
+      .map(t => {
+        let done = false;
+        if (t.type === 'one-time') done = t.completedAt === dateStr;
+        else if (t.type === 'recurring-monthly') done = !!t.completedOccurrences?.[ym];
+        else if (t.type === 'backlog') done = true;
+        return { task: t, done };
+      });
+  }, [tasks]);
+
+  const toggleTaskForDate = useCallback(async (id, dateStr) => {
+    if (!userId) return;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const ym = dateStr.slice(0, 7);
+    let changes;
+    if (task.type === 'one-time') {
+      const isDone = task.completedAt === dateStr;
+      changes = isDone
+        ? { completed: false, completedAt: null }
+        : { completed: true, completedAt: dateStr };
+    } else if (task.type === 'recurring-monthly') {
+      const isDone = !!task.completedOccurrences?.[ym];
+      changes = { completedOccurrences: { ...task.completedOccurrences, [ym]: isDone ? null : dateStr } };
+    } else if (task.type === 'backlog') {
+      const isDone = task.completedAt === dateStr;
+      changes = isDone ? { done: false, completedAt: null } : { done: true, completedAt: dateStr };
+    }
+    if (changes) await updateDoc(doc(db, 'users', userId, 'tasks', id), changes);
+  }, [userId, tasks]);
 
   const doneTasks = useCallback(() => {
     const today = todayStr();
@@ -154,5 +193,7 @@ export function useTasks(userId) {
     backlogTasks,
     upcomingTasks,
     todayStats,
+    tasksForDate,
+    toggleTaskForDate,
   };
 }
