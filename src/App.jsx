@@ -16,7 +16,7 @@ import { useTasks } from './hooks/useTasks';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { useWork } from './hooks/useWork';
-import { useTabOrder } from './hooks/useTabOrder';
+import { useTabOrder, ALL_TABS } from './hooks/useTabOrder';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
 const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays', work: 'Work' };
@@ -27,12 +27,24 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
 
   const userId = user?.uid ?? null;
-  const [features, setFeatures] = useState({});
+  const [features, setFeatures]         = useState({});
+  const [tabOrder, setTabOrderState]    = useTabOrder();
 
   useEffect(() => {
     if (!userId) { setFeatures({}); return; }
     getDoc(doc(db, 'users', userId))
-      .then(snap => setFeatures(snap.data()?.features || {}))
+      .then(snap => {
+        const data = snap.data() || {};
+        setFeatures(data.features || {});
+        const stored = data.preferences?.tabOrder;
+        if (Array.isArray(stored) && stored.length > 0) {
+          const valid = [
+            ...stored.filter(t => ALL_TABS.includes(t)),
+            ...ALL_TABS.filter(t => !stored.includes(t)),
+          ];
+          setTabOrderState(valid);
+        }
+      })
       .catch(() => {});
   }, [userId]);
 
@@ -42,8 +54,12 @@ export default function App() {
     setFeatures(updated);
   };
 
-  const showWork = features.workTab === true;
-  const [tabOrder, setTabOrder] = useTabOrder();
+  const setTabOrder = (newOrder) => {
+    setTabOrderState(newOrder);
+    setDoc(doc(db, 'users', userId), { preferences: { tabOrder: newOrder } }, { merge: true }).catch(() => {});
+  };
+
+  const showWork    = features.workTab === true;
   const visibleTabs = tabOrder.filter(id => id !== 'work' || showWork);
 
   const routinesHook  = useRoutines(userId);
