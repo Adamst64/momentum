@@ -165,15 +165,23 @@ export function useTasks(userId) {
 
   const rescheduleTask = useCallback(async (id, newDate) => {
     if (!userId) return;
-    await updateDoc(doc(db, 'users', userId, 'tasks', id), {
-      type: 'one-time',
-      date: newDate,
-      completed: false,
-      completedAt: null,
-      missedDot: false,
-      done: false,
-    });
-  }, [userId]);
+    const task = tasks.find(t => t.id === id);
+    if (task?.type === 'recurring-monthly') {
+      // Move the whole series to the new day of month; preserve recurrence
+      await updateDoc(doc(db, 'users', userId, 'tasks', id), {
+        dayOfMonth: parseInt(newDate.slice(-2), 10),
+      });
+    } else {
+      await updateDoc(doc(db, 'users', userId, 'tasks', id), {
+        type: 'one-time',
+        date: newDate,
+        completed: false,
+        completedAt: null,
+        missedDot: false,
+        done: false,
+      });
+    }
+  }, [userId, tasks]);
 
   const updateTask = useCallback(async (id, changes) => {
     if (!userId) return;

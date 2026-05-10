@@ -80,25 +80,23 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
             isPaid = paid;
           }
 
-          const bg = isSel
-            ? (isOff ? T.red + '44' : crewColor ? crewColor + '44' : T.olive + '44')
-            : isOff
-              ? T.red + '22'
-              : crewColor
-                ? crewColor + '28'
-                : hasEntry ? T.olive + '18' : 'transparent';
+          const bg = isOff
+            ? T.red + '22'
+            : crewColor
+              ? crewColor + '28'
+              : hasEntry ? T.olive + '18' : 'transparent';
 
           const borderColor = isToday && !isWorkDay
             ? T.khaki + '88'
-            : isSel
-              ? (isOff ? T.red : crewColor || T.olive)
-              : isWorkDay
-                ? (isPaid ? T.green : T.red)
-                : isOff
-                  ? T.red + '55'
-                  : hasEntry ? T.olive + '33' : 'transparent';
+            : isWorkDay
+              ? (isPaid ? T.green : T.red)
+              : isOff
+                ? T.red + '55'
+                : hasEntry ? T.olive + '33' : 'transparent';
 
           const borderWidth = isWorkDay ? 2 : 1;
+          // Selection ring uses box-shadow so it sits outside the status border
+          const selRing = isSel ? `0 0 0 2px ${T.khaki}` : 'none';
 
           const numColor = isToday
             ? T.khaki
@@ -110,7 +108,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
             <button
               key={i}
               onClick={() => handleSelect(day)}
-              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px solid ${borderColor}` }}
+              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px solid ${borderColor}`, boxShadow: selRing }}
             >
               {/* Crew lead indicator */}
               {isLead && (
