@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, doc, getDocs, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, query, where, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shopping }) {
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists }) {
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
@@ -36,11 +36,25 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     }
   };
 
-  const handleExport = () => {
-    const data = { exportedAt: new Date().toISOString(), version: 1, routines, tasks, shopping };
+  const handleExport = async () => {
+    const shoppingExport = await Promise.all(
+      (shoppingLists || []).map(async (list) => {
+        const [itemsSnap, tagsSnap] = await Promise.all([
+          getDocs(collection(db, 'lists', list.id, 'items')),
+          getDocs(collection(db, 'lists', list.id, 'tags')),
+        ]);
+        return {
+          id: list.id, name: list.name,
+          items: itemsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+          tags: tagsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
+        };
+      })
+    );
+
+    const data = { exportedAt: new Date().toISOString(), version: 2, routines, tasks, shopping: shoppingExport };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
     a.href = url;
     a.download = `momentum-${todayStr()}.json`;
     a.click();
@@ -71,15 +85,49 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     setImportStatus(null);
     try {
       const uid = user.uid;
-      for (const col of ['routines', 'tasks', 'shopping']) {
+
+      // Clear routines + tasks
+      for (const col of ['routines', 'tasks']) {
         const snap = await getDocs(collection(db, 'users', uid, col));
         await runBatch(snap.docs.map(d => b => b.delete(d.ref)));
       }
+
+      // Clear user-owned shopping lists (v2) or old path (v1)
+      const ownedListsSnap = await getDocs(query(collection(db, 'lists'), where('ownerId', '==', uid)));
+      for (const listDoc of ownedListsSnap.docs) {
+        const [iSnap, tSnap] = await Promise.all([
+          getDocs(collection(db, 'lists', listDoc.id, 'items')),
+          getDocs(collection(db, 'lists', listDoc.id, 'tags')),
+        ]);
+        await runBatch([
+          ...iSnap.docs.map(d => b => b.delete(d.ref)),
+          ...tSnap.docs.map(d => b => b.delete(d.ref)),
+          b => b.delete(listDoc.ref),
+        ]);
+      }
+
+      // Write routines + tasks
       await runBatch([
-        ...(importConfirm.routines  || []).map(item => b => b.set(doc(db, 'users', uid, 'routines',  item.id), item)),
-        ...(importConfirm.tasks     || []).map(item => b => b.set(doc(db, 'users', uid, 'tasks',     item.id), item)),
-        ...(importConfirm.shopping  || []).map(item => b => b.set(doc(db, 'users', uid, 'shopping',  item.id), item)),
+        ...(importConfirm.routines || []).map(item => b => b.set(doc(db, 'users', uid, 'routines', item.id), item)),
+        ...(importConfirm.tasks    || []).map(item => b => b.set(doc(db, 'users', uid, 'tasks',    item.id), item)),
       ]);
+
+      // Write shopping lists (v2 format: array of {id, name, items, tags})
+      const shoppingData = importConfirm.shopping || [];
+      if (Array.isArray(shoppingData) && shoppingData[0]?.items !== undefined) {
+        for (const list of shoppingData) {
+          await setDoc(doc(db, 'lists', list.id), {
+            name: list.name, ownerId: uid, members: [uid],
+            inviteCode: Math.random().toString(36).slice(2, 8).toUpperCase(),
+            createdAt: new Date().toISOString(),
+          });
+          await runBatch([
+            ...(list.items || []).map(item => b => b.set(doc(db, 'lists', list.id, 'items', item.id), item)),
+            ...(list.tags  || []).map(tag  => b => b.set(doc(db, 'lists', list.id, 'tags',  tag.id),  tag)),
+          ]);
+        }
+      }
+
       setImportStatus({ ok: true, msg: 'Import successful' });
       setImportConfirm(null);
     } catch (e) {
@@ -88,6 +136,8 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
       setImportLoading(false);
     }
   };
+
+  const totalShoppingItems = (shoppingLists || []).reduce((n, l) => n, 0);
 
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
@@ -100,13 +150,11 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           maxHeight: '88dvh', overflowY: 'auto',
         }}
       >
-        {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px 20px' }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Settings</span>
           <button onClick={onClose} style={{ color: T.muted, fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
 
-        {/* Account group */}
         <Group>
           <Row
             label="Change Password"
@@ -128,8 +176,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
                 style={{
                   padding: 12, borderRadius: 10, marginTop: 2,
                   background: (currentPw && newPw && confirmPw) ? T.olive : T.subtle,
-                  color: '#fff', fontSize: 14, fontWeight: 600,
-                  transition: 'background 0.15s',
+                  color: '#fff', fontSize: 14, fontWeight: 600, transition: 'background 0.15s',
                 }}
               >
                 {pwLoading ? 'Updating…' : 'Update Password'}
@@ -138,11 +185,10 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           )}
         </Group>
 
-        {/* Data group */}
         <Group>
           <Row
             label="Export as JSON"
-            detail={`${routines.length}r · ${tasks.length}t · ${shopping.length}s`}
+            detail={`${routines.length}r · ${tasks.length}t · ${(shoppingLists || []).length} lists`}
             onTap={handleExport}
           />
           <Row label="Import from JSON" onTap={() => fileRef.current?.click()} />
@@ -157,7 +203,10 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
                 <div style={{ fontSize: 13, color: T.muted, marginBottom: 12 }}>
                   Replace all current data with:{' '}
                   <span style={{ color: T.text }}>
-                    {importConfirm.routines?.length || 0}r · {importConfirm.tasks?.length || 0}t · {importConfirm.shopping?.length || 0}s
+                    {importConfirm.routines?.length || 0}r · {importConfirm.tasks?.length || 0}t
+                    {Array.isArray(importConfirm.shopping) && importConfirm.shopping[0]?.items !== undefined
+                      ? ` · ${importConfirm.shopping.length} lists`
+                      : ''}
                   </span>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
@@ -184,7 +233,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           )}
         </Group>
 
-        {/* Sign out */}
         <div style={{ padding: '0 16px' }}>
           <button
             onClick={onSignOut}
@@ -206,11 +254,8 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
 function Group({ children }) {
   return (
     <div style={{
-      margin: '0 16px 12px',
-      background: '#252527',
-      borderRadius: 12,
-      overflow: 'hidden',
-      border: `1px solid ${T.cardBorder}`,
+      margin: '0 16px 12px', background: '#252527',
+      borderRadius: 12, overflow: 'hidden', border: `1px solid ${T.cardBorder}`,
     }}>
       {children}
     </div>
@@ -225,8 +270,7 @@ function Row({ label, detail, onTap, arrow, arrowOpen }) {
         width: '100%', padding: '14px 16px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         borderBottom: `1px solid ${T.cardBorder}`,
-        color: T.text, fontSize: 15, background: 'transparent',
-        textAlign: 'left',
+        color: T.text, fontSize: 15, background: 'transparent', textAlign: 'left',
       }}
     >
       <span>{label}</span>
@@ -236,8 +280,7 @@ function Row({ label, detail, onTap, arrow, arrowOpen }) {
           <span style={{
             color: T.muted, fontSize: 16,
             transform: arrowOpen ? 'rotate(90deg)' : 'none',
-            transition: 'transform 0.2s',
-            display: 'inline-block',
+            transition: 'transform 0.2s', display: 'inline-block',
           }}>›</span>
         )}
       </span>

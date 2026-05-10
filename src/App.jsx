@@ -99,7 +99,7 @@ export default function App() {
             onClose={() => setShowSettings(false)}
             routines={routinesHook.routines}
             tasks={tasksHook.tasks}
-            shopping={shoppingHook.items}
+            shoppingLists={shoppingHook.lists}
           />
         )}
 
