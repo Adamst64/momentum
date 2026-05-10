@@ -127,6 +127,17 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
 
   const yearData  = earnings[summaryYear] || {};
   const yearTotal = Object.values(yearData).reduce((s, v) => s + v, 0);
+
+  // Days worked per crew for the selected year
+  const yearDaysMap = {};
+  days.filter(d => !d.isOff && d.crewId && d.id.slice(0, 4) === summaryYear)
+    .forEach(d => { yearDaysMap[d.crewId] = (yearDaysMap[d.crewId] || 0) + 1; });
+  const totalYearDays = Object.values(yearDaysMap).reduce((s, v) => s + v, 0);
+
+  // All crews that have days or earnings in selected year, sorted by days desc
+  const allYearCrewIds = [...new Set([...Object.keys(yearDaysMap), ...Object.keys(yearData)])]
+    .sort((a, b) => (yearDaysMap[b] || 0) - (yearDaysMap[a] || 0));
+
   const crewRows  = Object.entries(yearData).sort(([, a], [, b]) => b - a);
 
   const hasAnyData = days.filter(d => !d.isOff).length > 0 || weeks.length > 0;
@@ -161,20 +172,25 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
           </div>
 
           {/* Crew breakdown */}
-          {crewRows.length === 0 ? (
+          {allYearCrewIds.length === 0 ? (
             <div style={{ padding: '14px 16px', fontSize: 13, color: T.muted }}>
-              No paid amounts recorded for {summaryYear} yet.
+              No work days logged for {summaryYear} yet.
             </div>
           ) : (
-            crewRows.map(([crewId, amount]) => {
-              const crew = crews.find(c => c.id === crewId);
+            allYearCrewIds.map(crewId => {
+              const crew   = crews.find(c => c.id === crewId);
+              const amount = yearData[crewId] || 0;
+              const dc     = yearDaysMap[crewId] || 0;
               return (
                 <div key={crewId} style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     {crew?.color && <div style={{ width: 8, height: 8, borderRadius: '50%', background: crew.color }} />}
                     <span style={{ fontSize: 14, color: T.text }}>{crew?.name || 'No crew'}</span>
                   </div>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: T.khaki }}>{fmt(amount)}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <span style={{ fontSize: 12, color: T.muted }}>{dc} day{dc !== 1 ? 's' : ''}</span>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: amount > 0 ? T.khaki : T.muted, minWidth: 40, textAlign: 'right' }}>{fmt(amount)}</span>
+                  </div>
                 </div>
               );
             })
@@ -182,7 +198,10 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
 
           {/* Total row */}
           <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle + '55' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Total {summaryYear}</span>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Total {summaryYear}</span>
+              <span style={{ fontSize: 12, color: T.muted }}>{totalYearDays} days</span>
+            </div>
             <span style={{ fontSize: 19, fontWeight: 800, color: T.khaki }}>{fmt(yearTotal)}</span>
           </div>
         </div>

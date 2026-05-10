@@ -132,7 +132,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
         })}
       </div>
 
-      {/* Legend */}
+      {/* Status legend */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green }} />
@@ -151,6 +151,18 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
           <span style={{ fontSize: 11, color: T.muted }}>Day off</span>
         </div>
       </div>
+
+      {/* Crew color legend */}
+      {(crews || []).length > 0 && (
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 2 }}>
+          {(crews || []).map(c => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <div style={{ width: 10, height: 10, borderRadius: 3, background: c.color }} />
+              <span style={{ fontSize: 11, color: T.muted }}>{c.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
