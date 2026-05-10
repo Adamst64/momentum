@@ -13,7 +13,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPaid }) {
 
   // Group: weekId → crewId → { days[], windows, doors }
   const grouped = {};
-  days.forEach(day => {
+  days.filter(d => !d.isOff).forEach(day => {
     const wk  = getMondayId(day.id);
     const cid = day.crewId || '__none__';
     if (!grouped[wk]) grouped[wk] = {};

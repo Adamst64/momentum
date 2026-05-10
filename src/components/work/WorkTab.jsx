@@ -13,7 +13,7 @@ function todayStr() {
 }
 
 export default function WorkTab({ hook }) {
-  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPaid, addCrew, deleteCrew, addMember, deleteMember } = hook;
+  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPaid, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember } = hook;
   const [view, setView]                 = useState('today');
   const [selectedDay, setSelectedDay]   = useState(null);
   const [showDaySheet, setShowDaySheet] = useState(false);
@@ -73,7 +73,7 @@ export default function WorkTab({ hook }) {
               Manage Crews
             </button>
           </div>
-          <WorkCalendar days={days} onSelectDay={handleCalendarSelect} />
+          <WorkCalendar days={days} crews={crews} onSelectDay={handleCalendarSelect} />
         </>
       )}
 
@@ -116,6 +116,7 @@ export default function WorkTab({ hook }) {
           members={members}
           onAddCrew={addCrew}
           onDeleteCrew={deleteCrew}
+          onUpdateCrewColor={updateCrewColor}
           onAddMember={addMember}
           onDeleteMember={deleteMember}
           onClose={() => setShowCrewMgr(false)}

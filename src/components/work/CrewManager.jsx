@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
+import { CREW_COLORS } from '../../utils/workUtils';
 
-function AddInput({ placeholder, onAdd }) {
+function AddInput({ placeholder, onAdd, nextColor }) {
   const [val, setVal] = useState('');
   const submit = () => {
     if (!val.trim()) return;
-    onAdd(val.trim());
+    onAdd(val.trim(), nextColor);
     setVal('');
   };
   return (
@@ -22,23 +23,62 @@ function AddInput({ placeholder, onAdd }) {
   );
 }
 
-function ItemList({ items, onDelete }) {
-  if (items.length === 0) {
+function CrewList({ crews, onDelete, onUpdateColor }) {
+  const [editingColorId, setEditingColorId] = useState(null);
+
+  if (crews.length === 0) {
     return <div style={{ fontSize: 13, color: T.muted, padding: '8px 0 2px' }}>None added yet</div>;
   }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-      {items.map(item => (
-        <div key={item.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle, borderRadius: 10, padding: '10px 14px' }}>
-          <span style={{ fontSize: 14, color: T.text }}>{item.name}</span>
-          <button onClick={() => onDelete(item.id)} style={{ color: T.red, fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
+      {crews.map(crew => (
+        <div key={crew.id}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.subtle, borderRadius: 10, padding: '10px 14px' }}>
+            {/* Color swatch — tap to open picker */}
+            <button
+              onClick={() => setEditingColorId(editingColorId === crew.id ? null : crew.id)}
+              style={{ width: 22, height: 22, borderRadius: '50%', background: crew.color || CREW_COLORS[0], flexShrink: 0, border: editingColorId === crew.id ? '2px solid #fff' : '2px solid transparent', transition: 'border 0.15s' }}
+            />
+            <span style={{ flex: 1, fontSize: 14, color: T.text }}>{crew.name}</span>
+            <button onClick={() => { onDelete(crew.id); setEditingColorId(null); }} style={{ color: T.red, fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
+          </div>
+          {editingColorId === crew.id && (
+            <div style={{ display: 'flex', gap: 8, padding: '8px 14px 4px', flexWrap: 'wrap' }}>
+              {CREW_COLORS.map(color => (
+                <button
+                  key={color}
+                  onClick={() => { onUpdateColor(crew.id, color); setEditingColorId(null); }}
+                  style={{ width: 28, height: 28, borderRadius: '50%', background: color, border: crew.color === color ? '2.5px solid #fff' : '2.5px solid transparent', transition: 'border 0.1s' }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       ))}
     </div>
   );
 }
 
-export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onAddMember, onDeleteMember, onClose }) {
+function MemberList({ members, onDelete }) {
+  if (members.length === 0) {
+    return <div style={{ fontSize: 13, color: T.muted, padding: '8px 0 2px' }}>None added yet</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+      {members.map(m => (
+        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle, borderRadius: 10, padding: '10px 14px' }}>
+          <span style={{ fontSize: 14, color: T.text }}>{m.name}</span>
+          <button onClick={() => onDelete(m.id)} style={{ color: T.red, fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onAddMember, onDeleteMember, onClose }) {
+  const nextCrewColor = CREW_COLORS[crews.length % CREW_COLORS.length];
+
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: '#000000AA' }} onClick={onClose}>
       <div
@@ -52,13 +92,13 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
 
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Crews</div>
-          <ItemList items={crews} onDelete={onDeleteCrew} />
-          <AddInput placeholder="Crew name…" onAdd={onAddCrew} />
+          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} />
+          <AddInput placeholder="Crew name…" onAdd={onAddCrew} nextColor={nextCrewColor} />
         </div>
 
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Members</div>
-          <ItemList items={members} onDelete={onDeleteMember} />
+          <MemberList members={members} onDelete={onDeleteMember} />
           <AddInput placeholder="Member name…" onAdd={onAddMember} />
         </div>
       </div>

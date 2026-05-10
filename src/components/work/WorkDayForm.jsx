@@ -20,13 +20,13 @@ function Counter({ label, value, onChange }) {
   );
 }
 
-function Toggle({ label, value, onChange }) {
+function Toggle({ label, value, onChange, activeColor }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0' }}>
       <span style={{ fontSize: 15, color: T.text }}>{label}</span>
       <button
         onClick={() => onChange(!value)}
-        style={{ width: 50, height: 28, borderRadius: 14, background: value ? T.olive : T.subtle, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
+        style={{ width: 50, height: 28, borderRadius: 14, background: value ? (activeColor || T.olive) : T.subtle, position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}
       >
         <div style={{ position: 'absolute', top: 3, left: value ? 25 : 3, width: 22, height: 22, borderRadius: 11, background: '#fff', transition: 'left 0.2s' }} />
       </button>
@@ -34,7 +34,7 @@ function Toggle({ label, value, onChange }) {
   );
 }
 
-const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '' };
+const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false };
 
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
   const [form, setForm]                   = useState({ ...EMPTY, ...initial });
@@ -61,72 +61,89 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
     }
   };
 
-  const isEmpty = form.windows === 0 && form.doors === 0 && !form.crewId && form.memberIds.length === 0 && !form.comment;
+  const isEmpty = !form.isOff && form.windows === 0 && form.doors === 0 && !form.crewId && form.memberIds.length === 0 && !form.comment;
   const selectedCrew = crews.find(c => c.id === form.crewId);
   const availableMembers = members.filter(m => !form.memberIds.includes(m.id));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-      {/* Windows & Doors */}
-      <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
-        <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
-        <div style={{ height: 1, background: T.cardBorder }} />
-        <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
-      </div>
-
-      {/* Crew & Lead */}
-      <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
-        <button
-          onClick={() => setShowCrewPicker(true)}
-          style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
-        >
-          <span style={{ fontSize: 15, color: T.text }}>Crew</span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 15, color: selectedCrew ? T.text : T.muted }}>
-              {selectedCrew ? selectedCrew.name : 'None'}
-            </span>
-            <span style={{ color: T.muted, fontSize: 13 }}>›</span>
-          </div>
-        </button>
-        <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
-        <div style={{ padding: '0 16px' }}>
-          <Toggle label="Crew Lead" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
-        </div>
-      </div>
-
-      {/* Members */}
-      <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.memberIds.length > 0 ? 10 : 0 }}>
-          <span style={{ fontSize: 15, color: T.text }}>Members on site</span>
-          <button onClick={() => setShowMemberPicker(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>+ Add</button>
-        </div>
-        {form.memberIds.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {form.memberIds.map(id => {
-              const m = members.find(x => x.id === id);
-              if (!m) return null;
-              return (
-                <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.subtle, borderRadius: 8, padding: '5px 10px' }}>
-                  <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
-                  <button onClick={() => set('memberIds', form.memberIds.filter(mid => mid !== id))} style={{ color: T.muted, fontSize: 16, lineHeight: 1, marginLeft: 2 }}>×</button>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Comment */}
-      <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
-        <textarea
-          value={form.comment}
-          onChange={e => set('comment', e.target.value)}
-          placeholder="Notes…"
-          rows={3}
-          style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+      {/* Day off toggle */}
+      <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${form.isOff ? T.red + '55' : T.cardBorder}` }}>
+        <Toggle
+          label="Day off"
+          value={form.isOff}
+          onChange={v => set('isOff', v)}
+          activeColor={T.red}
         />
       </div>
+
+      {!form.isOff && (
+        <>
+          {/* Windows & Doors */}
+          <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
+            <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
+            <div style={{ height: 1, background: T.cardBorder }} />
+            <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
+          </div>
+
+          {/* Crew & Lead */}
+          <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
+            <button
+              onClick={() => setShowCrewPicker(true)}
+              style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+            >
+              <span style={{ fontSize: 15, color: T.text }}>Crew</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                {selectedCrew?.color && (
+                  <div style={{ width: 10, height: 10, borderRadius: '50%', background: selectedCrew.color }} />
+                )}
+                <span style={{ fontSize: 15, color: selectedCrew ? T.text : T.muted }}>
+                  {selectedCrew ? selectedCrew.name : 'None'}
+                </span>
+                <span style={{ color: T.muted, fontSize: 13 }}>›</span>
+              </div>
+            </button>
+            <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
+            <div style={{ padding: '0 16px' }}>
+              <Toggle label="Crew Lead" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
+            </div>
+          </div>
+
+          {/* Members */}
+          <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.memberIds.length > 0 ? 10 : 0 }}>
+              <span style={{ fontSize: 15, color: T.text }}>Members on site</span>
+              <button onClick={() => setShowMemberPicker(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>+ Add</button>
+            </div>
+            {form.memberIds.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {form.memberIds.map(id => {
+                  const m = members.find(x => x.id === id);
+                  if (!m) return null;
+                  return (
+                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.subtle, borderRadius: 8, padding: '5px 10px' }}>
+                      <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
+                      <button onClick={() => set('memberIds', form.memberIds.filter(mid => mid !== id))} style={{ color: T.muted, fontSize: 16, lineHeight: 1, marginLeft: 2 }}>×</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Comment */}
+          <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+            <textarea
+              value={form.comment}
+              onChange={e => set('comment', e.target.value)}
+              placeholder="Notes…"
+              rows={3}
+              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+            />
+          </div>
+        </>
+      )}
 
       {/* Save / Clear */}
       <div style={{ display: 'flex', gap: 10 }}>

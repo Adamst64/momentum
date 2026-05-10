@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { genId } from '../utils/id';
+import { genId, } from '../utils/id';
+import { CREW_COLORS } from '../utils/workUtils';
 
 export function useWork(userId) {
   const [days,    setDays]    = useState([]);
@@ -37,8 +38,12 @@ export function useWork(userId) {
     );
   }, [userId]);
 
-  const addCrew = useCallback(async (name) => {
-    await setDoc(doc(db, 'users', userId, 'workCrews', genId()), { name: name.trim() });
+  const addCrew = useCallback(async (name, color) => {
+    await setDoc(doc(db, 'users', userId, 'workCrews', genId()), { name: name.trim(), color: color || CREW_COLORS[0] });
+  }, [userId]);
+
+  const updateCrewColor = useCallback(async (id, color) => {
+    await updateDoc(doc(db, 'users', userId, 'workCrews', id), { color });
   }, [userId]);
 
   const deleteCrew = useCallback(async (id) => {
@@ -53,5 +58,5 @@ export function useWork(userId) {
     await deleteDoc(doc(db, 'users', userId, 'workMembers', id));
   }, [userId]);
 
-  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPaid, addCrew, deleteCrew, addMember, deleteMember };
+  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPaid, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember };
 }

@@ -1,3 +1,14 @@
+export const CREW_COLORS = [
+  '#4A90E2', // blue
+  '#E8924A', // orange
+  '#9B59B6', // purple
+  '#1ABC9C', // teal
+  '#F39C12', // amber
+  '#E84393', // pink
+  '#00BCD4', // cyan
+  '#8E44AD', // deep purple
+];
+
 function pad(n) { return String(n).padStart(2, '0'); }
 
 export function dateStr(date = new Date()) {
