@@ -109,3 +109,90 @@ exports.sendDayOfReminders = onSchedule(
     );
   }
 );
+
+// ── Task push notifications (every 15 minutes) ────────────────────────────────
+
+exports.sendTaskNotifications = onSchedule(
+  { schedule: 'every 15 minutes' },
+  async () => {
+    const db        = getFirestore();
+    const messaging = getMessaging();
+
+    const usersSnap = await db.collection('users').get();
+
+    await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
+      const uid    = userDoc.id;
+      const tokens = userDoc.data().fcmTokens || [];
+      if (!tokens.length) return;
+
+      const tasksSnap = await db.collection('users').doc(uid).collection('tasks').get();
+
+      for (const taskDoc of tasksSnap.docs) {
+        const task = taskDoc.data();
+        if (!task.notify?.enabled || !task.notify?.time) continue;
+
+        const tz = task.notify.timezone || 'UTC';
+
+        // Get current local date/time in the task's timezone
+        const nowInTz     = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+        const nowHour     = nowInTz.getHours();
+        const nowMin      = nowInTz.getMinutes();
+        const ymLocal     = `${nowInTz.getFullYear()}-${String(nowInTz.getMonth() + 1).padStart(2, '0')}`;
+        const domLocal    = nowInTz.getDate();
+        const todayLocal  = `${ymLocal}-${String(domLocal).padStart(2, '0')}`;
+
+        // Check if this 15-minute slot matches the task's notify time
+        const [notifyHour, notifyMin] = task.notify.time.split(':').map(Number);
+        if (nowHour !== notifyHour) continue;
+        if (Math.floor(nowMin / 15) !== Math.floor(notifyMin / 15)) continue;
+
+        // Check if task is due today
+        let dueToday = false;
+        if (task.type === 'one-time') {
+          dueToday = task.date === todayLocal;
+        } else if (task.type === 'recurring-monthly') {
+          const effectiveDay = task.monthOverrides?.[ymLocal] ?? task.dayOfMonth;
+          dueToday = effectiveDay === domLocal;
+        }
+        if (!dueToday) continue;
+
+        // Avoid duplicate sends
+        if (task.notify.lastSentDate === todayLocal) continue;
+
+        const isMonthly   = task.type === 'recurring-monthly';
+        const notifTitle  = task.name;
+        const notifBody   = isMonthly ? 'Monthly task due today' : 'Task due today';
+
+        // Update lastSentDate before sending to minimise duplicates
+        await taskDoc.ref.update({ 'notify.lastSentDate': todayLocal });
+
+        const staleTokens = [];
+        await Promise.allSettled(tokens.map(async (token) => {
+          try {
+            await messaging.send({
+              token,
+              notification: { title: notifTitle, body: notifBody },
+              webpush: {
+                notification: {
+                  icon:  'https://adamst64.github.io/momentum/icon-192.png',
+                  badge: 'https://adamst64.github.io/momentum/icon-192.png',
+                },
+                headers: { TTL: '86400' },
+              },
+            });
+          } catch (err) {
+            if (err.code === 'messaging/registration-token-not-registered') {
+              staleTokens.push(token);
+            }
+          }
+        }));
+
+        if (staleTokens.length) {
+          await db.collection('users').doc(uid).update({
+            fcmTokens: FieldValue.arrayRemove(...staleTokens),
+          });
+        }
+      }
+    }));
+  }
+);

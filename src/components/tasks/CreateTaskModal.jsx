@@ -17,10 +17,12 @@ const TYPE_LABELS = {
 
 export default function CreateTaskModal({ initial, onSave, onClose }) {
   const isEdit = !!initial;
-  const [name, setName] = useState(initial?.name || '');
-  const [type, setType] = useState(initial?.type || 'one-time');
-  const [date, setDate] = useState(initial?.date || todayStr());
-  const [dom,  setDom]  = useState(initial?.dayOfMonth || 1);
+  const [name,         setName]         = useState(initial?.name || '');
+  const [type,         setType]         = useState(initial?.type || 'one-time');
+  const [date,         setDate]         = useState(initial?.date || todayStr());
+  const [dom,          setDom]          = useState(initial?.dayOfMonth || 1);
+  const [notifyOn,     setNotifyOn]     = useState(initial?.notify?.enabled || false);
+  const [notifyTime,   setNotifyTime]   = useState(initial?.notify?.time || '09:00');
 
   const valid = name.trim() && (
     type === 'backlog' ||
@@ -33,6 +35,17 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
     const data = { name: name.trim(), type };
     if (type === 'one-time')          data.date       = date;
     if (type === 'recurring-monthly') data.dayOfMonth = Number(dom);
+    if (type === 'one-time' || type === 'recurring-monthly') {
+      if (notifyOn) {
+        data.notify = {
+          enabled: true,
+          time: notifyTime,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        };
+      } else {
+        data.notify = { enabled: false };
+      }
+    }
     onSave(data);
     onClose();
   };
@@ -104,6 +117,41 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
         {type === 'backlog' && (
           <div style={{ padding: '8px 12px', background: '#0F0F0F', borderRadius: 10, border: `1px solid ${T.cardBorder}` }}>
             <span style={{ fontSize: 13, color: T.muted }}>No due date — sits in your backlog until you schedule it</span>
+          </div>
+        )}
+
+        {(type === 'one-time' || type === 'recurring-monthly') && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14, color: T.text }}>Notify me</span>
+              {/* Pill switch */}
+              <button
+                type="button"
+                onClick={() => setNotifyOn(v => !v)}
+                style={{
+                  width: 44, height: 26, borderRadius: 13,
+                  background: notifyOn ? T.olive : T.subtle,
+                  border: 'none', cursor: 'pointer',
+                  position: 'relative', flexShrink: 0,
+                  transition: 'background 0.2s',
+                }}
+              >
+                <div style={{
+                  position: 'absolute', top: 3,
+                  left: notifyOn ? 21 : 3,
+                  width: 20, height: 20, borderRadius: '50%',
+                  background: '#fff', transition: 'left 0.2s',
+                }} />
+              </button>
+            </div>
+            {notifyOn && (
+              <input
+                type="time"
+                value={notifyTime}
+                onChange={e => setNotifyTime(e.target.value)}
+                style={{ ...inputStyle, colorScheme: 'dark', width: 'auto' }}
+              />
+            )}
           </div>
         )}
 

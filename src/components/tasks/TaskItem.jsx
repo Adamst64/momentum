@@ -38,7 +38,7 @@ function RescheduleSheet({ task, onReschedule, onClose }) {
   );
 }
 
-export default function TaskItem({ task, onComplete, onDelete, onReschedule, onEdit, section }) {
+export default function TaskItem({ task, onComplete, onDelete, onReschedule, onEdit, section, missed }) {
   const [showMenu, setShowMenu]             = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
 
@@ -47,10 +47,13 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
 
   const subtitle = (() => {
     if (task.type === 'recurring-monthly') return `Every ${task.dayOfMonth}${ord(task.dayOfMonth)} of the month`;
+    if (missed && task.date) return `Missed · ${formatShortDate(task.date)}`;
     if (task.type === 'one-time' && task.date) return formatShortDate(task.date);
     if (task.missedLabel) return `Missed: ${task.missedLabel}`;
     return null;
   })();
+
+  const showMissedDot = missed || task.missedDot;
 
   return (
     <>
@@ -80,7 +83,7 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
                 position: 'relative',
               }}
             >
-              {task.missedDot && (
+              {showMissedDot && (
                 <div style={{
                   position: 'absolute', top: -3, right: -3,
                   width: 8, height: 8, borderRadius: '50%',

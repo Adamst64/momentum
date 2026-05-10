@@ -5,6 +5,7 @@ import TaskItem from './TaskItem';
 import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
 import { formatLongDate, todayStr } from '../../utils/dateUtils';
+import { registerPushToken } from '../../utils/pushNotifications';
 
 function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -77,6 +78,85 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   );
 }
 
+function ord(n) {
+  if (n >= 11 && n <= 13) return 'th';
+  switch (n % 10) { case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
+}
+
+function MonthlyItem({ task, today, onEdit, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const ym  = today.slice(0, 7);
+  const dom = parseInt(today.slice(-2), 10);
+  const effectiveDay = task.monthOverrides?.[ym] ?? task.dayOfMonth;
+  const isDone    = !!task.completedOccurrences?.[ym];
+  const isOverdue = !isDone && effectiveDay < dom;
+  const isToday   = !isDone && effectiveDay === dom;
+
+  let statusColor = T.muted;
+  let statusText  = `Due ${effectiveDay}${ord(effectiveDay)}`;
+  if (isDone) {
+    statusColor = T.green;
+    statusText  = `Done ✓`;
+  } else if (isOverdue) {
+    statusColor = T.red;
+    statusText  = `${effectiveDay}${ord(effectiveDay)} passed`;
+  } else if (isToday) {
+    statusColor = T.khaki;
+    statusText  = `Due today`;
+  }
+
+  return (
+    <>
+      <div style={{
+        background: T.card,
+        border: `1px solid ${T.cardBorder}`,
+        borderRadius: 12, padding: '12px 14px',
+        display: 'flex', alignItems: 'center', gap: 12,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 15, color: T.text, fontWeight: 500,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{task.name}</div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+            Every {task.dayOfMonth}{ord(task.dayOfMonth)}
+          </div>
+        </div>
+
+        {task.notify?.enabled && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: T.muted }}>
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M13.73 21a2 2 0 01-3.46 0" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+
+        <div style={{ fontSize: 12, color: statusColor, fontWeight: 500, flexShrink: 0 }}>
+          {statusText}
+        </div>
+
+        <button onClick={() => setShowMenu(m => !m)} style={{
+          color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0,
+        }}>···</button>
+      </div>
+
+      {showMenu && (
+        <div style={{
+          background: '#252527', border: `1px solid ${T.cardBorder}`,
+          borderRadius: 10, overflow: 'hidden', marginTop: -6,
+        }}>
+          <button onClick={() => { onEdit(task); setShowMenu(false); }} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
+            color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
+          }}>Edit</button>
+          <button onClick={() => { onDelete(task.id); setShowMenu(false); }} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red,
+          }}>Delete</button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function Section({ title, count, children, defaultOpen = true }) {
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
@@ -95,21 +175,37 @@ function Section({ title, count, children, defaultOpen = true }) {
   );
 }
 
-export default function TasksTab({ hook }) {
+export default function TasksTab({ hook, userId }) {
   const {
     addTask, deleteTask, rescheduleTask, updateTask,
     toggleTaskForDate, tasksForDate,
-    todayTasks, backlogTasks, upcomingTasks, todayStats,
+    todayTasks, backlogTasks, scheduledTasks, monthlyTasks, todayStats,
   } = hook;
 
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing]       = useState(null);
 
-  const today   = todayStr();
-  const stats   = todayStats();
-  const todays  = todayTasks();
-  const backlog = backlogTasks();
-  const upcoming = upcomingTasks();
+  const today    = todayStr();
+  const stats    = todayStats();
+  const todays   = todayTasks();
+  const backlog  = backlogTasks();
+  const scheduled = scheduledTasks();
+  const monthly  = monthlyTasks();
+
+  const handleSave = (data) => {
+    addTask(data);
+    if (data.notify?.enabled && userId) {
+      registerPushToken(userId);
+    }
+  };
+
+  const handleEditSave = (data) => {
+    updateTask(editing.id, data);
+    if (data.notify?.enabled && userId) {
+      registerPushToken(userId);
+    }
+    setEditing(null);
+  };
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -163,9 +259,21 @@ export default function TasksTab({ hook }) {
       />
 
       <Section title="Backlog" count={backlog.length} defaultOpen={false}>
-        {backlog.map(t => (
+        {backlog.map(({ task, missed }) => (
           <TaskItem
-            key={t.id} task={t} section="backlog"
+            key={task.id} task={task} section="backlog" missed={missed}
+            onComplete={() => toggleTaskForDate(task.id, today)}
+            onDelete={deleteTask}
+            onReschedule={rescheduleTask}
+            onEdit={setEditing}
+          />
+        ))}
+      </Section>
+
+      <Section title="Scheduled" count={scheduled.length} defaultOpen={true}>
+        {scheduled.map(t => (
+          <TaskItem
+            key={t.id} task={t} section="scheduled"
             onComplete={() => toggleTaskForDate(t.id, today)}
             onDelete={deleteTask}
             onReschedule={rescheduleTask}
@@ -174,14 +282,12 @@ export default function TasksTab({ hook }) {
         ))}
       </Section>
 
-      <Section title="Upcoming" count={upcoming.length} defaultOpen={true}>
-        {upcoming.map(t => (
-          <TaskItem
-            key={t.id} task={t} section="upcoming"
-            onComplete={() => toggleTaskForDate(t.id, today)}
-            onDelete={deleteTask}
-            onReschedule={rescheduleTask}
+      <Section title="Monthly" count={monthly.length} defaultOpen={true}>
+        {monthly.map(t => (
+          <MonthlyItem
+            key={t.id} task={t} today={today}
             onEdit={setEditing}
+            onDelete={deleteTask}
           />
         ))}
       </Section>
@@ -196,12 +302,12 @@ export default function TasksTab({ hook }) {
       </button>
 
       {showCreate && (
-        <CreateTaskModal onSave={data => addTask(data)} onClose={() => setShowCreate(false)} />
+        <CreateTaskModal onSave={handleSave} onClose={() => setShowCreate(false)} />
       )}
       {editing && (
         <CreateTaskModal
           initial={editing}
-          onSave={data => { updateTask(editing.id, data); setEditing(null); }}
+          onSave={handleEditSave}
           onClose={() => setEditing(null)}
         />
       )}

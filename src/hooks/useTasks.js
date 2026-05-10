@@ -88,43 +88,27 @@ export function useTasks(userId) {
 
   const backlogTasks = useCallback(() => {
     const today = todayStr();
-    const ym = getYM(today);
-    const dom = parseInt(today.slice(-2), 10);
-    return tasks.filter(t => {
-      if (t.type === 'backlog') return !t.completedAt;
-      if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
-      if (t.type === 'recurring-monthly') {
-        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
-        const occ = `${ym}-${String(day).padStart(2, '0')}`;
-        if (t.createdAt && occ < t.createdAt) return false;
-        if (day < dom && !t.completedOccurrences?.[ym]) return true;
-      }
-      return false;
-    });
+    return tasks
+      .filter(t => {
+        if (t.type === 'backlog') return !t.completedAt;
+        if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
+        return false;
+      })
+      .map(t => ({ task: t, missed: t.type === 'one-time' }));
   }, [tasks]);
 
-  const upcomingTasks = useCallback(() => {
+  const scheduledTasks = useCallback(() => {
     const today = todayStr();
-    const ym    = getYM(today);
-    const dom   = parseInt(today.slice(-2), 10);
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.date > today && !t.completedAt;
-      if (t.type === 'recurring-monthly') {
-        const day      = t.monthOverrides?.[ym] ?? t.dayOfMonth;
-        const occ      = `${ym}-${String(day).padStart(2, '0')}`;
-        if (t.createdAt && occ < t.createdAt) return false;
-        const donethis = !!t.completedOccurrences?.[ym];
-        const dueToday = day === dom;
-        const missed   = day < dom && !donethis;
-        return !donethis && !dueToday && !missed;
-      }
       return false;
-    }).sort((a, b) => {
-      const nextDate = (t) => t.type === 'one-time'
-        ? t.date
-        : `${ym.slice(0,4)}-${ym.slice(5,7)}-${String(t.monthOverrides?.[ym] ?? t.dayOfMonth).padStart(2,'0')}`;
-      return nextDate(a).localeCompare(nextDate(b));
-    });
+    }).sort((a, b) => a.date.localeCompare(b.date));
+  }, [tasks]);
+
+  const monthlyTasks = useCallback(() => {
+    return tasks
+      .filter(t => t.type === 'recurring-monthly')
+      .sort((a, b) => (a.dayOfMonth ?? 1) - (b.dayOfMonth ?? 1));
   }, [tasks]);
 
   const todayStats = useCallback(() => {
@@ -219,7 +203,8 @@ export function useTasks(userId) {
     todayTasks,
     doneTasks,
     backlogTasks,
-    upcomingTasks,
+    scheduledTasks,
+    monthlyTasks,
     todayStats,
     tasksForDate,
     toggleTaskForDate,

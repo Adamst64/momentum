@@ -128,7 +128,7 @@ export default function App() {
         overflowY: 'auto',
       }}>
         {tab === 'routines'  && <RoutinesTab hook={routinesHook} />}
-        {tab === 'tasks'     && <TasksTab    hook={tasksHook} />}
+        {tab === 'tasks'     && <TasksTab    hook={tasksHook} userId={userId} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
         {tab === 'work'      && showWork && <WorkTab hook={workHook} />}
