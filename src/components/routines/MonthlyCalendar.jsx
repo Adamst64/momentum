@@ -50,7 +50,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
           // Fill height: 0% completion = 0px (empty), 1-100% = proportional
           // 3px red baseline only for past 0% days — not for today (day is in progress)
           const fillH      = hasData && ratio > 0 ? ratio : 0;
-          const showBase   = hasData && ratio === 0 && !isToday;
+          const showBase   = hasData && ratio === 0;
           const fillColor  = hasData ? completionColor(ratio) : null;
           // Text goes white once fill rises past ~80% of cell height
           const textWhite  = hasData && ratio >= 0.82;

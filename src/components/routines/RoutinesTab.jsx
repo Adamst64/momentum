@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { T } from '../../theme';
 import DonutChart from '../DonutChart';
 import RoutineItem from './RoutineItem';
@@ -18,10 +18,10 @@ export default function RoutinesTab({ hook }) {
     toggleDay, todayStats, dayRatio, forDate,
   } = hook;
 
-  const calendarDayRatio = useCallback((dateStr) => {
+  const calendarDayRatio = (dateStr) => {
     if (dateStr > todayStr()) return null;
     return dayRatio(dateStr);
-  }, [dayRatio]);
+  };
 
   const [showCreate, setShowCreate]           = useState(false);
   const [editing, setEditing]                 = useState(null);

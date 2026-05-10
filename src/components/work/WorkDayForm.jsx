@@ -35,18 +35,22 @@ function Toggle({ label, value, onChange, activeColor }) {
 }
 
 const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false };
+const norm = (base) => ({ ...EMPTY, ...base });
 
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
-  const [form, setForm]                   = useState({ ...EMPTY, ...initial });
-  const [saved, setSaved]                 = useState(false);
+  const [form, setForm]                   = useState(() => norm(initial));
+  const [lastSaved, setLastSaved]         = useState(() => initial ? norm(initial) : null);
   const [saving, setSaving]               = useState(false);
   const [showCrewPicker, setShowCrewPicker]     = useState(false);
   const [showMemberPicker, setShowMemberPicker] = useState(false);
 
   useEffect(() => {
-    setForm({ ...EMPTY, ...initial });
-    setSaved(false);
+    setForm(norm(initial));
+    setLastSaved(initial ? norm(initial) : null);
   }, [dateStr]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isDirty   = lastSaved === null || JSON.stringify(form) !== JSON.stringify(lastSaved);
+  const showSaved = lastSaved !== null && !isDirty;
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
@@ -54,8 +58,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
     setSaving(true);
     try {
       await onSave(dateStr, form);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setLastSaved({ ...form });
     } finally {
       setSaving(false);
     }
@@ -149,17 +152,17 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
       <div style={{ display: 'flex', gap: 10 }}>
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !isDirty}
           style={{
             flex: 1, padding: '14px 0', borderRadius: 14,
-            background: saved ? T.green + '33' : T.olive,
-            color: saved ? T.green : '#fff',
+            background: showSaved ? T.green + '33' : T.olive,
+            color: showSaved ? T.green : '#fff',
             fontSize: 15, fontWeight: 600,
             transition: 'background 0.2s, color 0.2s',
-            opacity: saving ? 0.6 : 1,
+            opacity: saving || !isDirty ? 0.5 : 1,
           }}
         >
-          {saving ? 'Saving…' : saved ? 'Saved ✓' : 'Save Day'}
+          {saving ? 'Saving…' : showSaved ? 'Saved ✓' : 'Save Day'}
         </button>
         {!isEmpty && onDelete && (
           <button
