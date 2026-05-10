@@ -1,13 +1,25 @@
 export const CREW_COLORS = [
   '#4A90E2', // blue
   '#E8924A', // orange
+  '#27AE60', // green
   '#9B59B6', // purple
-  '#1ABC9C', // teal
-  '#F39C12', // amber
   '#E84393', // pink
+  '#F39C12', // amber
+  '#1ABC9C', // teal
+  '#E74C3C', // red
   '#00BCD4', // cyan
   '#8E44AD', // deep purple
+  '#F1C40F', // yellow
+  '#2ECC71', // light green
+  '#E67E22', // dark orange
+  '#3498DB', // light blue
 ];
+
+export function parsePayEntry(val) {
+  if (typeof val === 'boolean') return { paid: val, amount: 0 };
+  if (val && typeof val === 'object') return { paid: val.paid === true, amount: Number(val.amount) || 0 };
+  return { paid: false, amount: 0 };
+}
 
 function pad(n) { return String(n).padStart(2, '0'); }
 

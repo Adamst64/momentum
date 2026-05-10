@@ -1,26 +1,23 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
-import { getMondayId, formatWeekRange } from '../../utils/workUtils';
-
-// Backward-compat: old format stored boolean, new stores { paid, amount }
-function parseEntry(val) {
-  if (typeof val === 'boolean') return { paid: val, amount: 0 };
-  if (val && typeof val === 'object') return { paid: val.paid === true, amount: Number(val.amount) || 0 };
-  return { paid: false, amount: 0 };
-}
+import { getMondayId, formatWeekRange, parsePayEntry } from '../../utils/workUtils';
 
 function fmt(n) {
   if (!n) return '—';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
 }
 
-function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment }) {
-  const { paid, amount: savedAmount } = parseEntry(rawEntry);
+function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, isCurrentWeek }) {
+  const { paid, amount: savedAmount } = parsePayEntry(rawEntry);
   const crew = crews.find(c => c.id === crewId);
   const [localAmt, setLocalAmt] = useState(savedAmount > 0 ? String(savedAmount) : '');
+  const [editing, setEditing]   = useState(false);
+
+  const showInput = isCurrentWeek || editing;
 
   const save = (newPaid = paid) => {
     onSetPayment(mondayId, crewId, newPaid, parseFloat(localAmt) || 0);
+    if (editing) setEditing(false);
   };
 
   const dc = stats.days.length;
@@ -48,28 +45,48 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment })
         >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 14, color: T.muted }}>$</span>
-        <input
-          value={localAmt}
-          onChange={e => setLocalAmt(e.target.value.replace(/[^0-9.]/g, ''))}
-          onBlur={() => save()}
-          onKeyDown={e => e.key === 'Enter' && save()}
-          placeholder="Amount…"
-          inputMode="decimal"
-          style={{
-            flex: 1, background: T.bg, border: `1px solid ${T.cardBorder}`,
-            borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 15,
-            outline: 'none', colorScheme: 'dark',
-          }}
-        />
-      </div>
+      {showInput ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span style={{ fontSize: 14, color: T.muted }}>$</span>
+          <input
+            value={localAmt}
+            onChange={e => setLocalAmt(e.target.value.replace(/[^0-9.]/g, ''))}
+            onBlur={() => { if (isCurrentWeek) save(); }}
+            onKeyDown={e => e.key === 'Enter' && save()}
+            placeholder="Amount…"
+            inputMode="decimal"
+            autoFocus={editing}
+            style={{
+              flex: 1, background: T.bg, border: `1px solid ${T.cardBorder}`,
+              borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 15,
+              outline: 'none', colorScheme: 'dark',
+            }}
+          />
+          {editing && (
+            <button
+              onClick={() => save()}
+              style={{ padding: '8px 14px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0 }}
+            >✓</button>
+          )}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 16, fontWeight: 700, color: savedAmount > 0 ? T.khaki : T.muted }}>
+            {savedAmount > 0 ? `$${savedAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}
+          </span>
+          <button
+            onClick={() => setEditing(true)}
+            style={{ fontSize: 16, color: T.muted, padding: '4px 8px' }}
+          >✎</button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
-  const currentYear = String(new Date().getFullYear());
+  const currentYear    = String(new Date().getFullYear());
+  const currentMondayId = getMondayId((() => { const d = new Date(); const pad = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; })());
   const [summaryYear, setSummaryYear] = useState(currentYear);
 
   const weeksMap = {};
@@ -93,7 +110,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
     const yr = w.id.slice(0, 4);
     Object.entries(w).forEach(([key, val]) => {
       if (key === 'id') return;
-      const { paid, amount } = parseEntry(val);
+      const { paid, amount } = parsePayEntry(val);
       if (paid && amount > 0) {
         if (!earnings[yr]) earnings[yr] = {};
         earnings[yr][key] = (earnings[yr][key] || 0) + amount;
@@ -194,6 +211,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                 rawEntry={weekDoc[crewId]}
                 crews={crews}
                 onSetPayment={onSetPayment}
+                isCurrentWeek={mondayId === currentMondayId}
               />
             ))}
           </div>

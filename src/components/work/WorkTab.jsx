@@ -73,7 +73,7 @@ export default function WorkTab({ hook }) {
               Manage Crews
             </button>
           </div>
-          <WorkCalendar days={days} crews={crews} onSelectDay={handleCalendarSelect} />
+          <WorkCalendar days={days} weeks={weeks} crews={crews} onSelectDay={handleCalendarSelect} />
         </>
       )}
 

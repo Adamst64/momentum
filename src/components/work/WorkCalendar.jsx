@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
+import { getMondayId, parsePayEntry } from '../../utils/workUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_LABELS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -10,7 +11,7 @@ function mondayOffset(year, month) {
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
-export default function WorkCalendar({ days, crews, onSelectDay }) {
+export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
   const now = new Date();
   const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 
@@ -29,6 +30,9 @@ export default function WorkCalendar({ days, crews, onSelectDay }) {
 
   const crewColorMap = {};
   (crews || []).forEach(c => { crewColorMap[c.id] = c.color; });
+
+  const weeksMap = {};
+  (weeks || []).forEach(w => { weeksMap[w.id] = w; });
 
   const cells = [
     ...Array(offset).fill(null),
@@ -67,6 +71,15 @@ export default function WorkCalendar({ days, crews, onSelectDay }) {
           const crewColor = entry?.crewId ? crewColorMap[entry.crewId] : null;
           const hasEntry  = !!entry;
 
+          const isWorkDay = hasEntry && !isOff && entry?.crewId;
+          let isPaid = false;
+          if (isWorkDay) {
+            const mondayId = getMondayId(ds);
+            const weekDoc  = weeksMap[mondayId] || {};
+            const { paid } = parsePayEntry(weekDoc[entry.crewId]);
+            isPaid = paid;
+          }
+
           const bg = isSel
             ? (isOff ? T.red + '44' : crewColor ? crewColor + '44' : T.olive + '44')
             : isOff
@@ -75,15 +88,17 @@ export default function WorkCalendar({ days, crews, onSelectDay }) {
                 ? crewColor + '28'
                 : hasEntry ? T.olive + '18' : 'transparent';
 
-          const borderColor = isToday
+          const borderColor = isToday && !isWorkDay
             ? T.khaki + '88'
             : isSel
               ? (isOff ? T.red : crewColor || T.olive)
-              : isOff
-                ? T.red + '55'
-                : crewColor
-                  ? crewColor + '55'
+              : isWorkDay
+                ? (isPaid ? T.green : T.red)
+                : isOff
+                  ? T.red + '55'
                   : hasEntry ? T.olive + '33' : 'transparent';
+
+          const borderWidth = isWorkDay ? 2 : 1;
 
           const numColor = isToday
             ? T.khaki
@@ -95,7 +110,7 @@ export default function WorkCalendar({ days, crews, onSelectDay }) {
             <button
               key={i}
               onClick={() => handleSelect(day)}
-              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `1px solid ${borderColor}` }}
+              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px solid ${borderColor}` }}
             >
               {/* Crew lead indicator */}
               {isLead && (
@@ -122,6 +137,14 @@ export default function WorkCalendar({ days, crews, onSelectDay }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green }} />
           <span style={{ fontSize: 11, color: T.muted }}>Crew lead</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 8, height: 8, borderRadius: 2, background: 'transparent', border: `2px solid ${T.green}` }} />
+          <span style={{ fontSize: 11, color: T.muted }}>Paid</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 8, height: 8, borderRadius: 2, background: 'transparent', border: `2px solid ${T.red}` }} />
+          <span style={{ fontSize: 11, color: T.muted }}>Unpaid</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: 2, background: T.red + '44', border: `1px solid ${T.red + '55'}` }} />
