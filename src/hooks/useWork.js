@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
 import { genId, } from '../utils/id';
-import { CREW_COLORS } from '../utils/workUtils';
+import { CREW_COLORS, getMondayId } from '../utils/workUtils';
 
 export function useWork(userId) {
   const [days,    setDays]    = useState([]);
@@ -26,8 +26,24 @@ export function useWork(userId) {
   }, [userId]);
 
   const deleteDay = useCallback(async (ds) => {
+    const crewId = days.find(d => d.id === ds)?.crewId;
     await deleteDoc(doc(db, 'users', userId, 'workDays', ds));
-  }, [userId]);
+
+    if (crewId) {
+      const mondayId = getMondayId(ds);
+      const stillHasDays = days.some(d =>
+        d.id !== ds && !d.isOff && d.crewId === crewId && getMondayId(d.id) === mondayId
+      );
+      if (!stillHasDays) {
+        try {
+          await updateDoc(
+            doc(db, 'users', userId, 'workWeeks', mondayId),
+            { [crewId]: deleteField() },
+          );
+        } catch (_) { /* week doc didn't exist, nothing to clean up */ }
+      }
+    }
+  }, [userId, days]);
 
   const setWeekPayment = useCallback(async (mondayId, crewId, paid, amount) => {
     await setDoc(
