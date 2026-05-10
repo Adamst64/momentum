@@ -474,6 +474,8 @@ export default function ShoppingTab({ hook, userId }) {
   const [pendingTagIds, setPendingTagIds] = useState([]);
   const [filterTagId, setFilterTagId] = useState(null);
   const [tagPickerItem, setTagPickerItem] = useState(null); // item | 'new' | null
+
+  useEffect(() => { setFilterTagId(null); }, [activeListId]);
   const [showShare, setShowShare] = useState(false);
   const [showNewList, setShowNewList] = useState(false);
   const [newListName, setNewListName] = useState('');

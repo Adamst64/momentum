@@ -106,8 +106,6 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           <button onClick={onClose} style={{ color: T.muted, fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
 
-
-
         {/* Account group */}
         <Group>
           <Row

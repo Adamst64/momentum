@@ -81,7 +81,7 @@ export function useTasks(userId) {
   const backlogTasks = useCallback(() => {
     const today = todayStr();
     const ym = getYM(today);
-    const dom = new Date().getDate();
+    const dom = parseInt(today.slice(-2), 10);
     return tasks.filter(t => {
       if (t.type === 'backlog') return !t.completedAt;
       if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
@@ -136,7 +136,6 @@ export function useTasks(userId) {
     const base = { id, ...data };
     if (data.type === 'recurring-monthly') {
       base.completedOccurrences = {};
-      base.notifiedMonths = [];
     }
     if (data.type === 'backlog') base.missedDot = false;
     await setDoc(doc(db, 'users', userId, 'tasks', id), base);

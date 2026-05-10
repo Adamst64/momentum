@@ -15,7 +15,7 @@ function lerpColor(hexA, hexB, t) {
 
 // ratio 0→red, 0.5→khaki, 1→olive
 export function completionColor(ratio) {
-  if (ratio == null) return '#3A3A3C';
+  if (ratio === null || ratio === undefined) return '#3A3A3C';
   if (ratio <= 0) return '#FF453A';
   if (ratio >= 1) return '#6B7C3F';
   if (ratio <= 0.5) return lerpColor('#FF453A', '#C8B87A', ratio * 2);

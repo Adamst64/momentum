@@ -14,7 +14,7 @@ import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
-const TAB_LABELS = { routines: 'Routines', weekly: 'Weekly', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays' };
+const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays' };
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword } = useAuth();

@@ -1,7 +1,6 @@
 import { getMessaging, getToken, isSupported } from 'firebase/messaging';
 import { getApp } from 'firebase/app';
-import { doc, setDoc } from 'firebase/firestore';
-import { arrayUnion } from 'firebase/firestore';
+import { doc, setDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '../firebase';
 
 // Get this from: Firebase Console → Project Settings → Cloud Messaging → Web Push Certificates → Generate key pair

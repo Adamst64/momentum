@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { T } from '../../theme';
 import CreateRoutineModal from './CreateRoutineModal';
 import RoutineCalendarModal from './RoutineCalendarModal';
@@ -74,7 +74,10 @@ export default function AllRoutinesTab({ hook }) {
   const [pendingDelete, setPendingDelete] = useState(null);
   const [undoState, setUndoState]        = useState(null);
 
-  const sorted = [...routines].filter(r => !r.archived).sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = useMemo(
+    () => [...routines].filter(r => !r.archived).sort((a, b) => a.name.localeCompare(b.name)),
+    [routines]
+  );
 
   const handleConfirmDelete = async (keepHistory) => {
     const routine = pendingDelete;

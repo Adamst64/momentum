@@ -5,7 +5,7 @@ import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
 export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete, onShowCalendar }) {
   const [expanded, setExpanded] = useState(false);
   const today          = todayStr();
-  const done           = !!routine.completions[today];
+  const done           = !!routine.completions?.[today];
   const dow            = getDOW(today);
   const scheduledToday = routine.days.includes(dow);
 
