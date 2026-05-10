@@ -5,7 +5,9 @@ import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature }) {
+const TAB_NAMES = { routines: 'Routines', tasks: 'Tasks', work: 'Work', shopping: 'Shopping', birthdays: 'Birthdays' };
+
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork }) {
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
@@ -244,6 +246,46 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
             <div style={{ padding: '0 16px 8px', fontSize: 13, color: importStatus.ok ? T.green : T.red }}>{importStatus.msg}</div>
           )}
         </Group>
+
+        {tabOrder && (
+          <Group>
+            <div style={{ padding: '12px 16px 4px', fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              Tab Order
+            </div>
+            {tabOrder.filter(id => id !== 'work' || showWork).map((id, i, arr) => (
+              <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
+                <span style={{ fontSize: 15, color: T.text }}>{TAB_NAMES[id]}</span>
+                <div style={{ display: 'flex', gap: 2 }}>
+                  <button
+                    disabled={i === 0}
+                    onClick={() => {
+                      const visible = tabOrder.filter(t => t !== 'work' || showWork);
+                      const neighbor = visible[i - 1];
+                      const newOrder = [...tabOrder];
+                      const a = newOrder.indexOf(id), b = newOrder.indexOf(neighbor);
+                      [newOrder[a], newOrder[b]] = [newOrder[b], newOrder[a]];
+                      setTabOrder(newOrder);
+                    }}
+                    style={{ width: 32, height: 32, borderRadius: 8, background: i === 0 ? 'transparent' : T.subtle, color: i === 0 ? T.cardBorder : T.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >↑</button>
+                  <button
+                    disabled={i === arr.length - 1}
+                    onClick={() => {
+                      const visible = tabOrder.filter(t => t !== 'work' || showWork);
+                      const neighbor = visible[i + 1];
+                      const newOrder = [...tabOrder];
+                      const a = newOrder.indexOf(id), b = newOrder.indexOf(neighbor);
+                      [newOrder[a], newOrder[b]] = [newOrder[b], newOrder[a]];
+                      setTabOrder(newOrder);
+                    }}
+                    style={{ width: 32, height: 32, borderRadius: 8, background: i === arr.length - 1 ? 'transparent' : T.subtle, color: i === arr.length - 1 ? T.cardBorder : T.muted, fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >↓</button>
+                </div>
+              </div>
+            ))}
+            <div style={{ height: 4 }} />
+          </Group>
+        )}
 
         <Group>
           {features?.workTab ? (

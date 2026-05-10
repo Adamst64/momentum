@@ -16,6 +16,7 @@ import { useTasks } from './hooks/useTasks';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { useWork } from './hooks/useWork';
+import { useTabOrder } from './hooks/useTabOrder';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
 const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays', work: 'Work' };
@@ -42,6 +43,8 @@ export default function App() {
   };
 
   const showWork = features.workTab === true;
+  const [tabOrder, setTabOrder] = useTabOrder();
+  const visibleTabs = tabOrder.filter(id => id !== 'work' || showWork);
 
   const routinesHook  = useRoutines(userId);
   const tasksHook     = useTasks(userId);
@@ -125,12 +128,15 @@ export default function App() {
             shoppingLists={shoppingHook.lists}
             features={features}
             onUnlockFeature={handleUnlockFeature}
+            tabOrder={tabOrder}
+            setTabOrder={setTabOrder}
+            showWork={showWork}
           />
         )}
 
       </main>
 
-      <BottomNav active={tab} onChange={setTab} showWork={showWork} />
+      <BottomNav active={tab} onChange={setTab} tabOrder={visibleTabs} />
     </div>
   );
 }

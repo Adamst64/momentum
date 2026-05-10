@@ -1,21 +1,8 @@
 import React from 'react';
 import { T } from '../theme';
 
-const WORK_TAB = {
-  id: 'work',
-  label: 'Work',
-  icon: (on) => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
-      <line x1="3" y1="12" x2="21" y2="12" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
-      <line x1="12" y1="3" x2="12" y2="21" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
-    </svg>
-  ),
-};
-
-const tabs = [
-  {
-    id: 'routines',
+const TAB_DEFS = {
+  routines: {
     label: 'Routines',
     icon: (on) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -24,8 +11,7 @@ const tabs = [
       </svg>
     ),
   },
-  {
-    id: 'tasks',
+  tasks: {
     label: 'Tasks',
     icon: (on) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -35,8 +21,7 @@ const tabs = [
       </svg>
     ),
   },
-  {
-    id: 'shopping',
+  shopping: {
     label: 'Shopping',
     icon: (on) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -47,8 +32,7 @@ const tabs = [
       </svg>
     ),
   },
-  {
-    id: 'birthdays',
+  birthdays: {
     label: 'Birthdays',
     icon: (on) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
@@ -60,10 +44,21 @@ const tabs = [
       </svg>
     ),
   },
-];
+  work: {
+    label: 'Work',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="18" height="18" rx="2.5" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <line x1="3" y1="12" x2="21" y2="12" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <line x1="12" y1="3" x2="12" y2="21" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+};
 
-export default function BottomNav({ active, onChange, showWork }) {
-  const visibleTabs = showWork ? [...tabs, WORK_TAB] : tabs;
+export { TAB_DEFS };
+
+export default function BottomNav({ active, onChange, tabOrder }) {
   return (
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
@@ -73,13 +68,15 @@ export default function BottomNav({ active, onChange, showWork }) {
       paddingBottom: 'env(safe-area-inset-bottom)',
       height: `calc(${T.navH}px + env(safe-area-inset-bottom))`,
     }}>
-      {visibleTabs.map(tab => {
-        const on = active === tab.id;
+      {tabOrder.map(id => {
+        const def = TAB_DEFS[id];
+        if (!def) return null;
+        const on = active === id;
         return (
           <button
-            key={tab.id}
+            key={id}
             type="button"
-            onClick={() => onChange(tab.id)}
+            onClick={() => onChange(id)}
             style={{
               flex: 1,
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -89,8 +86,8 @@ export default function BottomNav({ active, onChange, showWork }) {
               transition: 'color 0.2s',
             }}
           >
-            {tab.icon(on)}
-            {tab.label}
+            {def.icon(on)}
+            {def.label}
           </button>
         );
       })}
