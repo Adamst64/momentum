@@ -110,7 +110,6 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
               />
               <span style={{ color: T.muted, fontSize: 14 }}>of every month</span>
             </div>
-            <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>You'll be notified 3 days before</div>
           </div>
         )}
 
