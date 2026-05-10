@@ -48,9 +48,9 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
           const hasData  = ratio !== null;
 
           // Fill height: 0% completion = 0px (empty), 1-100% = proportional
-          // A tiny 3px baseline shows for 0%-but-tracked days
+          // 3px red baseline only for past 0% days — not for today (day is in progress)
           const fillH      = hasData && ratio > 0 ? ratio : 0;
-          const showBase   = hasData && ratio === 0;
+          const showBase   = hasData && ratio === 0 && !isToday;
           const fillColor  = hasData ? completionColor(ratio) : null;
           // Text goes white once fill rises past ~80% of cell height
           const textWhite  = hasData && ratio >= 0.82;
@@ -58,6 +58,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
           return (
             <div
               key={day}
+              className={isToday ? 'cal-today-live' : undefined}
               onClick={() => isEditable && onDayClick && onDayClick(dateStr)}
               style={{
                 aspectRatio: '1',

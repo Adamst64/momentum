@@ -4,6 +4,7 @@ import {
   formatLongDate, formatMonthYear, todayStr, addDays,
   getDaysInMonth, getFirstDOW, parseDate, DAYS_SHORT,
 } from '../../utils/dateUtils';
+import { completionColor } from '../../utils/colors';
 
 function getDayState(items, dateStr, today) {
   if (!items.length) return null;
@@ -14,30 +15,75 @@ function getDayState(items, dateStr, today) {
   return 'partial';
 }
 
-const STATE_BG    = { done: '#2A3A1A', missed: '#3A1C1C', partial: '#2A2814', scheduled: '#1C1E18' };
-const STATE_COLOR = { done: '#6BAE5A', missed: '#E05050', partial: '#C8B87A', scheduled: '#8A9E52' };
+const STATE_TEXT = { done: '#6BAE5A', missed: '#E05050', partial: '#C8B87A' };
 
 function DayCell({ dateStr, items, today, isSelected, onClick }) {
   const day = parseInt(dateStr.slice(-2), 10);
-  const isToday = dateStr === today;
-  const state = getDayState(items, dateStr, today);
+  const isToday    = dateStr === today;
+  const isFuture   = dateStr > today;
+  const state      = getDayState(items, dateStr, today);
+
+  // Numeric ratio for water-fill (matches routines calendar style)
+  let ratio = null;
+  if (state === 'done')    ratio = 1;
+  else if (state === 'missed')  ratio = 0;
+  else if (state === 'partial') ratio = items.filter(i => i.done).length / items.length;
+
+  const fillColor = ratio !== null ? completionColor(ratio) : null;
+  const textWhite = ratio !== null && ratio >= 0.82;
+
   return (
     <button onClick={onClick} style={{
       aspectRatio: '1',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      borderRadius: 8, background: state ? STATE_BG[state] : 'transparent',
+      display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+      paddingTop: 3,
+      borderRadius: 8,
+      background: T.bg,
+      position: 'relative',
+      overflow: 'hidden',
       border: isToday
         ? `2px solid ${T.khaki}`
         : isSelected
         ? `2px solid ${T.olive}`
         : '2px solid transparent',
     }}>
+      {/* Water fill for past days */}
+      {fillColor && ratio > 0 && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: `${ratio * 100}%`,
+          background: fillColor,
+          transition: 'height 0.4s ease',
+        }} />
+      )}
+
+      {/* 3px red baseline for 0% missed days */}
+      {state === 'missed' && (
+        <div style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0,
+          height: 3, background: '#FF453A', opacity: 0.7,
+        }} />
+      )}
+
       <span style={{
+        position: 'relative', zIndex: 1,
         fontSize: 13, fontWeight: isToday ? 700 : 400,
-        color: state ? STATE_COLOR[state] : (isToday ? T.khaki : T.muted),
+        color: textWhite ? '#fff'
+          : isToday ? T.khaki
+          : isFuture ? T.muted
+          : state ? STATE_TEXT[state]
+          : T.muted,
       }}>
         {day}
       </span>
+
+      {/* Green dot for future days with scheduled tasks */}
+      {state === 'scheduled' && (
+        <div style={{
+          position: 'absolute', bottom: 3, left: '50%', transform: 'translateX(-50%)',
+          width: 4, height: 4, borderRadius: '50%', background: T.green,
+        }} />
+      )}
     </button>
   );
 }
