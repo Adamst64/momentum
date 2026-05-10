@@ -3,7 +3,7 @@ import { T } from '../../theme';
 import TagBadge from './TagBadge';
 import TagPickerSheet from './TagPickerSheet';
 
-function InventoryItem({ item, tags, onEdit, onDelete, onAddToList, onOpenTagPicker }) {
+function InventoryItem({ item, tags, inList, onEdit, onDelete, onAddToList, onOpenTagPicker }) {
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState(item.name);
 
@@ -59,11 +59,18 @@ function InventoryItem({ item, tags, onEdit, onDelete, onAddToList, onOpenTagPic
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <span style={{ flex: 1, fontSize: 15, color: T.text, fontWeight: 500 }}>{item.name}</span>
 
-        <button onClick={() => onAddToList(item)} style={{
-          padding: '4px 10px', borderRadius: 8,
-          background: '#1A2410', border: `1px solid ${T.olive}44`,
-          color: T.oliveLight, fontSize: 12, fontWeight: 600, flexShrink: 0,
-        }}>+ List</button>
+        <button
+          onClick={() => !inList && onAddToList(item)}
+          disabled={inList}
+          style={{
+            padding: '4px 10px', borderRadius: 8, flexShrink: 0,
+            background: inList ? 'transparent' : '#1A2410',
+            border: `1px solid ${inList ? T.cardBorder : T.olive + '44'}`,
+            color: inList ? T.subtle : T.oliveLight,
+            fontSize: 12, fontWeight: 600,
+            cursor: inList ? 'default' : 'pointer',
+          }}
+        >{inList ? 'In list' : '+ List'}</button>
 
         <button onClick={() => { setEditName(item.name); setEditing(true); }} style={{
           color: T.muted, fontSize: 13, padding: '2px 7px', borderRadius: 6,
@@ -85,9 +92,11 @@ function InventoryItem({ item, tags, onEdit, onDelete, onAddToList, onOpenTagPic
   );
 }
 
-export default function InventoryTab({ inventory, tags, onEdit, onDelete, onAddToList, onAddTag, onUpdateTag, onDeleteTag }) {
+export default function InventoryTab({ inventory, items, tags, onEdit, onDelete, onAddToList, onAddTag, onUpdateTag, onDeleteTag }) {
   const [tagPickerItem, setTagPickerItem] = useState(null);
   const [search, setSearch] = useState('');
+
+  const listNames = new Set((items || []).map(i => i.name.toLowerCase()));
 
   const filtered = search.trim()
     ? inventory.filter(i => i.name.toLowerCase().includes(search.trim().toLowerCase()))
@@ -126,6 +135,7 @@ export default function InventoryTab({ inventory, tags, onEdit, onDelete, onAddT
               key={item.id}
               item={item}
               tags={tags}
+              inList={listNames.has(item.name.toLowerCase())}
               onEdit={onEdit}
               onDelete={onDelete}
               onAddToList={onAddToList}

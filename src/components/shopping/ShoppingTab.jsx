@@ -105,6 +105,7 @@ export default function ShoppingTab({ hook, userId }) {
       {view === 'inventory' ? (
         <InventoryTab
           inventory={inventory}
+          items={items}
           tags={tags}
           onEdit={updateInventoryItem}
           onDelete={deleteInventoryItem}

@@ -116,6 +116,15 @@ export function useShoppingLists(userId) {
       await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
         name: name.trim(), tagIds,
       });
+    } else {
+      // Merge tags: union of existing and new
+      const existingTagIds = existingInv.tagIds || [];
+      const added = tagIds.filter(t => !existingTagIds.includes(t));
+      if (added.length > 0) {
+        await updateDoc(doc(db, 'lists', activeListId, 'inventory', existingInv.id), {
+          tagIds: [...existingTagIds, ...added],
+        });
+      }
     }
   }, [userId, activeListId, inventory]);
 
