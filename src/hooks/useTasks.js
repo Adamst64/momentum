@@ -38,6 +38,7 @@ export function useTasks(userId) {
       .filter(t => {
         if (t.type === 'one-time') return t.date === dateStr;
         if (t.type === 'recurring-monthly') {
+          if (t.createdAt && dateStr < t.createdAt) return false;
           const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
           return day === dom;
         }
@@ -94,6 +95,8 @@ export function useTasks(userId) {
       if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
       if (t.type === 'recurring-monthly') {
         const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        const occ = `${ym}-${String(day).padStart(2, '0')}`;
+        if (t.createdAt && occ < t.createdAt) return false;
         if (day < dom && !t.completedOccurrences?.[ym]) return true;
       }
       return false;
@@ -108,6 +111,8 @@ export function useTasks(userId) {
       if (t.type === 'one-time') return t.date > today && !t.completedAt;
       if (t.type === 'recurring-monthly') {
         const day      = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        const occ      = `${ym}-${String(day).padStart(2, '0')}`;
+        if (t.createdAt && occ < t.createdAt) return false;
         const donethis = !!t.completedOccurrences?.[ym];
         const dueToday = day === dom;
         const missed   = day < dom && !donethis;
@@ -147,7 +152,7 @@ export function useTasks(userId) {
   const addTask = useCallback(async (data) => {
     if (!userId) return;
     const id = genId();
-    const base = { id, ...data };
+    const base = { id, createdAt: todayStr(), ...data };
     if (data.type === 'recurring-monthly') {
       base.completedOccurrences = {};
     }
