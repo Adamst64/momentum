@@ -19,10 +19,14 @@ export function useTasks(userId) {
 
   const todayTasks = useCallback(() => {
     const today = todayStr();
+    const ym  = today.slice(0, 7);
     const dom = parseInt(today.slice(-2), 10);
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
-      if (t.type === 'recurring-monthly') return t.dayOfMonth === dom;
+      if (t.type === 'recurring-monthly') {
+        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        return day === dom;
+      }
       return false;
     });
   }, [tasks]);
@@ -33,7 +37,10 @@ export function useTasks(userId) {
     return tasks
       .filter(t => {
         if (t.type === 'one-time') return t.date === dateStr;
-        if (t.type === 'recurring-monthly') return t.dayOfMonth === dom;
+        if (t.type === 'recurring-monthly') {
+          const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+          return day === dom;
+        }
         if (t.type === 'backlog') return t.completedAt === dateStr;
         return false;
       })
@@ -85,7 +92,10 @@ export function useTasks(userId) {
     return tasks.filter(t => {
       if (t.type === 'backlog') return !t.completedAt;
       if (t.type === 'one-time' && t.date < today && !t.completedAt) return true;
-      if (t.type === 'recurring-monthly' && t.dayOfMonth < dom && !t.completedOccurrences?.[ym]) return true;
+      if (t.type === 'recurring-monthly') {
+        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        if (day < dom && !t.completedOccurrences?.[ym]) return true;
+      }
       return false;
     });
   }, [tasks]);
@@ -97,16 +107,17 @@ export function useTasks(userId) {
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.date > today && !t.completedAt;
       if (t.type === 'recurring-monthly') {
-        const donethis  = !!t.completedOccurrences?.[ym];
-        const dueToday  = t.dayOfMonth === dom;
-        const missed    = t.dayOfMonth < dom && !donethis;
+        const day      = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        const donethis = !!t.completedOccurrences?.[ym];
+        const dueToday = day === dom;
+        const missed   = day < dom && !donethis;
         return !donethis && !dueToday && !missed;
       }
       return false;
     }).sort((a, b) => {
       const nextDate = (t) => t.type === 'one-time'
         ? t.date
-        : `${ym.slice(0,4)}-${ym.slice(5,7)}-${String(t.dayOfMonth).padStart(2,'0')}`;
+        : `${ym.slice(0,4)}-${ym.slice(5,7)}-${String(t.monthOverrides?.[ym] ?? t.dayOfMonth).padStart(2,'0')}`;
       return nextDate(a).localeCompare(nextDate(b));
     });
   }, [tasks]);
@@ -117,7 +128,10 @@ export function useTasks(userId) {
     const dom = new Date().getDate();
     const scheduled = tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
-      if (t.type === 'recurring-monthly') return t.dayOfMonth === dom;
+      if (t.type === 'recurring-monthly') {
+        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        return day === dom;
+      }
       return false;
     });
     const done = scheduled.filter(t => {
@@ -163,13 +177,15 @@ export function useTasks(userId) {
     await updateDoc(doc(db, 'users', userId, 'tasks', id), changes);
   }, [userId, tasks]);
 
-  const rescheduleTask = useCallback(async (id, newDate) => {
+  const rescheduleTask = useCallback(async (id, newDate, sourceYM) => {
     if (!userId) return;
     const task = tasks.find(t => t.id === id);
     if (task?.type === 'recurring-monthly') {
-      // Move the whole series to the new day of month; preserve recurrence
+      // Override just the specified month; all others keep their own day
+      const ym     = sourceYM || newDate.slice(0, 7);
+      const newDay = parseInt(newDate.slice(-2), 10);
       await updateDoc(doc(db, 'users', userId, 'tasks', id), {
-        dayOfMonth: parseInt(newDate.slice(-2), 10),
+        monthOverrides: { ...(task.monthOverrides || {}), [ym]: newDay },
       });
     } else {
       await updateDoc(doc(db, 'users', userId, 'tasks', id), {

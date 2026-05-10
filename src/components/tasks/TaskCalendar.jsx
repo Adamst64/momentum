@@ -176,7 +176,7 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
               flex: 1, padding: '8px', borderRadius: 7, background: 'transparent',
               border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13,
             }}>Cancel</button>
-            <button onClick={() => { onReschedule(task.id, newDate); setRescheduling(false); }} style={{
+            <button onClick={() => { onReschedule(task.id, newDate, dateStr.slice(0, 7)); setRescheduling(false); }} style={{
               flex: 1, padding: '8px', borderRadius: 7, background: T.olive, color: T.text, fontSize: 13, fontWeight: 600,
             }}>Set Date</button>
           </div>
