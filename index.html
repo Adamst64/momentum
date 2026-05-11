@@ -12,6 +12,24 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="theme-color" content="#0F0F0F" />
     <link rel="icon" type="image/png" href="/icon-192.png" />
+    <script>
+      // Prevent iOS auto-zoom on input/textarea focus by locking maximum-scale while focused
+      (function () {
+        var vp = document.querySelector('meta[name=viewport]');
+        if (!vp) return;
+        var base = vp.getAttribute('content');
+        document.addEventListener('focus', function (e) {
+          if (e.target.matches('input, textarea, select')) {
+            vp.setAttribute('content', base + ', maximum-scale=1.0');
+          }
+        }, true);
+        document.addEventListener('blur', function (e) {
+          if (e.target.matches('input, textarea, select')) {
+            setTimeout(function () { vp.setAttribute('content', base); }, 100);
+          }
+        }, true);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
