@@ -102,7 +102,7 @@ export default function WorkTab({ hook }) {
               initial={dayMap[selectedDay] || null}
               crews={crews}
               members={members}
-              onSave={async (ds, data) => { await saveDay(ds, data); setShowDaySheet(false); }}
+              onSave={(ds, data) => { saveDay(ds, data); setShowDaySheet(false); }}
               onDelete={async (ds) => { await deleteDay(ds); setShowDaySheet(false); }}
             />
             <div style={{ height: 24 }} />

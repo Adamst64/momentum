@@ -40,7 +40,6 @@ const norm = (base) => ({ ...EMPTY, ...base });
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
   const [form, setForm]                   = useState(() => norm(initial));
   const [lastSaved, setLastSaved]         = useState(() => initial ? norm(initial) : null);
-  const [saving, setSaving]               = useState(false);
   const [confirmClear, setConfirmClear]   = useState(false);
   const [showCrewPicker, setShowCrewPicker]     = useState(false);
   const [showMemberPicker, setShowMemberPicker] = useState(false);
@@ -55,14 +54,9 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await onSave(dateStr, form);
-      setLastSaved({ ...form });
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = () => {
+    onSave(dateStr, form);
+    setLastSaved({ ...form });
   };
 
   const isEmpty = !form.isOff && form.windows === 0 && form.doors === 0 && !form.crewId && form.memberIds.length === 0 && !form.comment;
@@ -153,17 +147,17 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
       <div style={{ display: 'flex', gap: 10 }}>
         <button
           onClick={handleSave}
-          disabled={saving || !isDirty}
+          disabled={!isDirty}
           style={{
             flex: 1, padding: '14px 0', borderRadius: 14,
             background: showSaved ? T.green + '33' : T.olive,
             color: showSaved ? T.green : '#fff',
             fontSize: 15, fontWeight: 600,
             transition: 'background 0.2s, color 0.2s',
-            opacity: saving || !isDirty ? 0.5 : 1,
+            opacity: !isDirty ? 0.5 : 1,
           }}
         >
-          {saving ? 'Saving…' : showSaved ? 'Saved ✓' : 'Save Day'}
+          {showSaved ? 'Saved ✓' : 'Save Day'}
         </button>
         {!isEmpty && onDelete && !confirmClear && (
           <button
