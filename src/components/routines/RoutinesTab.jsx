@@ -37,7 +37,12 @@ export default function RoutinesTab({ hook }) {
 
   const sorted = [...routines]
     .filter(r => !r.archived && !r.paused && r.days.includes(dow))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const aDone = !!a.completions?.[today];
+      const bDone = !!b.completions?.[today];
+      if (aDone !== bDone) return aDone ? 1 : -1;
+      return a.name.localeCompare(b.name);
+    });
 
   const handleRequestDelete = (routine) => setPendingDelete(routine);
 
@@ -85,6 +90,20 @@ export default function RoutinesTab({ hook }) {
         </div>
       </div>
 
+      {/* Add routine */}
+      <button
+        type="button"
+        onClick={() => setShowCreate(true)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: 14, borderRadius: 14,
+          border: `1.5px dashed ${T.cardBorder}`,
+          color: T.muted, fontSize: 15, background: 'transparent',
+        }}
+      >
+        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Routine
+      </button>
+
       {/* Today's routines */}
       <div>
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
@@ -131,20 +150,6 @@ export default function RoutinesTab({ hook }) {
       >
         <span>All Routines</span>
         <span style={{ color: T.muted, fontSize: 18 }}>›</span>
-      </button>
-
-      {/* Add routine */}
-      <button
-        type="button"
-        onClick={() => setShowCreate(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: 14, borderRadius: 14,
-          border: `1.5px dashed ${T.cardBorder}`,
-          color: T.muted, fontSize: 15, background: 'transparent',
-        }}
-      >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Routine
       </button>
 
       {/* Monthly calendar */}

@@ -274,6 +274,15 @@ export default function TasksTab({ hook, userId }) {
         </div>
       </div>
 
+      <button type="button" onClick={() => setShowCreate(true)} style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        padding: 14, borderRadius: 14,
+        border: `1.5px dashed ${T.cardBorder}`,
+        color: T.muted, fontSize: 15, background: 'transparent',
+      }}>
+        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Task
+      </button>
+
       <div>
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>Today</div>
         {todays.length === 0 ? (
@@ -358,15 +367,6 @@ export default function TasksTab({ hook, userId }) {
           </div>
         </div>
       )}
-
-      <button type="button" onClick={() => setShowCreate(true)} style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        padding: 14, borderRadius: 14,
-        border: `1.5px dashed ${T.cardBorder}`,
-        color: T.muted, fontSize: 15, background: 'transparent',
-      }}>
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Task
-      </button>
 
       {showCreate && (
         <CreateTaskModal onSave={handleSave} onClose={() => setShowCreate(false)} />

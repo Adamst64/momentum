@@ -26,8 +26,9 @@ export function useTasks(userId) {
       if (t.type === 'recurring-monthly') {
         if (t.createdAt && today < t.createdAt) return false;
         let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
-        // If genuinely missed (existed on original due day), roll to today
-        if (day < dom) {
+        // Roll to today only if not already done for this month
+        const doneThisMonth = !!t.completedOccurrences?.[ym];
+        if (!doneThisMonth && day < dom) {
           const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
           if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
         }
@@ -48,8 +49,9 @@ export function useTasks(userId) {
         if (t.type === 'recurring-monthly') {
           if (t.createdAt && dateStr < t.createdAt) return false;
           let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
-          // For today: roll to today if task was genuinely missed (existed on original due day)
-          if (isToday && ym === today.slice(0, 7) && day < dom) {
+          // For today: roll to today only if not already done for this month
+          const doneThisMonth = !!t.completedOccurrences?.[ym];
+          if (isToday && ym === today.slice(0, 7) && !doneThisMonth && day < dom) {
             const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
             if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
           }
@@ -133,7 +135,8 @@ export function useTasks(userId) {
       if (t.type === 'recurring-monthly') {
         if (t.createdAt && today < t.createdAt) return false;
         let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
-        if (day < dom) {
+        const doneThisMonth = !!t.completedOccurrences?.[ym];
+        if (!doneThisMonth && day < dom) {
           const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
           if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
         }
