@@ -4,7 +4,7 @@ import DonutChart from '../DonutChart';
 import TaskItem from './TaskItem';
 import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
-import { formatLongDate, todayStr } from '../../utils/dateUtils';
+import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils';
 import { registerPushToken } from '../../utils/pushNotifications';
 
 function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
@@ -83,35 +83,58 @@ function ord(n) {
   switch (n % 10) { case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
 }
 
-function MonthlyItem({ task, today, onEdit, onDelete }) {
+function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
-  const ym  = today.slice(0, 7);
-  const dom = parseInt(today.slice(-2), 10);
-  const effectiveDay = task.monthOverrides?.[ym] ?? task.dayOfMonth;
-  const isDone    = !!task.completedOccurrences?.[ym];
-  const isOverdue = !isDone && effectiveDay < dom;
-  const isToday   = !isDone && effectiveDay === dom;
+  const effectiveDay  = task.monthOverrides?.[viewYM] ?? task.dayOfMonth;
+  const isDone        = !!task.completedOccurrences?.[viewYM];
+  const taskCreatedYM = task.createdAt?.slice(0, 7);
 
-  let statusColor = T.muted;
-  let statusText  = `Due ${effectiveDay}${ord(effectiveDay)}`;
-  if (isDone) {
-    statusColor = T.green;
-    statusText  = `Done ✓`;
-  } else if (isOverdue) {
-    statusColor = T.red;
-    statusText  = `${effectiveDay}${ord(effectiveDay)} passed`;
-  } else if (isToday) {
-    statusColor = T.khaki;
-    statusText  = `Due today`;
+  const isPast         = viewYM < todayYM;
+  const isCurrent      = viewYM === todayYM;
+  const isFuture       = viewYM > todayYM;
+  const beforeCreation = taskCreatedYM && viewYM < taskCreatedYM;
+
+  // For current month: if the due day has passed and task is not done, roll forward to today
+  let displayDay = effectiveDay;
+  if (isCurrent && !isDone && effectiveDay < todayDom) {
+    displayDay = todayDom;
   }
+
+  let statusColor, statusText;
+  if (beforeCreation) {
+    statusColor = T.subtle;
+    statusText  = '—';
+  } else if (isDone) {
+    statusColor = T.green;
+    statusText  = 'Done ✓';
+  } else if (isFuture) {
+    statusColor = T.muted;
+    statusText  = `Due ${effectiveDay}${ord(effectiveDay)}`;
+  } else if (isPast) {
+    statusColor = T.red;
+    statusText  = 'Missed';
+  } else {
+    // current month, not done
+    if (displayDay > todayDom) {
+      statusColor = T.muted;
+      statusText  = `Due ${displayDay}${ord(displayDay)}`;
+    } else {
+      // due today — either originally scheduled today, or rolled from a missed earlier day
+      statusColor = T.khaki;
+      statusText  = effectiveDay < todayDom ? 'Missed · due today' : 'Due today';
+    }
+  }
+
+  const isOverridden = task.monthOverrides?.[viewYM] != null;
 
   return (
     <>
       <div style={{
         background: T.card,
-        border: `1px solid ${T.cardBorder}`,
+        border: `1px solid ${isDone ? T.olive + '44' : T.cardBorder}`,
         borderRadius: 12, padding: '12px 14px',
         display: 'flex', alignItems: 'center', gap: 12,
+        opacity: isDone ? 0.75 : 1,
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
@@ -120,17 +143,18 @@ function MonthlyItem({ task, today, onEdit, onDelete }) {
           }}>{task.name}</div>
           <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
             Every {task.dayOfMonth}{ord(task.dayOfMonth)}
+            {isOverridden && ` · this month: ${effectiveDay}${ord(effectiveDay)}`}
           </div>
         </div>
 
         {task.notify?.enabled && (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, color: T.muted }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
             <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             <path d="M13.73 21a2 2 0 01-3.46 0" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         )}
 
-        <div style={{ fontSize: 12, color: statusColor, fontWeight: 500, flexShrink: 0 }}>
+        <div style={{ fontSize: 12, color: statusColor, fontWeight: 600, flexShrink: 0, textAlign: 'right', maxWidth: 110 }}>
           {statusText}
         </div>
 
@@ -183,27 +207,40 @@ export default function TasksTab({ hook, userId }) {
   } = hook;
 
   const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing]       = useState(null);
+  const [editing,    setEditing]    = useState(null);
 
   const today    = todayStr();
-  const stats    = todayStats();
-  const todays   = todayTasks();
-  const backlog  = backlogTasks();
+  const todayYM  = today.slice(0, 7);
+  const todayDom = parseInt(today.slice(-2), 10);
+
+  const [viewYM, setViewYM] = useState(todayYM);
+
+  const prevViewMonth = () => setViewYM(ym => {
+    const [y, m] = ym.split('-').map(Number);
+    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
+  });
+
+  const nextViewMonth = () => setViewYM(ym => {
+    const [y, m] = ym.split('-').map(Number);
+    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
+  });
+
+  const [viewYear, viewMonthNum] = viewYM.split('-').map(Number);
+
+  const stats     = todayStats();
+  const todays    = todayTasks();
+  const backlog   = backlogTasks();
   const scheduled = scheduledTasks();
-  const monthly  = monthlyTasks();
+  const monthly   = monthlyTasks();
 
   const handleSave = (data) => {
     addTask(data);
-    if (data.notify?.enabled && userId) {
-      registerPushToken(userId);
-    }
+    if (data.notify?.enabled && userId) registerPushToken(userId);
   };
 
   const handleEditSave = (data) => {
     updateTask(editing.id, data);
-    if (data.notify?.enabled && userId) {
-      registerPushToken(userId);
-    }
+    if (data.notify?.enabled && userId) registerPushToken(userId);
     setEditing(null);
   };
 
@@ -282,15 +319,39 @@ export default function TasksTab({ hook, userId }) {
         ))}
       </Section>
 
-      <Section title="Monthly" count={monthly.length} defaultOpen={true}>
-        {monthly.map(t => (
-          <MonthlyItem
-            key={t.id} task={t} today={today}
-            onEdit={setEditing}
-            onDelete={deleteTask}
-          />
-        ))}
-      </Section>
+      {monthly.length > 0 && (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+              Monthly <span style={{ color: T.subtle }}>({monthly.length})</span>
+            </span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <button onClick={prevViewMonth} style={{ color: T.muted, fontSize: 18, padding: '2px 8px', background: 'none', border: 'none' }}>‹</button>
+              <span style={{
+                fontSize: 12, fontWeight: 600, minWidth: 100, textAlign: 'center',
+                color: viewYM === todayYM ? T.khaki : T.text,
+              }}>
+                {formatMonthYear(viewYear, viewMonthNum - 1)}
+              </span>
+              <button onClick={nextViewMonth} style={{ color: T.muted, fontSize: 18, padding: '2px 8px', background: 'none', border: 'none' }}>›</button>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {monthly.map(t => (
+              <MonthlyItem
+                key={t.id}
+                task={t}
+                viewYM={viewYM}
+                todayYM={todayYM}
+                todayDom={todayDom}
+                onEdit={setEditing}
+                onDelete={deleteTask}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       <button type="button" onClick={() => setShowCreate(true)} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
