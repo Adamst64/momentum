@@ -98,6 +98,18 @@ export default function BirthdaysTab({ hook, userId }) {
         ))}
       </div>
 
+      <button
+        onClick={() => { setEditing(null); setShowForm(true); }}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          padding: 14, borderRadius: 14,
+          border: `1.5px dashed ${T.cardBorder}`,
+          color: T.muted, fontSize: 15, background: 'transparent',
+        }}
+      >
+        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Birthday
+      </button>
+
       {view === 'list' ? (
         <>
           {birthdays.length === 0 && (
@@ -125,18 +137,6 @@ export default function BirthdaysTab({ hook, userId }) {
       ) : (
         <BirthdayCalendar birthdays={birthdays} onEdit={openEdit} onDelete={deleteBirthday} />
       )}
-
-      <button
-        onClick={() => { setEditing(null); setShowForm(true); }}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: 14, borderRadius: 14,
-          border: `1.5px dashed ${T.cardBorder}`,
-          color: T.muted, fontSize: 15, background: 'transparent',
-        }}
-      >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Birthday
-      </button>
 
       {showForm && (
         <BirthdayForm
