@@ -220,19 +220,21 @@ export default function TasksTab({ hook, userId }) {
   const todayYM  = today.slice(0, 7);
   const todayDom = parseInt(today.slice(-2), 10);
 
-  const [viewYM, setViewYM] = useState(todayYM);
+  const d0 = new Date(today + 'T00:00:00');
+  const [calYear,  setCalYear]  = useState(d0.getFullYear());
+  const [calMonth, setCalMonth] = useState(d0.getMonth()); // 0-indexed
 
-  const prevViewMonth = () => setViewYM(ym => {
-    const [y, m] = ym.split('-').map(Number);
-    return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
-  });
+  const prevCalMonth = () => {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  };
+  const nextCalMonth = () => {
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  };
 
-  const nextViewMonth = () => setViewYM(ym => {
-    const [y, m] = ym.split('-').map(Number);
-    return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`;
-  });
-
-  const [viewYear, viewMonthNum] = viewYM.split('-').map(Number);
+  // viewYM derived from the shared calendar month (calMonth is 0-indexed)
+  const viewYM = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
 
   const stats     = todayStats();
   const todays    = todayTasks();
@@ -295,6 +297,10 @@ export default function TasksTab({ hook, userId }) {
 
       <TaskCalendar
         today={today}
+        calYear={calYear}
+        calMonth={calMonth}
+        onPrevMonth={prevCalMonth}
+        onNextMonth={nextCalMonth}
         tasksForDate={tasksForDate}
         toggleTaskForDate={toggleTaskForDate}
         deleteTask={deleteTask}
@@ -332,16 +338,9 @@ export default function TasksTab({ hook, userId }) {
             <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
               Monthly <span style={{ color: T.subtle }}>({monthly.length})</span>
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <button onClick={prevViewMonth} style={{ color: T.muted, fontSize: 18, padding: '2px 8px', background: 'none', border: 'none' }}>‹</button>
-              <span style={{
-                fontSize: 12, fontWeight: 600, minWidth: 100, textAlign: 'center',
-                color: viewYM === todayYM ? T.khaki : T.text,
-              }}>
-                {formatMonthYear(viewYear, viewMonthNum - 1)}
-              </span>
-              <button onClick={nextViewMonth} style={{ color: T.muted, fontSize: 18, padding: '2px 8px', background: 'none', border: 'none' }}>›</button>
-            </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: viewYM === todayYM ? T.khaki : T.muted }}>
+              {formatMonthYear(calYear, calMonth)}
+            </span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

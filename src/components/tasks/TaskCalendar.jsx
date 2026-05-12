@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import {
   formatLongDate, formatMonthYear, todayStr, addDays,
-  getDaysInMonth, getFirstDOW, parseDate, DAYS_SHORT,
+  getDaysInMonth, getFirstDOW, DAYS_SHORT,
 } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
 
@@ -186,24 +186,13 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
   );
 }
 
-export default function TaskCalendar({ today, tasksForDate, toggleTaskForDate, deleteTask, rescheduleTask, onEdit }) {
-  const d0 = parseDate(today);
-  const [calYear, setCalYear]       = useState(d0.getFullYear());
-  const [calMonth, setCalMonth]     = useState(d0.getMonth());
+export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, onNextMonth, tasksForDate, toggleTaskForDate, deleteTask, rescheduleTask, onEdit }) {
   const [selectedDate, setSelectedDate] = useState(null);
 
   const minEditableDate = addDays(today, -6);
 
-  const prevMonth = () => {
-    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
-    else setCalMonth(m => m - 1);
-    setSelectedDate(null);
-  };
-  const nextMonth = () => {
-    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
-    else setCalMonth(m => m + 1);
-    setSelectedDate(null);
-  };
+  const prevMonth = () => { onPrevMonth(); setSelectedDate(null); };
+  const nextMonth = () => { onNextMonth(); setSelectedDate(null); };
 
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDow    = getFirstDOW(calYear, calMonth);
