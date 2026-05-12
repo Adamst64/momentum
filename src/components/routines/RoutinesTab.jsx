@@ -36,7 +36,7 @@ export default function RoutinesTab({ hook }) {
   const dow   = getDOW(today);
 
   const sorted = [...routines]
-    .filter(r => !r.archived && r.days.includes(dow))
+    .filter(r => !r.archived && !r.paused && r.days.includes(dow))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const handleRequestDelete = (routine) => setPendingDelete(routine);
