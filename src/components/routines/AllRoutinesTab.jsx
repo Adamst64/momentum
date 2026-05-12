@@ -6,8 +6,19 @@ import DeleteRoutineSheet from './DeleteRoutineSheet';
 import UndoToast from '../UndoToast';
 import { DAYS_SHORT } from '../../utils/dateUtils';
 
-function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
-  const [showMenu, setShowMenu] = useState(false);
+function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPause, onUnpause }) {
+  const [showMenu,     setShowMenu]     = useState(false);
+  const [confirmPause, setConfirmPause] = useState(false);
+  const isPaused = !!routine.paused;
+
+  const handleToggle = () => {
+    if (isPaused) {
+      onUnpause(routine.id);
+    } else {
+      setShowMenu(false);
+      setConfirmPause(true);
+    }
+  };
 
   return (
     <>
@@ -15,9 +26,19 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
         background: T.card, border: `1px solid ${T.cardBorder}`,
         borderRadius: 12, padding: '13px 14px',
         display: 'flex', alignItems: 'center', gap: 12,
+        opacity: isPaused ? 0.6 : 1,
+        transition: 'opacity 0.2s',
       }}>
         <div style={{ flex: 1, minWidth: 0 }} onClick={() => onShowCalendar(routine)}>
-          <div style={{ fontSize: 15, fontWeight: 500, color: T.text }}>{routine.name}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 15, fontWeight: 500, color: T.text }}>{routine.name}</span>
+            {isPaused && (
+              <span style={{
+                fontSize: 9, padding: '2px 5px', borderRadius: 4,
+                background: T.subtle, color: T.muted, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.3,
+              }}>Paused</span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
             {DAYS_SHORT.map((label, i) => (
               <span key={i} style={{
@@ -32,6 +53,25 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
           </div>
         </div>
 
+        {/* On/Off toggle */}
+        <button
+          type="button"
+          onClick={handleToggle}
+          style={{
+            width: 40, height: 24, borderRadius: 12, flexShrink: 0,
+            background: isPaused ? T.subtle : T.olive,
+            border: 'none', cursor: 'pointer', position: 'relative',
+            transition: 'background 0.2s',
+          }}
+        >
+          <div style={{
+            position: 'absolute', top: 3,
+            left: isPaused ? 3 : 19,
+            width: 18, height: 18, borderRadius: '50%',
+            background: '#fff', transition: 'left 0.2s',
+          }} />
+        </button>
+
         <button
           type="button"
           onClick={() => setShowMenu(m => !m)}
@@ -40,6 +80,28 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
           ···
         </button>
       </div>
+
+      {confirmPause && (
+        <div style={{
+          display: 'flex', gap: 10, alignItems: 'center',
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 10, padding: '12px 14px', marginTop: -4,
+        }}>
+          <span style={{ flex: 1, fontSize: 13, color: T.text }}>
+            Pause <strong>{routine.name}</strong>? It won't appear in daily routines or affect progress.
+          </span>
+          <button
+            type="button"
+            onClick={() => setConfirmPause(false)}
+            style={{ padding: '7px 12px', borderRadius: 8, background: T.subtle, color: T.muted, fontSize: 13, fontWeight: 600, flexShrink: 0 }}
+          >Cancel</button>
+          <button
+            type="button"
+            onClick={() => { onPause(routine.id); setConfirmPause(false); }}
+            style={{ padding: '7px 12px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 13, fontWeight: 600, flexShrink: 0 }}
+          >Pause</button>
+        </div>
+      )}
 
       {showMenu && (
         <div style={{
@@ -67,7 +129,7 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit }) {
 }
 
 export default function AllRoutinesTab({ hook }) {
-  const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine } = hook;
+  const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine, pauseRoutine, unpauseRoutine } = hook;
   const [showCreate, setShowCreate]    = useState(false);
   const [editing, setEditing]          = useState(null);
   const [calendarRoutine, setCalendar] = useState(null);
@@ -120,6 +182,8 @@ export default function AllRoutinesTab({ hook }) {
           onShowCalendar={setCalendar}
           onRequestDelete={setPendingDelete}
           onEdit={() => setEditing(r)}
+          onPause={pauseRoutine}
+          onUnpause={unpauseRoutine}
         />
       ))}
 

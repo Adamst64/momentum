@@ -67,6 +67,17 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { archived: false });
   }, [userId]);
 
+  // Pause: stays visible in All Routines but excluded from active views and today's stats
+  const pauseRoutine = useCallback(async (id) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { paused: true });
+  }, [userId]);
+
+  const unpauseRoutine = useCallback(async (id) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { paused: false });
+  }, [userId]);
+
   // Restores a previously deleted routine document (for undo)
   const restoreDeletedRoutine = useCallback(async (routine) => {
     if (!userId) return;
@@ -84,10 +95,10 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
-  // Active views: exclude archived routines
+  // Active views: exclude archived and paused routines
   const forDate = useCallback((dateStr) => {
     return routines.filter(r => {
-      if (r.archived) return false;
+      if (r.archived || r.paused) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
@@ -114,6 +125,7 @@ export function useRoutines(userId) {
   return {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
+    pauseRoutine, unpauseRoutine,
     toggleDay, forDate, todayRoutines, todayStats, dayRatio,
   };
 }
