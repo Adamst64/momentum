@@ -24,7 +24,13 @@ export function useTasks(userId) {
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
       if (t.type === 'recurring-monthly') {
-        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        if (t.createdAt && today < t.createdAt) return false;
+        let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        // If genuinely missed (existed on original due day), roll to today
+        if (day < dom) {
+          const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
+          if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
+        }
         return day === dom;
       }
       return false;
@@ -32,14 +38,21 @@ export function useTasks(userId) {
   }, [tasks]);
 
   const tasksForDate = useCallback((dateStr) => {
-    const ym = dateStr.slice(0, 7);
-    const dom = parseInt(dateStr.slice(-2), 10);
+    const ym    = dateStr.slice(0, 7);
+    const dom   = parseInt(dateStr.slice(-2), 10);
+    const today = todayStr();
+    const isToday = dateStr === today;
     return tasks
       .filter(t => {
         if (t.type === 'one-time') return t.date === dateStr;
         if (t.type === 'recurring-monthly') {
           if (t.createdAt && dateStr < t.createdAt) return false;
-          const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+          let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+          // For today: roll to today if task was genuinely missed (existed on original due day)
+          if (isToday && ym === today.slice(0, 7) && day < dom) {
+            const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
+            if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
+          }
           return day === dom;
         }
         if (t.type === 'backlog') return t.completedAt === dateStr;
@@ -113,12 +126,17 @@ export function useTasks(userId) {
 
   const todayStats = useCallback(() => {
     const today = todayStr();
-    const ym = getYM(today);
+    const ym  = getYM(today);
     const dom = new Date().getDate();
     const scheduled = tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
       if (t.type === 'recurring-monthly') {
-        const day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        if (t.createdAt && today < t.createdAt) return false;
+        let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
+        if (day < dom) {
+          const dueDateStr = `${ym}-${String(day).padStart(2, '0')}`;
+          if (!t.createdAt || t.createdAt <= dueDateStr) day = dom;
+        }
         return day === dom;
       }
       return false;

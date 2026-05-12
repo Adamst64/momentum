@@ -85,23 +85,28 @@ function ord(n) {
 
 function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
-  const effectiveDay  = task.monthOverrides?.[viewYM] ?? task.dayOfMonth;
-  const isDone        = !!task.completedOccurrences?.[viewYM];
-  const taskCreatedYM = task.createdAt?.slice(0, 7);
+  const effectiveDay      = task.monthOverrides?.[viewYM] ?? task.dayOfMonth;
+  const isDone            = !!task.completedOccurrences?.[viewYM];
+  const createdAtStr      = task.createdAt;
+  const createdYM         = createdAtStr?.slice(0, 7);
+  // Was the task created on or before its due day for the viewed month?
+  const dueDateForMonth   = `${viewYM}-${String(effectiveDay).padStart(2, '0')}`;
+  const taskExistedOnDueDay = !createdAtStr || createdAtStr <= dueDateForMonth;
 
-  const isPast         = viewYM < todayYM;
-  const isCurrent      = viewYM === todayYM;
-  const isFuture       = viewYM > todayYM;
-  const beforeCreation = taskCreatedYM && viewYM < taskCreatedYM;
+  const isPast    = viewYM < todayYM;
+  const isCurrent = viewYM === todayYM;
+  const isFuture  = viewYM > todayYM;
 
-  // For current month: if the due day has passed and task is not done, roll forward to today
-  let displayDay = effectiveDay;
-  if (isCurrent && !isDone && effectiveDay < todayDom) {
-    displayDay = todayDom;
-  }
+  // Not applicable: month is before the task existed, or same month but task was created after its due day
+  const notApplicable = (createdYM && viewYM < createdYM)
+    || (createdYM && viewYM === createdYM && !taskExistedOnDueDay);
+
+  // Roll to today only if the task genuinely existed on the original due day
+  const shouldRoll = isCurrent && !isDone && effectiveDay < todayDom && taskExistedOnDueDay;
+  const displayDay = shouldRoll ? todayDom : effectiveDay;
 
   let statusColor, statusText;
-  if (beforeCreation) {
+  if (notApplicable) {
     statusColor = T.subtle;
     statusText  = '—';
   } else if (isDone) {
@@ -118,10 +123,12 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
     if (displayDay > todayDom) {
       statusColor = T.muted;
       statusText  = `Due ${displayDay}${ord(displayDay)}`;
-    } else {
-      // due today — either originally scheduled today, or rolled from a missed earlier day
+    } else if (shouldRoll) {
       statusColor = T.khaki;
-      statusText  = effectiveDay < todayDom ? 'Missed · due today' : 'Due today';
+      statusText  = 'Missed · due today';
+    } else {
+      statusColor = T.khaki;
+      statusText  = 'Due today';
     }
   }
 
