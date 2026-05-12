@@ -112,9 +112,10 @@ export function useRoutines(userId) {
     return { total: list.length, done: list.filter(r => r.completions[today]).length };
   }, [todayRoutines]);
 
-  // Day ratio includes archived routines so historical calendar stays accurate
+  // Day ratio includes archived routines so historical calendar stays accurate; excludes paused
   const dayRatio = useCallback((dateStr) => {
     const list = routines.filter(r => {
+      if (r.paused) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
