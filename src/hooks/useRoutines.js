@@ -126,10 +126,12 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
-  // Active views: exclude archived, paused, deferred (activeFrom), and historically paused dates
+  // Active views: exclude archived, paused (from pausedAt onwards), deferred, and historically paused dates
   const forDate = useCallback((dateStr) => {
     return routines.filter(r => {
-      if (r.archived || r.paused) return false;
+      if (r.archived) return false;
+      // Exclude paused routines only from their pause date onwards (not retroactively)
+      if (r.paused && (!r.pausedAt || dateStr >= r.pausedAt)) return false;
       if (r.activeFrom && dateStr < r.activeFrom) return false;
       if (wasPausedOn(r, dateStr)) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
