@@ -4,12 +4,18 @@ import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, DAYS_SHORT } from '../../utils/dateUtils';
 import { getScheduleForDate } from '../../hooks/useRoutines';
 
+function wasPausedOn(routine, dateStr) {
+  if (routine.paused && routine.pausedAt && dateStr >= routine.pausedAt) return true;
+  return (routine.pausedRanges || []).some(pr => dateStr >= pr.from && dateStr <= pr.to);
+}
+
 function getDayState(routine, dateStr, today) {
   if (routine.createdAt && dateStr < routine.createdAt) return 'pre';
   if (dateStr > today) return 'future';
   const dow      = getDOW(dateStr);
   const schedule = getScheduleForDate(routine, dateStr);
   if (!schedule.includes(dow)) return 'off';
+  if (wasPausedOn(routine, dateStr)) return 'off';
   return routine.completions?.[dateStr] ? 'done' : 'missed';
 }
 
