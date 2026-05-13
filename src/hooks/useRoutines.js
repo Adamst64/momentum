@@ -151,6 +151,7 @@ export function useRoutines(userId) {
   const dayRatio = useCallback((dateStr) => {
     const list = routines.filter(r => {
       if (r.archived) return false;
+      if (r.paused && (!r.pausedAt || dateStr >= r.pausedAt)) return false;
       if (wasPausedOn(r, dateStr)) return false;
       if (r.activeFrom && dateStr < r.activeFrom) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
