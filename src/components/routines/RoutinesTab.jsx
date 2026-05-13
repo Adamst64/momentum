@@ -36,7 +36,11 @@ export default function RoutinesTab({ hook }) {
   const dow   = getDOW(today);
 
   const sorted = [...routines]
-    .filter(r => !r.archived && !r.paused && r.days.includes(dow))
+    .filter(r => {
+      if (r.archived || r.paused) return false;
+      if (r.activeFrom && today < r.activeFrom) return false;
+      return r.days.includes(dow);
+    })
     .sort((a, b) => {
       const aDone = !!a.completions?.[today];
       const bDone = !!b.completions?.[today];

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { todayStr, getDOW } from '../utils/dateUtils';
+import { todayStr, getDOW, addDays } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
 export function getScheduleForDate(routine, dateStr) {
@@ -11,6 +11,12 @@ export function getScheduleForDate(routine, dateStr) {
     .sort((a, b) => b.from.localeCompare(a.from))
     .find(h => h.from <= dateStr);
   return applicable ? applicable.days : routine.days;
+}
+
+// Returns true if the routine was paused on the given date
+function wasPausedOn(routine, dateStr) {
+  if (routine.paused && routine.pausedAt && dateStr >= routine.pausedAt) return true;
+  return (routine.pausedRanges || []).some(pr => dateStr >= pr.from && dateStr <= pr.to);
 }
 
 export function useRoutines(userId) {
@@ -67,16 +73,30 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { archived: false });
   }, [userId]);
 
-  // Pause: stays visible in All Routines but excluded from active views and today's stats
+  // Pause: record pausedAt so we can exclude those days from history on resume
   const pauseRoutine = useCallback(async (id) => {
     if (!userId) return;
-    await updateDoc(doc(db, 'users', userId, 'routines', id), { paused: true });
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { paused: true, pausedAt: todayStr() });
   }, [userId]);
 
-  const unpauseRoutine = useCallback(async (id) => {
+  // Resume: record the pause range so historical charts stay accurate
+  // startTomorrow=true → today is still excluded; routine becomes active from tomorrow
+  const unpauseRoutine = useCallback(async (id, startTomorrow = false) => {
     if (!userId) return;
-    await updateDoc(doc(db, 'users', userId, 'routines', id), { paused: false });
-  }, [userId]);
+    const routine = routines.find(r => r.id === id);
+    const today = todayStr();
+    const rangeFrom = routine?.pausedAt || today;
+    // "start today" excludes up to yesterday; "start tomorrow" excludes up to today
+    const rangeTo = startTomorrow ? today : addDays(today, -1);
+    const update = { paused: false, pausedAt: null, activeFrom: null };
+    if (rangeFrom <= rangeTo) {
+      update.pausedRanges = [...(routine?.pausedRanges || []), { from: rangeFrom, to: rangeTo }];
+    }
+    if (startTomorrow) {
+      update.activeFrom = addDays(today, 1);
+    }
+    await updateDoc(doc(db, 'users', userId, 'routines', id), update);
+  }, [userId, routines]);
 
   // Restores a previously deleted routine document (for undo)
   const restoreDeletedRoutine = useCallback(async (routine) => {
@@ -95,10 +115,12 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
-  // Active views: exclude archived and paused routines
+  // Active views: exclude archived, paused, deferred (activeFrom), and historically paused dates
   const forDate = useCallback((dateStr) => {
     return routines.filter(r => {
       if (r.archived || r.paused) return false;
+      if (r.activeFrom && dateStr < r.activeFrom) return false;
+      if (wasPausedOn(r, dateStr)) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
@@ -112,10 +134,12 @@ export function useRoutines(userId) {
     return { total: list.length, done: list.filter(r => r.completions[today]).length };
   }, [todayRoutines]);
 
-  // Day ratio includes archived routines so historical calendar stays accurate; excludes paused
+  // Day ratio: excludes paused periods so historical charts aren't polluted
   const dayRatio = useCallback((dateStr) => {
     const list = routines.filter(r => {
-      if (r.paused) return false;
+      if (r.archived) return false;
+      if (wasPausedOn(r, dateStr)) return false;
+      if (r.activeFrom && dateStr < r.activeFrom) return false;
       if (r.createdAt && r.createdAt > dateStr) return false;
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });

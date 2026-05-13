@@ -7,15 +7,16 @@ import UndoToast from '../UndoToast';
 import { DAYS_SHORT } from '../../utils/dateUtils';
 
 function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPause, onUnpause }) {
-  const [showMenu,     setShowMenu]     = useState(false);
-  const [confirmPause, setConfirmPause] = useState(false);
+  const [showMenu,      setShowMenu]      = useState(false);
+  const [confirmPause,  setConfirmPause]  = useState(false);
+  const [confirmResume, setConfirmResume] = useState(false);
   const isPaused = !!routine.paused;
 
   const handleToggle = () => {
+    setShowMenu(false);
     if (isPaused) {
-      onUnpause(routine.id);
+      setConfirmResume(true);
     } else {
-      setShowMenu(false);
       setConfirmPause(true);
     }
   };
@@ -100,6 +101,34 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
             onClick={() => { onPause(routine.id); setConfirmPause(false); }}
             style={{ padding: '7px 12px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 13, fontWeight: 600, flexShrink: 0 }}
           >Pause</button>
+        </div>
+      )}
+
+      {confirmResume && (
+        <div style={{
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 10, padding: '12px 14px', marginTop: -4,
+        }}>
+          <div style={{ fontSize: 13, color: T.text, marginBottom: 10 }}>
+            Resume <strong>{routine.name}</strong> starting from:
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={() => setConfirmResume(false)}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: T.subtle, color: T.muted, fontSize: 13, fontWeight: 600 }}
+            >Cancel</button>
+            <button
+              type="button"
+              onClick={() => { onUnpause(routine.id, true); setConfirmResume(false); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: T.subtle, color: T.text, fontSize: 13, fontWeight: 600 }}
+            >Tomorrow</button>
+            <button
+              type="button"
+              onClick={() => { onUnpause(routine.id, false); setConfirmResume(false); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 13, fontWeight: 600 }}
+            >Today</button>
+          </div>
         </div>
       )}
 
