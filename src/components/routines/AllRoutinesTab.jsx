@@ -4,13 +4,17 @@ import CreateRoutineModal from './CreateRoutineModal';
 import RoutineCalendarModal from './RoutineCalendarModal';
 import DeleteRoutineSheet from './DeleteRoutineSheet';
 import UndoToast from '../UndoToast';
-import { DAYS_SHORT } from '../../utils/dateUtils';
+import { DAYS_SHORT, todayStr } from '../../utils/dateUtils';
 
-function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPause, onUnpause }) {
-  const [showMenu,      setShowMenu]      = useState(false);
-  const [confirmPause,  setConfirmPause]  = useState(false);
-  const [confirmResume, setConfirmResume] = useState(false);
+function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPause, onUnpause, onAddPausedRange }) {
+  const [showMenu,        setShowMenu]        = useState(false);
+  const [confirmPause,    setConfirmPause]    = useState(false);
+  const [confirmResume,   setConfirmResume]   = useState(false);
+  const [addingRange,     setAddingRange]     = useState(false);
+  const [rangeFrom,       setRangeFrom]       = useState('');
+  const [rangeTo,         setRangeTo]         = useState('');
   const isPaused = !!routine.paused;
+  const today = todayStr();
 
   const handleToggle = () => {
     setShowMenu(false);
@@ -132,6 +136,43 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
         </div>
       )}
 
+      {addingRange && (
+        <div style={{
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 10, padding: '12px 14px', marginTop: -4,
+        }}>
+          <div style={{ fontSize: 13, color: T.muted, marginBottom: 10 }}>
+            Exclude dates from progress (e.g. when this routine was paused)
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>From</div>
+              <input type="date" value={rangeFrom} max={today}
+                onChange={e => setRangeFrom(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#0F0F0F', border: `1px solid ${T.cardBorder}`, color: T.text, colorScheme: 'dark', boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>To</div>
+              <input type="date" value={rangeTo} min={rangeFrom} max={today}
+                onChange={e => setRangeTo(e.target.value)}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, background: '#0F0F0F', border: `1px solid ${T.cardBorder}`, color: T.text, colorScheme: 'dark', boxSizing: 'border-box' }}
+              />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" onClick={() => { setAddingRange(false); setRangeFrom(''); setRangeTo(''); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: T.subtle, color: T.muted, fontSize: 13, fontWeight: 600 }}
+            >Cancel</button>
+            <button type="button"
+              disabled={!rangeFrom || !rangeTo || rangeFrom > rangeTo}
+              onClick={() => { onAddPausedRange(routine.id, rangeFrom, rangeTo); setAddingRange(false); setRangeFrom(''); setRangeTo(''); }}
+              style={{ flex: 1, padding: '8px 0', borderRadius: 8, background: rangeFrom && rangeTo && rangeFrom <= rangeTo ? T.olive : T.subtle, color: rangeFrom && rangeTo && rangeFrom <= rangeTo ? '#fff' : T.muted, fontSize: 13, fontWeight: 600 }}
+            >Exclude</button>
+          </div>
+        </div>
+      )}
+
       {showMenu && (
         <div style={{
           background: '#252527', border: `1px solid ${T.cardBorder}`,
@@ -143,6 +184,13 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
             style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.text, borderBottom: `1px solid ${T.cardBorder}` }}
           >
             Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAddingRange(true); setShowMenu(false); }}
+            style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.muted, borderBottom: `1px solid ${T.cardBorder}` }}
+          >
+            Exclude dates from history
           </button>
           <button
             type="button"
@@ -158,7 +206,7 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
 }
 
 export default function AllRoutinesTab({ hook }) {
-  const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine, pauseRoutine, unpauseRoutine } = hook;
+  const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine, pauseRoutine, unpauseRoutine, addPausedRange } = hook;
   const [showCreate, setShowCreate]    = useState(false);
   const [editing, setEditing]          = useState(null);
   const [calendarRoutine, setCalendar] = useState(null);
@@ -213,6 +261,7 @@ export default function AllRoutinesTab({ hook }) {
           onEdit={() => setEditing(r)}
           onPause={pauseRoutine}
           onUnpause={unpauseRoutine}
+          onAddPausedRange={addPausedRange}
         />
       ))}
 

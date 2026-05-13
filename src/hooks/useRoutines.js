@@ -98,6 +98,17 @@ export function useRoutines(userId) {
     await updateDoc(doc(db, 'users', userId, 'routines', id), update);
   }, [userId, routines]);
 
+  // Manually add a paused date range (backfill for routines paused before history tracking)
+  const addPausedRange = useCallback(async (id, from, to) => {
+    if (!userId || !from || !to || from > to) return;
+    const routine = routines.find(r => r.id === id);
+    if (!routine) return;
+    const existing = routine.pausedRanges || [];
+    await updateDoc(doc(db, 'users', userId, 'routines', id), {
+      pausedRanges: [...existing, { from, to }],
+    });
+  }, [userId, routines]);
+
   // Restores a previously deleted routine document (for undo)
   const restoreDeletedRoutine = useCallback(async (routine) => {
     if (!userId) return;
@@ -150,7 +161,7 @@ export function useRoutines(userId) {
   return {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
-    pauseRoutine, unpauseRoutine,
+    pauseRoutine, unpauseRoutine, addPausedRange,
     toggleDay, forDate, todayRoutines, todayStats, dayRatio,
   };
 }
