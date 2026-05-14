@@ -4,6 +4,7 @@ import DonutChart from '../DonutChart';
 import TaskItem from './TaskItem';
 import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
+import MonthlyTaskHistoryModal from './MonthlyTaskHistoryModal';
 import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
@@ -84,7 +85,7 @@ function ord(n) {
   switch (n % 10) { case 1: return 'st'; case 2: return 'nd'; case 3: return 'rd'; default: return 'th'; }
 }
 
-function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
+function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete, onShowHistory }) {
   const [showMenu, setShowMenu] = useState(false);
   const longPressRef = useLongPress(() => setShowMenu(true));
   const effectiveDay      = task.monthOverrides?.[viewYM] ?? task.dayOfMonth;
@@ -173,6 +174,10 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
           background: '#252527', border: `1px solid ${T.cardBorder}`,
           borderRadius: 10, overflow: 'hidden', marginTop: -6,
         }}>
+          <button onClick={() => { onShowHistory(task); setShowMenu(false); }} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
+            color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
+          }}>View History</button>
           <button onClick={() => { onEdit(task); setShowMenu(false); }} style={{
             width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
             color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
@@ -214,8 +219,9 @@ export default function TasksTab({ hook, userId }) {
     todayTasks, backlogTasks, scheduledTasks, monthlyTasks, todayStats,
   } = hook;
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing,    setEditing]    = useState(null);
+  const [showCreate, setShowCreate]     = useState(false);
+  const [editing,    setEditing]        = useState(null);
+  const [historyTask, setHistoryTask]   = useState(null);
 
   const today    = todayStr();
   const todayYM  = today.slice(0, 7);
@@ -363,6 +369,7 @@ export default function TasksTab({ hook, userId }) {
                 todayDom={todayDom}
                 onEdit={setEditing}
                 onDelete={deleteTask}
+                onShowHistory={setHistoryTask}
               />
             ))}
           </div>
@@ -378,6 +385,9 @@ export default function TasksTab({ hook, userId }) {
           onSave={handleEditSave}
           onClose={() => setEditing(null)}
         />
+      )}
+      {historyTask && (
+        <MonthlyTaskHistoryModal task={historyTask} onClose={() => setHistoryTask(null)} />
       )}
     </div>
   );
