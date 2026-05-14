@@ -19,27 +19,45 @@ function getStreak(commitment, today) {
   return streak;
 }
 
-function NameSheet({ initial = '', title, onSave, onClose }) {
-  const [name, setName] = useState(initial);
-  const canSave = name.trim() && name.trim() !== initial;
+function NameSheet({ initial = '', title, onSave, onClose, showLastFailed = false }) {
+  const [name, setName]             = useState(initial);
+  const [lastFailed, setLastFailed] = useState('');
+  const inputStyle = {
+    width: '100%', padding: '12px 14px', borderRadius: 10, boxSizing: 'border-box',
+    background: '#0F0F0F', border: `1px solid ${T.cardBorder}`,
+    color: T.text, fontSize: 15, outline: 'none', colorScheme: 'dark',
+  };
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{ width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))' }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>{title}</div>
+
         <input
           autoFocus
           value={name}
           onChange={e => setName(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onSave(name.trim()); onClose(); } }}
+          onKeyDown={e => { if (e.key === 'Enter' && name.trim()) { onSave(name.trim(), lastFailed || null); onClose(); } }}
           placeholder='e.g. "No smoking"'
-          style={{
-            width: '100%', padding: '12px 14px', borderRadius: 10, boxSizing: 'border-box',
-            background: '#0F0F0F', border: `1px solid ${T.cardBorder}`,
-            color: T.text, fontSize: 16, outline: 'none', marginBottom: 16,
-          }}
+          style={{ ...inputStyle, marginBottom: showLastFailed ? 14 : 16 }}
         />
+
+        {showLastFailed && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>
+              Last time you failed <span style={{ color: T.subtle }}>(optional — sets your starting streak)</span>
+            </div>
+            <input
+              type="date"
+              value={lastFailed}
+              max={todayStr()}
+              onChange={e => setLastFailed(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+        )}
+
         <button
-          onClick={() => { if (name.trim()) { onSave(name.trim()); onClose(); } }}
+          onClick={() => { if (name.trim()) { onSave(name.trim(), lastFailed || null); onClose(); } }}
           disabled={!name.trim()}
           style={{
             width: '100%', padding: 14, borderRadius: 12, fontSize: 15, fontWeight: 600,
@@ -173,7 +191,12 @@ export default function CommitmentsTab({ hook }) {
       ))}
 
       {showAdd && (
-        <NameSheet title="New Commitment" onSave={addCommitment} onClose={() => setShowAdd(false)} />
+        <NameSheet
+          title="New Commitment"
+          onSave={(name, lastFailed) => addCommitment(name, lastFailed)}
+          onClose={() => setShowAdd(false)}
+          showLastFailed
+        />
       )}
       {editing && (
         <NameSheet

@@ -15,11 +15,13 @@ export function useCommitments(userId) {
     });
   }, [userId]);
 
-  const addCommitment = useCallback(async (name) => {
+  const addCommitment = useCallback(async (name, lastFailedDate = null) => {
     if (!userId) return;
     const id = genId();
     await setDoc(doc(db, 'users', userId, 'commitments', id), {
-      name, createdAt: todayStr(), failures: {},
+      name,
+      createdAt: lastFailedDate || todayStr(),
+      failures: lastFailedDate ? { [lastFailedDate]: true } : {},
     });
   }, [userId]);
 
