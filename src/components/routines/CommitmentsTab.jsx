@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
 import { useLongPress } from '../../hooks/useLongPress';
+import CommitmentCalendarModal from './CommitmentCalendarModal';
 
 function getStreak(commitment, today) {
   let streak = 0;
@@ -54,7 +55,7 @@ function NameSheet({ initial = '', title, onSave, onClose }) {
   );
 }
 
-function CommitmentItem({ commitment, today, onToggleFailed, onEdit, onDelete }) {
+function CommitmentItem({ commitment, today, onToggleFailed, onEdit, onDelete, onShowCalendar }) {
   const [showMenu, setShowMenu] = useState(false);
   const longPressRef = useLongPress(() => setShowMenu(true));
   const failedToday = !!commitment.failures?.[today];
@@ -108,6 +109,10 @@ function CommitmentItem({ commitment, today, onToggleFailed, onEdit, onDelete })
           borderRadius: 10, overflow: 'hidden', marginTop: -6,
         }}>
           <button
+            onClick={() => { onShowCalendar(commitment); setShowMenu(false); }}
+            style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.text, borderBottom: `1px solid ${T.cardBorder}` }}
+          >View History</button>
+          <button
             onClick={() => { onEdit(commitment); setShowMenu(false); }}
             style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.text, borderBottom: `1px solid ${T.cardBorder}` }}
           >Edit</button>
@@ -127,8 +132,9 @@ function CommitmentItem({ commitment, today, onToggleFailed, onEdit, onDelete })
 
 export default function CommitmentsTab({ hook }) {
   const { commitments, addCommitment, updateCommitment, deleteCommitment, toggleFailed } = hook;
-  const [showAdd, setShowAdd]   = useState(false);
-  const [editing, setEditing]   = useState(null);
+  const [showAdd, setShowAdd]           = useState(false);
+  const [editing, setEditing]           = useState(null);
+  const [calendarItem, setCalendarItem] = useState(null);
   const today = todayStr();
 
   const sorted = [...commitments].sort((a, b) => a.name.localeCompare(b.name));
@@ -162,6 +168,7 @@ export default function CommitmentsTab({ hook }) {
           onToggleFailed={toggleFailed}
           onEdit={setEditing}
           onDelete={deleteCommitment}
+          onShowCalendar={setCalendarItem}
         />
       ))}
 
@@ -174,6 +181,13 @@ export default function CommitmentsTab({ hook }) {
           initial={editing.name}
           onSave={name => updateCommitment(editing.id, name)}
           onClose={() => setEditing(null)}
+        />
+      )}
+
+      {calendarItem && (
+        <CommitmentCalendarModal
+          commitment={calendarItem}
+          onClose={() => setCalendarItem(null)}
         />
       )}
     </div>
