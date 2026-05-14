@@ -22,6 +22,7 @@ export function useCommitments(userId) {
       name,
       createdAt: lastFailedDate || todayStr(),
       failures: lastFailedDate ? { [lastFailedDate]: true } : {},
+      ...(lastFailedDate ? { seedDate: lastFailedDate } : {}),
     });
   }, [userId]);
 

@@ -7,15 +7,17 @@ import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 function pad(n) { return String(n).padStart(2, '0'); }
 
 function computeStats(commitment, today) {
-  const created = commitment.createdAt || today;
+  const created  = commitment.createdAt || today;
+  const seedDate = commitment.seedDate || null;
   let clean = 0, total = 0;
   let d = new Date(created + 'T12:00:00');
   const end = new Date(today + 'T12:00:00');
   while (d <= end) {
     const ds     = d.toISOString().slice(0, 10);
     const failed = !!commitment.failures?.[ds];
+    // Skip the seeded failure used only to establish the starting streak
+    if (ds === seedDate) { d.setDate(d.getDate() + 1); continue; }
     if (ds === today) {
-      // today only counts if explicitly failed; clean days not yet confirmed
       if (failed) total++;
     } else {
       total++;
