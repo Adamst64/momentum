@@ -12,6 +12,7 @@ import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
 import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
+import { useCommitments } from './hooks/useCommitments';
 import { useTasks } from './hooks/useTasks';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
@@ -62,8 +63,9 @@ export default function App() {
   const showWork    = features.workTab === true;
   const visibleTabs = tabOrder.filter(id => id !== 'work' || showWork);
 
-  const routinesHook  = useRoutines(userId);
-  const tasksHook     = useTasks(userId);
+  const routinesHook     = useRoutines(userId);
+  const commitmentsHook  = useCommitments(userId);
+  const tasksHook        = useTasks(userId);
   const shoppingHook  = useShoppingLists(userId);
   const birthdaysHook = useBirthdays(userId);
   const workHook      = useWork(showWork ? userId : null);
@@ -127,7 +129,7 @@ export default function App() {
         paddingBottom: `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
         overflowY: 'auto',
       }}>
-        {tab === 'routines'  && <RoutinesTab hook={routinesHook} />}
+        {tab === 'routines'  && <RoutinesTab hook={routinesHook} commitmentsHook={commitmentsHook} />}
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} userId={userId} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}

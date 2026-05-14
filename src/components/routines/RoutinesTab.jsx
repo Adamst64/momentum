@@ -9,9 +9,10 @@ import AllRoutinesTab from './AllRoutinesTab';
 import RoutineCalendarModal from './RoutineCalendarModal';
 import DeleteRoutineSheet from './DeleteRoutineSheet';
 import UndoToast from '../UndoToast';
+import CommitmentsTab from './CommitmentsTab';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 
-export default function RoutinesTab({ hook }) {
+export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
@@ -23,6 +24,7 @@ export default function RoutinesTab({ hook }) {
     return dayRatio(dateStr);
   };
 
+  const [subTab, setSubTab]                   = useState('routines');
   const [showCreate, setShowCreate]           = useState(false);
   const [editing, setEditing]                 = useState(null);
   const [selectedDay, setSelectedDay]         = useState(null);
@@ -74,6 +76,30 @@ export default function RoutinesTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* Sub-tab switcher */}
+      <div style={{
+        display: 'flex', gap: 4, background: T.card,
+        border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: 4,
+      }}>
+        {[['routines', 'Routines'], ['commitments', 'Commitments']].map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setSubTab(id)}
+            style={{
+              flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
+              background: subTab === id ? T.olive : 'transparent',
+              color: subTab === id ? '#fff' : T.muted,
+              transition: 'background 0.15s, color 0.15s',
+            }}
+          >{label}</button>
+        ))}
+      </div>
+
+      {subTab === 'commitments' && <CommitmentsTab hook={commitmentsHook} />}
+
+      {subTab === 'routines' && <>
 
       {/* Header card */}
       <div style={{
@@ -163,6 +189,8 @@ export default function RoutinesTab({ hook }) {
         </div>
         <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
       </div>
+
+      </>}
 
       {/* All Routines overlay */}
       {showAllRoutines && (
