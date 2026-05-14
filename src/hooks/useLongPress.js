@@ -13,8 +13,9 @@ export function useLongPress(onLongPress, delay = 500) {
     el.style.webkitUserSelect    = 'none';
     el.style.webkitTouchCallout  = 'none';
 
-    let timer  = null;
-    let fired  = false;
+    let timer     = null;
+    let fired     = false;
+    let blockNext = false;
     let startX = 0, startY = 0;
 
     const start = (e) => {
@@ -22,7 +23,8 @@ export function useLongPress(onLongPress, delay = 500) {
       startX = t.clientX; startY = t.clientY;
       fired  = false;
       timer  = setTimeout(() => {
-        fired = true;
+        fired     = true;
+        blockNext = true;
         navigator.vibrate?.(10);
         cbRef.current();
       }, delay);
@@ -38,19 +40,28 @@ export function useLongPress(onLongPress, delay = 500) {
 
     const end = (e) => {
       clearTimeout(timer); timer = null;
-      if (fired) e.preventDefault(); // block the follow-up click
+      if (fired) e.preventDefault();
       fired = false;
     };
 
-    el.addEventListener('touchstart', start, { passive: true });
-    el.addEventListener('touchmove',  move,  { passive: true });
-    el.addEventListener('touchend',   end,   { passive: false });
+    const onCapClick = (e) => {
+      if (!blockNext) return;
+      blockNext = false;
+      e.stopPropagation();
+      e.preventDefault();
+    };
+
+    el.addEventListener('touchstart', start,      { passive: true });
+    el.addEventListener('touchmove',  move,       { passive: true });
+    el.addEventListener('touchend',   end,        { passive: false });
+    el.addEventListener('click',      onCapClick, { capture: true });
 
     return () => {
       clearTimeout(timer);
       el.removeEventListener('touchstart', start);
       el.removeEventListener('touchmove',  move);
       el.removeEventListener('touchend',   end);
+      el.removeEventListener('click',      onCapClick, { capture: true });
     };
   }, [delay]);
 
