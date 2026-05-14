@@ -68,8 +68,11 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
             color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
           }}>Edit</button>
           <button onClick={() => { onDelete(task.id); setShowMenu(false); }} style={{
-            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red,
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red, borderBottom: `1px solid ${T.cardBorder}`,
           }}>Delete</button>
+          <button onClick={() => setShowMenu(false)} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.muted,
+          }}>Cancel</button>
         </div>
       )}
     </>
@@ -175,8 +178,11 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
             color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
           }}>Edit</button>
           <button onClick={() => { onDelete(task.id); setShowMenu(false); }} style={{
-            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red,
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red, borderBottom: `1px solid ${T.cardBorder}`,
           }}>Delete</button>
+          <button onClick={() => setShowMenu(false)} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.muted,
+          }}>Cancel</button>
         </div>
       )}
     </>

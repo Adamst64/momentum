@@ -69,6 +69,12 @@ export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete
       {expanded && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button
+            onClick={() => setExpanded(false)}
+            style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, background: '#2C2C2E', color: T.subtle }}
+          >
+            Cancel
+          </button>
+          <button
             onClick={() => { onEdit(routine); setExpanded(false); }}
             style={{ flex: 1, padding: '8px', borderRadius: 8, fontSize: 13, background: '#2C2C2E', color: T.muted }}
           >

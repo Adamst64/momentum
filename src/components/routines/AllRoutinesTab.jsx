@@ -190,9 +190,16 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
           <button
             type="button"
             onClick={() => { onRequestDelete(routine); setShowMenu(false); }}
-            style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red }}
+            style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red, borderBottom: `1px solid ${T.cardBorder}` }}
           >
             Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowMenu(false)}
+            style={{ width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.muted }}
+          >
+            Cancel
           </button>
         </div>
       )}
