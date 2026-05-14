@@ -9,6 +9,10 @@ export function useLongPress(onLongPress, delay = 500) {
     const el = ref.current;
     if (!el) return;
 
+    el.style.userSelect          = 'none';
+    el.style.webkitUserSelect    = 'none';
+    el.style.webkitTouchCallout  = 'none';
+
     let timer  = null;
     let fired  = false;
     let startX = 0, startY = 0;
