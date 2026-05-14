@@ -5,6 +5,7 @@ import {
   getDaysInMonth, getFirstDOW, DAYS_SHORT,
 } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
+import { useSwipe } from '../../hooks/useSwipe';
 
 function getDayState(items, dateStr, today) {
   if (!items.length) return null;
@@ -193,6 +194,7 @@ export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, on
 
   const prevMonth = () => { onPrevMonth(); setSelectedDate(null); };
   const nextMonth = () => { onNextMonth(); setSelectedDate(null); };
+  const swipeRef = useSwipe(nextMonth, prevMonth);
 
   const daysInMonth = getDaysInMonth(calYear, calMonth);
   const firstDow    = getFirstDOW(calYear, calMonth);
@@ -206,7 +208,7 @@ export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, on
   const isEditable = !!(selectedDate && selectedDate >= minEditableDate && selectedDate <= today);
 
   return (
-    <div>
+    <div ref={swipeRef}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
         <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>Calendar</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

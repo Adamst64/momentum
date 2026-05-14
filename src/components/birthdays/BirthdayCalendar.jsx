@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import BirthdayRow from './BirthdayRow';
 import { daysUntil, turningAge } from '../../utils/birthdayUtils';
+import { useSwipe } from '../../hooks/useSwipe';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -18,6 +19,7 @@ export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
     if (month === 12) { setMonth(1); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   };
+  const swipeRef = useSwipe(nextMonth, prevMonth);
 
   const firstDow    = new Date(year, month - 1, 1).getDay();
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -40,7 +42,7 @@ export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
     .flatMap(([, bds]) => bds);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div ref={swipeRef} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={prevMonth} style={{ color: T.muted, fontSize: 24, padding: '4px 10px', lineHeight: 1 }}>‹</button>
         <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>

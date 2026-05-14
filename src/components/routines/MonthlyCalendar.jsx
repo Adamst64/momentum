@@ -1,14 +1,14 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, formatMonthYear, toDateStr, todayStr, parseDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
+import { useSwipe } from '../../hooks/useSwipe';
 
 export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate }) {
   const today     = todayStr();
   const todayDate = parseDate(today);
   const [year, setYear]   = useState(todayDate.getFullYear());
   const [month, setMonth] = useState(todayDate.getMonth());
-  const touchStartX = useRef(null);
 
   const dim      = getDaysInMonth(year, month);
   const firstDow = getFirstDOW(year, month);
@@ -19,21 +19,10 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
 
   const prev = () => { if (month === 0) { setYear(y => y-1); setMonth(11); } else setMonth(m => m-1); };
   const next = () => { if (month === 11) { setYear(y => y+1); setMonth(0); } else setMonth(m => m+1); };
-
-  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
-  const handleTouchEnd   = (e) => {
-    if (touchStartX.current === null) return;
-    const dx = e.changedTouches[0].clientX - touchStartX.current;
-    if (Math.abs(dx) > 40) dx < 0 ? next() : prev();
-    touchStartX.current = null;
-  };
+  const swipeRef = useSwipe(next, prev);
 
   return (
-    <div
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 16 }}
-    >
+    <div ref={swipeRef} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: 16 }}>
       {/* Nav */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <button type="button" onClick={prev} style={{ color: T.muted, fontSize: 20, padding: '4px 10px' }}>‹</button>

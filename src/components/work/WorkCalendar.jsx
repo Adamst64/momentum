@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
+import { useSwipe } from '../../hooks/useSwipe';
 import { getMondayId, parsePayEntry } from '../../utils/workUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -21,6 +22,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
 
   const prevMonth = () => month === 1 ? (setMonth(12), setYear(y => y - 1)) : setMonth(m => m - 1);
   const nextMonth = () => month === 12 ? (setMonth(1),  setYear(y => y + 1)) : setMonth(m => m + 1);
+  const swipeRef = useSwipe(nextMonth, prevMonth);
 
   const offset      = mondayOffset(year, month);
   const daysInMonth = new Date(year, month, 0).getDate();
@@ -46,7 +48,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+    <div ref={swipeRef} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <button onClick={prevMonth} style={{ color: T.muted, fontSize: 24, padding: '4px 10px', lineHeight: 1 }}>‹</button>
         <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{MONTH_FULL[month - 1]} {year}</span>
