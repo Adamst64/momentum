@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
-import { useSwipe } from '../../hooks/useSwipe';
+import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 import { getMondayId, parsePayEntry } from '../../utils/workUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -19,9 +19,10 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
   const [year,     setYear]     = useState(now.getFullYear());
   const [month,    setMonth]    = useState(now.getMonth() + 1);
   const [selected, setSelected] = useState(null);
+  const gridRef = useRef(null);
 
-  const prevMonth = () => month === 1 ? (setMonth(12), setYear(y => y - 1)) : setMonth(m => m - 1);
-  const nextMonth = () => month === 12 ? (setMonth(1),  setYear(y => y + 1)) : setMonth(m => m + 1);
+  const prevMonth = () => { animateSlide(gridRef.current, 'prev'); if (month === 1) { setMonth(12); setYear(y => y - 1); } else setMonth(m => m - 1); };
+  const nextMonth = () => { animateSlide(gridRef.current, 'next'); if (month === 12) { setMonth(1); setYear(y => y + 1); } else setMonth(m => m + 1); };
   const swipeRef = useSwipe(nextMonth, prevMonth);
 
   const offset      = mondayOffset(year, month);
@@ -61,7 +62,8 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+      <div style={{ overflow: 'hidden' }}>
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
         {cells.map((day, i) => {
           if (!day) return <div key={i} />;
           const ds        = `${year}-${pad(month)}-${pad(day)}`;
@@ -130,6 +132,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
             </button>
           );
         })}
+      </div>
       </div>
 
       {/* Status legend */}

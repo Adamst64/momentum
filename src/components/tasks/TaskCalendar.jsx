@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
 import {
   formatLongDate, formatMonthYear, todayStr, addDays,
   getDaysInMonth, getFirstDOW, DAYS_SHORT,
 } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
-import { useSwipe } from '../../hooks/useSwipe';
+import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 import { useLongPress } from '../../hooks/useLongPress';
 
 function getDayState(items, dateStr, today) {
@@ -190,11 +190,12 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
 
 export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, onNextMonth, tasksForDate, toggleTaskForDate, deleteTask, rescheduleTask, onEdit }) {
   const [selectedDate, setSelectedDate] = useState(null);
+  const gridRef = useRef(null);
 
   const minEditableDate = addDays(today, -6);
 
-  const prevMonth = () => { onPrevMonth(); setSelectedDate(null); };
-  const nextMonth = () => { onNextMonth(); setSelectedDate(null); };
+  const prevMonth = () => { animateSlide(gridRef.current, 'prev'); onPrevMonth(); setSelectedDate(null); };
+  const nextMonth = () => { animateSlide(gridRef.current, 'next'); onNextMonth(); setSelectedDate(null); };
   const swipeRef = useSwipe(nextMonth, prevMonth);
 
   const daysInMonth = getDaysInMonth(calYear, calMonth);
@@ -227,7 +228,8 @@ export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, on
         ))}
       </div>
 
-      <div style={{
+      <div style={{ overflow: 'hidden', borderRadius: 14 }}>
+      <div ref={gridRef} style={{
         background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: 8,
         display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4,
       }}>
@@ -244,6 +246,7 @@ export default function TaskCalendar({ today, calYear, calMonth, onPrevMonth, on
             />
           );
         })}
+      </div>
       </div>
 
       {selectedDate && (

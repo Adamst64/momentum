@@ -1,5 +1,20 @@
 import { useEffect, useRef } from 'react';
 
+export function animateSlide(el, dir) {
+  if (!el) return;
+  const startX = dir === 'next' ? 36 : -36;
+  el.style.transition = 'none';
+  el.style.transform = `translateX(${startX}px)`;
+  el.style.opacity = '0.55';
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.26s ease, opacity 0.26s ease';
+      el.style.transform = 'translateX(0)';
+      el.style.opacity = '1';
+    });
+  });
+}
+
 export function useSwipe(onLeft, onRight) {
   const ref = useRef(null);
   const onLeftRef  = useRef(onLeft);

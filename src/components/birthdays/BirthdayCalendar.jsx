@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
 import BirthdayRow from './BirthdayRow';
 import { daysUntil, turningAge } from '../../utils/birthdayUtils';
-import { useSwipe } from '../../hooks/useSwipe';
+import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -11,11 +11,14 @@ export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
   const [year, setYear]   = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
 
+  const gridRef  = useRef(null);
   const prevMonth = () => {
+    animateSlide(gridRef.current, 'prev');
     if (month === 1) { setMonth(12); setYear(y => y - 1); }
     else setMonth(m => m - 1);
   };
   const nextMonth = () => {
+    animateSlide(gridRef.current, 'next');
     if (month === 12) { setMonth(1); setYear(y => y + 1); }
     else setMonth(m => m + 1);
   };
@@ -57,7 +60,8 @@ export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
+      <div style={{ overflow: 'hidden' }}>
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 3 }}>
         {cells.map((day, i) => {
           if (!day) return <div key={i} />;
           const bds     = bdMap[day] || [];
@@ -91,6 +95,7 @@ export default function BirthdayCalendar({ birthdays, onEdit, onDelete }) {
             </div>
           );
         })}
+      </div>
       </div>
 
       {thisMonthBirthdays.length > 0 && (

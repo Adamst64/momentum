@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, formatMonthYear, toDateStr, todayStr, parseDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
-import { useSwipe } from '../../hooks/useSwipe';
+import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
 export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate }) {
   const today     = todayStr();
@@ -17,8 +17,9 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
   for (let i = 0; i < firstDow; i++) cells.push(null);
   for (let d = 1; d <= dim; d++) cells.push(d);
 
-  const prev = () => { if (month === 0) { setYear(y => y-1); setMonth(11); } else setMonth(m => m-1); };
-  const next = () => { if (month === 11) { setYear(y => y+1); setMonth(0); } else setMonth(m => m+1); };
+  const gridRef  = useRef(null);
+  const prev = () => { animateSlide(gridRef.current, 'prev'); if (month === 0) { setYear(y => y-1); setMonth(11); } else setMonth(m => m-1); };
+  const next = () => { animateSlide(gridRef.current, 'next'); if (month === 11) { setYear(y => y+1); setMonth(0); } else setMonth(m => m+1); };
   const swipeRef = useSwipe(next, prev);
 
   return (
@@ -38,7 +39,8 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
       </div>
 
       {/* Cells */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
+      <div style={{ overflow: 'hidden' }}>
+      <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
         {cells.map((day, i) => {
           if (!day) return <div key={`e${i}`} />;
 
@@ -116,6 +118,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
             </div>
           );
         })}
+      </div>
       </div>
 
       {/* Legend — bars instead of dots to match the fill style */}
