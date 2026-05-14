@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
-import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, DAYS_SHORT } from '../../utils/dateUtils';
+import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { getScheduleForDate } from '../../hooks/useRoutines';
 
 function wasPausedOn(routine, dateStr) {
@@ -17,6 +17,21 @@ function getDayState(routine, dateStr, today) {
   if (!schedule.includes(dow)) return 'off';
   if (wasPausedOn(routine, dateStr)) return 'off';
   return routine.completions?.[dateStr] ? 'done' : 'missed';
+}
+
+function computeStats(routine, today) {
+  const created = routine.createdAt || today;
+  let done = 0, total = 0;
+  const end = new Date(today + 'T12:00:00');
+  let d   = new Date(created + 'T12:00:00');
+  while (d <= end) {
+    const ds    = d.toISOString().slice(0, 10);
+    const state = getDayState(routine, ds, today);
+    if (state === 'done')   { done++; total++; }
+    else if (state === 'missed') { total++; }
+    d.setDate(d.getDate() + 1);
+  }
+  return { done, total, pct: total > 0 ? Math.round(done / total * 100) : null };
 }
 
 function MonthBlock({ routine, year, month, today }) {
@@ -70,6 +85,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
   const today       = todayStr();
   const createdDate = routine.createdAt ? parseDate(routine.createdAt) : parseDate(today);
   const todayDate   = parseDate(today);
+  const stats       = computeStats(routine, today);
 
   // Months newest-first, from today back to creation month
   const months = [];
@@ -96,6 +112,28 @@ export default function RoutineCalendarModal({ routine, onClose }) {
         padding: '16px 20px',
         paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
       }}>
+
+        {/* Stats */}
+        {stats.pct !== null && (
+          <div style={{
+            background: T.card, border: `1px solid ${T.cardBorder}`,
+            borderRadius: 14, padding: '14px 18px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 18,
+          }}>
+            <div style={{ fontSize: 36, fontWeight: 800, color: T.oliveLight, lineHeight: 1, flexShrink: 0 }}>
+              {stats.pct}%
+            </div>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
+                {stats.done} of {stats.total} scheduled days done
+              </div>
+              <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+                since {formatShortDate(routine.createdAt || today)}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
           {[['#2A3A1A', T.oliveLight, 'Done'], ['#3A1C1C', T.red, 'Missed']].map(([bg, c, label]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
