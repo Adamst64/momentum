@@ -1,10 +1,30 @@
 import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
-import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, DAYS_SHORT } from '../../utils/dateUtils';
+import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
 function pad(n) { return String(n).padStart(2, '0'); }
+
+function computeStats(commitment, today) {
+  const created = commitment.createdAt || today;
+  let clean = 0, total = 0;
+  let d = new Date(created + 'T12:00:00');
+  const end = new Date(today + 'T12:00:00');
+  while (d <= end) {
+    const ds     = d.toISOString().slice(0, 10);
+    const failed = !!commitment.failures?.[ds];
+    if (ds === today) {
+      // today only counts if explicitly failed; clean days not yet confirmed
+      if (failed) total++;
+    } else {
+      total++;
+      if (!failed) clean++;
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return { clean, total, pct: total > 0 ? Math.round(clean / total * 100) : null };
+}
 
 export default function CommitmentCalendarModal({ commitment, onClose }) {
   const today = todayStr();
@@ -27,6 +47,7 @@ export default function CommitmentCalendarModal({ commitment, onClose }) {
   };
   const swipeRef = useSwipe(nextMonth, prevMonth);
 
+  const stats    = computeStats(commitment, today);
   const created  = commitment.createdAt || today;
   const dim      = getDaysInMonth(year, month);
   const firstDow = getFirstDOW(year, month);
@@ -49,6 +70,27 @@ export default function CommitmentCalendarModal({ commitment, onClose }) {
 
       {/* Swipeable calendar area */}
       <div ref={swipeRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+
+        {/* Stats */}
+        {stats.pct !== null && (
+          <div style={{
+            background: T.card, border: `1px solid ${T.cardBorder}`,
+            borderRadius: 14, padding: '14px 18px', marginBottom: 20,
+            display: 'flex', alignItems: 'center', gap: 18,
+          }}>
+            <div style={{ fontSize: 36, fontWeight: 800, color: T.green, lineHeight: 1, flexShrink: 0 }}>
+              {stats.pct}%
+            </div>
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>
+                {stats.clean} of {stats.total} days clean
+              </div>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                since {formatShortDate(created)}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Month nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
