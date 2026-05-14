@@ -1,11 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { T } from '../../theme';
 import TagBadge from './TagBadge';
+import { useLongPress } from '../../hooks/useLongPress';
 
 export default function ShoppingItem({ item, tags, onToggle, onDelete, onEditTags, onRename }) {
   const [editing, setEditing] = useState(false);
   const [editVal, setEditVal] = useState(item.name);
   const inputRef = useRef(null);
+  const longPressRef = useLongPress(() => { if (!item.checked) { setEditVal(item.name); setEditing(true); } });
 
   useEffect(() => {
     if (editing) inputRef.current?.focus();
@@ -49,7 +51,7 @@ export default function ShoppingItem({ item, tags, onToggle, onDelete, onEditTag
   }
 
   return (
-    <div style={{
+    <div ref={longPressRef} style={{
       background: T.card, border: `1px solid ${T.cardBorder}`,
       borderRadius: 12, padding: '11px 12px',
       opacity: item.checked ? 0.55 : 1, transition: 'opacity 0.15s',
@@ -77,13 +79,6 @@ export default function ShoppingItem({ item, tags, onToggle, onDelete, onEditTag
         }}>
           {item.name}
         </span>
-
-        {!item.checked && (
-          <button onClick={() => { setEditVal(item.name); setEditing(true); }} style={{
-            color: T.muted, fontSize: 13, padding: '2px 7px', borderRadius: 6,
-            background: T.subtle, border: 'none', lineHeight: 1, flexShrink: 0,
-          }}>✎</button>
-        )}
 
         {!item.checked && (
           <button onClick={() => onEditTags(item)} style={{

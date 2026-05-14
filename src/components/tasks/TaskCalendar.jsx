@@ -6,6 +6,7 @@ import {
 } from '../../utils/dateUtils';
 import { completionColor } from '../../utils/colors';
 import { useSwipe } from '../../hooks/useSwipe';
+import { useLongPress } from '../../hooks/useLongPress';
 
 function getDayState(items, dateStr, today) {
   if (!items.length) return null;
@@ -93,11 +94,12 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
   const [showMenu, setShowMenu] = useState(false);
   const [rescheduling, setRescheduling] = useState(false);
   const [newDate, setNewDate] = useState(today);
+  const longPressRef = useLongPress(() => setShowMenu(true));
   const { task, done } = item;
 
   return (
     <div>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: T.bg, border: `1px solid ${done ? T.olive + '44' : T.cardBorder}`,
         borderRadius: 10, padding: '10px 12px',
         display: 'flex', alignItems: 'center', gap: 10,
@@ -131,10 +133,6 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
             background: '#2A3A1A', color: T.oliveLight, fontWeight: 600, textTransform: 'uppercase',
           }}>mo</span>
         )}
-
-        <button onClick={() => setShowMenu(m => !m)} style={{
-          color: T.muted, fontSize: 16, padding: '2px 6px', lineHeight: 1, flexShrink: 0,
-        }}>···</button>
       </div>
 
       {showMenu && (

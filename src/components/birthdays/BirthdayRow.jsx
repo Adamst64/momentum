@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
+import { useLongPress } from '../../hooks/useLongPress';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function BirthdayRow({ birthday, days, age, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
 
   const isToday  = days === 0;
   const isSoon   = days <= 7;
@@ -13,7 +15,7 @@ export default function BirthdayRow({ birthday, days, age, onEdit, onDelete }) {
 
   return (
     <>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: isToday ? '#2A2010' : T.card,
         border: `1px solid ${isToday ? T.khaki + '55' : T.cardBorder}`,
         borderRadius: 12, padding: '12px 14px',
@@ -43,10 +45,6 @@ export default function BirthdayRow({ birthday, days, age, onEdit, onDelete }) {
           </div>
         </div>
 
-        <button
-          onClick={() => setShowMenu(m => !m)}
-          style={{ color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0 }}
-        >···</button>
       </div>
 
       {showMenu && (

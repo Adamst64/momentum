@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { T } from '../../theme';
+import { useLongPress } from '../../hooks/useLongPress';
 import CreateRoutineModal from './CreateRoutineModal';
 import RoutineCalendarModal from './RoutineCalendarModal';
 import DeleteRoutineSheet from './DeleteRoutineSheet';
@@ -8,6 +9,7 @@ import { DAYS_SHORT, todayStr } from '../../utils/dateUtils';
 
 function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPause, onUnpause, onAddPausedRange }) {
   const [showMenu,        setShowMenu]        = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
   const [confirmPause,    setConfirmPause]    = useState(false);
   const [confirmResume,   setConfirmResume]   = useState(false);
   const [addingRange,     setAddingRange]     = useState(false);
@@ -27,7 +29,7 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
 
   return (
     <>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: T.card, border: `1px solid ${T.cardBorder}`,
         borderRadius: 12, padding: '13px 14px',
         display: 'flex', alignItems: 'center', gap: 12,
@@ -77,13 +79,6 @@ function RoutineListRow({ routine, onShowCalendar, onRequestDelete, onEdit, onPa
           }} />
         </button>
 
-        <button
-          type="button"
-          onClick={() => setShowMenu(m => !m)}
-          style={{ color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0 }}
-        >
-          ···
-        </button>
       </div>
 
       {confirmPause && (

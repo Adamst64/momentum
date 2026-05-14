@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
+import { useLongPress } from '../../hooks/useLongPress';
 
 export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete, onShowCalendar }) {
   const [expanded, setExpanded] = useState(false);
+  const longPressRef = useLongPress(() => setExpanded(true));
   const today          = todayStr();
   const done           = !!routine.completions?.[today];
   const dow            = getDOW(today);
   const scheduledToday = routine.days.includes(dow);
 
   return (
-    <div style={{
+    <div ref={longPressRef} style={{
       background: T.card,
       border: `1px solid ${T.cardBorder}`,
       borderRadius: 14,
@@ -62,17 +64,6 @@ export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete
           </div>
         </div>
 
-        {/* Expand for edit/delete */}
-        <button
-          onClick={() => setExpanded(e => !e)}
-          style={{
-            color: T.muted, fontSize: 16, padding: '4px 8px',
-            transform: expanded ? 'rotate(90deg)' : 'none',
-            transition: 'transform 0.2s',
-          }}
-        >
-          ›
-        </button>
       </div>
 
       {expanded && (

@@ -6,9 +6,11 @@ import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
 import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils';
 import { registerPushToken } from '../../utils/pushNotifications';
+import { useLongPress } from '../../hooks/useLongPress';
 
 function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
   const ym = today.slice(0, 7);
   const isDone = task.type === 'recurring-monthly'
     ? !!task.completedOccurrences?.[ym]
@@ -16,7 +18,7 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
 
   return (
     <>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: T.card,
         border: `1px solid ${isDone ? T.olive + '44' : T.cardBorder}`,
         borderRadius: 12, padding: '12px 14px',
@@ -54,10 +56,6 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
             textTransform: 'uppercase', letterSpacing: 0.3, flexShrink: 0,
           }}>Monthly</div>
         )}
-
-        <button onClick={() => setShowMenu(m => !m)} style={{
-          color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0,
-        }}>···</button>
       </div>
 
       {showMenu && (
@@ -85,6 +83,7 @@ function ord(n) {
 
 function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
   const effectiveDay      = task.monthOverrides?.[viewYM] ?? task.dayOfMonth;
   const isDone            = !!task.completedOccurrences?.[viewYM];
   const createdAtStr      = task.createdAt;
@@ -136,7 +135,7 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
 
   return (
     <>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: T.card,
         border: `1px solid ${isDone ? T.olive + '44' : T.cardBorder}`,
         borderRadius: 12, padding: '12px 14px',
@@ -164,10 +163,6 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete }) {
         <div style={{ fontSize: 12, color: statusColor, fontWeight: 600, flexShrink: 0, textAlign: 'right', maxWidth: 110 }}>
           {statusText}
         </div>
-
-        <button onClick={() => setShowMenu(m => !m)} style={{
-          color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0,
-        }}>···</button>
       </div>
 
       {showMenu && (

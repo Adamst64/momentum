@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
+import { useLongPress } from '../../hooks/useLongPress';
 import { todayStr, formatShortDate } from '../../utils/dateUtils';
 
 function RescheduleSheet({ task, onReschedule, onClose }) {
@@ -41,6 +42,7 @@ function RescheduleSheet({ task, onReschedule, onClose }) {
 export default function TaskItem({ task, onComplete, onDelete, onReschedule, onEdit, section, missed }) {
   const [showMenu, setShowMenu]             = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
 
   const isDone    = section === 'done';
   const isBacklog = section === 'backlog';
@@ -57,7 +59,7 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
 
   return (
     <>
-      <div style={{
+      <div ref={longPressRef} style={{
         background: T.card,
         border: `1px solid ${T.cardBorder}`,
         borderRadius: 12,
@@ -119,15 +121,6 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
           </div>
         )}
 
-        {/* Actions menu */}
-        {!isDone && (
-          <button
-            onClick={() => setShowMenu(m => !m)}
-            style={{ color: T.muted, fontSize: 18, padding: '4px 6px', lineHeight: 1, flexShrink: 0 }}
-          >
-            ···
-          </button>
-        )}
       </div>
 
       {showMenu && (
