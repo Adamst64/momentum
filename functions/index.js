@@ -97,9 +97,9 @@ exports.sendDayBeforeReminders = onSchedule(
   }
 );
 
-// 7:30 AM Eastern — day-of reminder
+// 7:00 AM Eastern — day-of reminder
 exports.sendDayOfReminders = onSchedule(
-  { schedule: '30 7 * * *', timeZone: 'America/New_York' },
+  { schedule: '0 7 * * *', timeZone: 'America/New_York' },
   async () => {
     const db        = getFirestore();
     const messaging = getMessaging();
