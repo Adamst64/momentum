@@ -214,11 +214,15 @@ export default function AllRoutinesTab({ hook }) {
   const [calendarRoutine, setCalendar] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [undoState, setUndoState]        = useState(null);
+  const [subTab, setSubTab]              = useState('active');
 
-  const sorted = useMemo(
+  const all = useMemo(
     () => [...routines].filter(r => !r.archived).sort((a, b) => a.name.localeCompare(b.name)),
     [routines]
   );
+  const active = useMemo(() => all.filter(r => !r.paused), [all]);
+  const paused = useMemo(() => all.filter(r => !!r.paused), [all]);
+  const visible = subTab === 'active' ? active : paused;
 
   const handleConfirmDelete = async (keepHistory) => {
     const routine = pendingDelete;
@@ -244,17 +248,56 @@ export default function AllRoutinesTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {sorted.length === 0 && (
+
+      {/* Header row: sub-tabs + Add button */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+        <div style={{
+          display: 'flex', flex: 1,
+          background: T.card, borderRadius: 10, padding: 3,
+          border: `1px solid ${T.cardBorder}`,
+        }}>
+          {['active', 'paused'].map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setSubTab(tab)}
+              style={{
+                flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
+                fontSize: 13, fontWeight: 600,
+                background: subTab === tab ? T.subtle : 'transparent',
+                color: subTab === tab ? T.text : T.muted,
+                transition: 'background 0.15s, color 0.15s',
+              }}
+            >
+              {tab === 'active' ? `Active${active.length ? ` (${active.length})` : ''}` : `Paused${paused.length ? ` (${paused.length})` : ''}`}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            padding: '8px 14px', borderRadius: 10, flexShrink: 0,
+            border: `1.5px dashed ${T.cardBorder}`,
+            color: T.muted, fontSize: 13, fontWeight: 600, background: 'transparent',
+          }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add
+        </button>
+      </div>
+
+      {visible.length === 0 && (
         <div style={{
           background: T.card, border: `1px solid ${T.cardBorder}`,
           borderRadius: 14, padding: '32px 16px', textAlign: 'center',
           color: T.muted, fontSize: 14,
         }}>
-          No routines yet
+          {subTab === 'active' ? 'No active routines' : 'No paused routines'}
         </div>
       )}
 
-      {sorted.map(r => (
+      {visible.map(r => (
         <RoutineListRow
           key={r.id}
           routine={r}
@@ -266,19 +309,6 @@ export default function AllRoutinesTab({ hook }) {
           onAddPausedRange={addPausedRange}
         />
       ))}
-
-      <button
-        type="button"
-        onClick={() => setShowCreate(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: 14, borderRadius: 14, marginTop: 4,
-          border: `1.5px dashed ${T.cardBorder}`,
-          color: T.muted, fontSize: 15, background: 'transparent',
-        }}
-      >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Routine
-      </button>
 
       {(showCreate || editing) && (
         <CreateRoutineModal
