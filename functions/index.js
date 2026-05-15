@@ -87,7 +87,8 @@ exports.sendDayBeforeReminders = onSchedule(
   async () => {
     const db        = getFirestore();
     const messaging = getMessaging();
-    const tomorrow  = new Date();
+    const nowET     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const tomorrow  = new Date(nowET);
     tomorrow.setDate(tomorrow.getDate() + 1);
     await sendToUsers(db, messaging, tomorrow.getMonth() + 1, tomorrow.getDate(),
       '🎂 Birthday Tomorrow',
@@ -96,13 +97,13 @@ exports.sendDayBeforeReminders = onSchedule(
   }
 );
 
-// 7:00 AM Eastern — day-of reminder
+// 7:30 AM Eastern — day-of reminder
 exports.sendDayOfReminders = onSchedule(
-  { schedule: '0 7 * * *', timeZone: 'America/New_York' },
+  { schedule: '30 7 * * *', timeZone: 'America/New_York' },
   async () => {
-    const db      = getFirestore();
+    const db        = getFirestore();
     const messaging = getMessaging();
-    const today   = new Date();
+    const today     = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
     await sendToUsers(db, messaging, today.getMonth() + 1, today.getDate(),
       (name) => `🎂 ${name}'s Birthday!`,
       (name) => `Today is ${name}'s birthday — wish them well!`
