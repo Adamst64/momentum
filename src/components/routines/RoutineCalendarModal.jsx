@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
 import { getScheduleForDate, getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
+import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
 const ORANGE = '#FF9F0A';
 
@@ -69,7 +70,7 @@ function computeStreak(routine, today) {
   return streak;
 }
 
-function MonthBlock({ routine, year, month, today }) {
+function MonthGrid({ routine, year, month, today, gridRef }) {
   const dim      = getDaysInMonth(year, month);
   const firstDow = getFirstDOW(year, month);
   const cells    = [];
@@ -77,64 +78,66 @@ function MonthBlock({ routine, year, month, today }) {
   for (let d = 1; d <= dim; d++)     cells.push(d);
 
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 8 }}>
-        {formatMonthYear(year, month)}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 3 }}>
-        {DAYS_SHORT.map(d => (
-          <div key={d} style={{ textAlign: 'center', fontSize: 9, color: T.muted }}>{d}</div>
-        ))}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
-        {cells.map((day, i) => {
-          if (!day) return <div key={`e${i}`} />;
-          const dateStr = toDateStr(new Date(year, month, day));
-          const state   = getDayState(routine, dateStr, today);
-          const isToday = dateStr === today;
+    <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+      {cells.map((day, i) => {
+        if (!day) return <div key={`e${i}`} />;
+        const dateStr = toDateStr(new Date(year, month, day));
+        const state   = getDayState(routine, dateStr, today);
+        const isToday = dateStr === today;
 
-          let bg    = 'transparent';
-          let color = T.subtle;
-          if (state === 'off')     { color = T.text; }
-          if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
-          if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
-          if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
-          if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
+        let bg    = 'transparent';
+        let color = T.subtle;
+        if (state === 'off')     { color = T.text; }
+        if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
+        if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
+        if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
+        if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
 
-          return (
-            <div key={day} style={{
-              aspectRatio: '1',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              borderRadius: 5, background: bg,
-              border: `1.5px solid ${isToday ? T.khaki : 'transparent'}`,
-              fontSize: 11, color,
-              fontWeight: isToday ? 700 : 400,
-            }}>
-              {day}
-            </div>
-          );
-        })}
-      </div>
+        return (
+          <div key={day} style={{
+            aspectRatio: '1',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: 5, background: bg,
+            border: `1.5px solid ${isToday ? T.khaki : 'transparent'}`,
+            fontSize: 11, color,
+            fontWeight: isToday ? 700 : 400,
+          }}>
+            {day}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 export default function RoutineCalendarModal({ routine, onClose }) {
   const today       = todayStr();
-  const createdDate = routine.createdAt ? parseDate(routine.createdAt) : parseDate(today);
   const todayDate   = parseDate(today);
+  const createdDate = routine.createdAt ? parseDate(routine.createdAt) : todayDate;
+
+  const [year,  setYear]  = useState(todayDate.getFullYear());
+  const [month, setMonth] = useState(todayDate.getMonth());
+
+  const gridRef = useRef(null);
+
+  const canGoPrev = year > createdDate.getFullYear() || (year === createdDate.getFullYear() && month > createdDate.getMonth());
+  const canGoNext = year < todayDate.getFullYear()   || (year === todayDate.getFullYear()   && month < todayDate.getMonth());
+
+  const prev = () => {
+    if (!canGoPrev) return;
+    animateSlide(gridRef.current, 'prev');
+    if (month === 0) { setYear(y => y - 1); setMonth(11); } else setMonth(m => m - 1);
+  };
+  const next = () => {
+    if (!canGoNext) return;
+    animateSlide(gridRef.current, 'next');
+    if (month === 11) { setYear(y => y + 1); setMonth(0); } else setMonth(m => m + 1);
+  };
+
+  const swipeRef = useSwipe(next, prev);
+
   const stats  = computeStats(routine, today);
   const streak = computeStreak(routine, today);
-
-  // Months newest-first, from today back to creation month
-  const months = [];
-  let y = todayDate.getFullYear(), m = todayDate.getMonth();
-  const endY = createdDate.getFullYear(), endM = createdDate.getMonth();
-  while (y > endY || (y === endY && m >= endM)) {
-    months.push({ year: y, month: m });
-    if (m === 0) { m = 11; y--; } else m--;
-  }
-
   const isMulti = (routine.timesPerDay ?? 1) > 1 || Object.keys(routine.timesPerDayByDow || {}).length > 0;
 
   const legend = [
@@ -146,6 +149,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
 
   return ReactDOM.createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+      {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
@@ -166,7 +170,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
           <div style={{
             background: T.card, border: `1px solid ${T.cardBorder}`,
             borderRadius: 14, padding: '14px 18px', marginBottom: 20,
-            display: 'flex', alignItems: 'center', gap: 0,
+            display: 'flex', alignItems: 'center',
           }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 36, fontWeight: 800, color: T.oliveLight, lineHeight: 1 }}>{stats.pct}%</div>
@@ -197,7 +201,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
                   {stats.greenDays}/{stats.total} days done
                 </div>
               )}
-              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>
                 since {formatShortDate(routine.createdAt || today)}
               </div>
             </div>
@@ -210,24 +214,49 @@ export default function RoutineCalendarModal({ routine, onClose }) {
           </div>
         )}
 
-        <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          {legend.map(([bg, c, label]) => (
-            <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: bg, border: `1px solid ${c}` }} />
-              <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
-            </div>
-          ))}
+        {/* Month navigator */}
+        <div ref={swipeRef} style={{
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 14, padding: '14px 16px',
+        }}>
+          {/* Month header with arrows */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <button
+              type="button"
+              onClick={prev}
+              style={{ fontSize: 22, color: canGoPrev ? T.muted : T.subtle, padding: '2px 8px', lineHeight: 1 }}
+            >‹</button>
+            <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{formatMonthYear(year, month)}</span>
+            <button
+              type="button"
+              onClick={next}
+              style={{ fontSize: 22, color: canGoNext ? T.muted : T.subtle, padding: '2px 8px', lineHeight: 1 }}
+            >›</button>
+          </div>
+
+          {/* Day-of-week labels */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 2, marginBottom: 6 }}>
+            {DAYS_SHORT.map(d => (
+              <div key={d} style={{ textAlign: 'center', fontSize: 9, color: T.muted }}>{d}</div>
+            ))}
+          </div>
+
+          {/* Calendar grid */}
+          <div style={{ overflow: 'hidden' }}>
+            <MonthGrid routine={routine} year={year} month={month} today={today} gridRef={gridRef} />
+          </div>
+
+          {/* Legend */}
+          <div style={{ display: 'flex', gap: 16, marginTop: 14, flexWrap: 'wrap' }}>
+            {legend.map(([bg, c, label]) => (
+              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <div style={{ width: 12, height: 12, borderRadius: 3, background: bg, border: `1px solid ${c}` }} />
+                <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {months.map(({ year, month }) => (
-          <MonthBlock
-            key={`${year}-${month}`}
-            routine={routine}
-            year={year}
-            month={month}
-            today={today}
-          />
-        ))}
       </div>
     </div>,
     document.body
