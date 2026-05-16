@@ -30,7 +30,8 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
   const [editing, setEditing]                 = useState(null);
   const [selectedDay, setSelectedDay]         = useState(null);
   const [showAllRoutines, setShowAllRoutines] = useState(false);
-  const [calendarRoutine, setCalendarRoutine] = useState(null);
+  const [calendarRoutineId, setCalendarRoutineId] = useState(null);
+  const calendarRoutine = routines.find(r => r.id === calendarRoutineId) ?? null;
   const [pendingDelete, setPendingDelete]     = useState(null);
   const [undoState, setUndoState]             = useState(null);
 
@@ -161,7 +162,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
                 onIncrement={id => incrementDay(id, today)}
                 onEdit={setEditing}
                 onRequestDelete={handleRequestDelete}
-                onShowCalendar={setCalendarRoutine}
+                onShowCalendar={r => setCalendarRoutineId(r.id)}
               />
             ))}
           </div>
@@ -232,7 +233,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       )}
 
       {calendarRoutine && (
-        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendarRoutine(null)} />
+        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendarRoutineId(null)} />
       )}
 
       {(showCreate || editing) && (

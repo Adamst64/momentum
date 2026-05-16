@@ -211,7 +211,8 @@ export default function AllRoutinesTab({ hook }) {
   const { routines, addRoutine, updateRoutine, deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine, pauseRoutine, unpauseRoutine, addPausedRange } = hook;
   const [showCreate, setShowCreate]    = useState(false);
   const [editing, setEditing]          = useState(null);
-  const [calendarRoutine, setCalendar] = useState(null);
+  const [calendarRoutineId, setCalendarId] = useState(null);
+  const calendarRoutine = routines.find(r => r.id === calendarRoutineId) ?? null;
   const [pendingDelete, setPendingDelete] = useState(null);
   const [undoState, setUndoState]        = useState(null);
   const [subTab, setSubTab]              = useState('active');
@@ -301,7 +302,7 @@ export default function AllRoutinesTab({ hook }) {
         <RoutineListRow
           key={r.id}
           routine={r}
-          onShowCalendar={setCalendar}
+          onShowCalendar={r => setCalendarId(r.id)}
           onRequestDelete={setPendingDelete}
           onEdit={() => setEditing(r)}
           onPause={pauseRoutine}
@@ -322,7 +323,7 @@ export default function AllRoutinesTab({ hook }) {
       )}
 
       {calendarRoutine && (
-        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendar(null)} />
+        <RoutineCalendarModal routine={calendarRoutine} onClose={() => setCalendarId(null)} />
       )}
 
       {pendingDelete && (
