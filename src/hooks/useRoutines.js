@@ -44,11 +44,12 @@ export function useRoutines(userId) {
     });
   }, [userId]);
 
-  const addRoutine = useCallback(async (name, days, timesPerDay = 1, timesPerDayByDow = {}) => {
+  const addRoutine = useCallback(async (name, days, timesPerDay = 1, timesPerDayByDow = {}, startDate = null, initialCompletions = {}) => {
     if (!userId) return;
-    const id    = genId();
-    const today = todayStr();
-    const data  = { name, days, completions: {}, createdAt: today, scheduleHistory: [{ days, from: today }] };
+    const id        = genId();
+    const today     = todayStr();
+    const createdAt = startDate || today;
+    const data      = { name, days, completions: initialCompletions, createdAt, scheduleHistory: [{ days, from: createdAt }] };
     if (timesPerDay > 1) data.timesPerDay = timesPerDay;
     if (Object.keys(timesPerDayByDow).length) data.timesPerDayByDow = timesPerDayByDow;
     await setDoc(doc(db, 'users', userId, 'routines', id), data);

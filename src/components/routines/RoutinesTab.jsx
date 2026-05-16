@@ -238,9 +238,9 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       {(showCreate || editing) && (
         <CreateRoutineModal
           initial={editing}
-          onSave={(name, days, timesPerDay, timesPerDayByDow) => {
+          onSave={(name, days, timesPerDay, timesPerDayByDow, startDate, pastCompletions) => {
             if (editing) updateRoutine(editing.id, name, days, timesPerDay, timesPerDayByDow);
-            else addRoutine(name, days, timesPerDay, timesPerDayByDow);
+            else addRoutine(name, days, timesPerDay, timesPerDayByDow, startDate, pastCompletions);
           }}
           onClose={() => { setShowCreate(false); setEditing(null); }}
         />
