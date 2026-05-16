@@ -28,7 +28,7 @@ function getDayState(routine, dateStr, today) {
 
 function computeStats(routine, today) {
   const created = routine.createdAt || today;
-  let progress = 0, total = 0, greenDays = 0, partialDays = 0;
+  let progress = 0, total = 0, greenDays = 0, partialDays = 0, redDays = 0;
   let d = new Date(created + 'T12:00:00');
   const end = new Date(today + 'T12:00:00');
   while (d <= end) {
@@ -42,11 +42,11 @@ function computeStats(routine, today) {
       progress += count / required;
       total++; partialDays++;
     } else if (state === 'missed') {
-      total++;
+      total++; redDays++;
     }
     d.setDate(d.getDate() + 1);
   }
-  return { progress, total, pct: total > 0 ? Math.round(progress / total * 100) : null, greenDays, partialDays };
+  return { progress, total, pct: total > 0 ? Math.round(progress / total * 100) : null, greenDays, partialDays, redDays };
 }
 
 function computeStreak(routine, today) {
@@ -170,15 +170,26 @@ export default function RoutineCalendarModal({ routine, onClose }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 36, fontWeight: 800, color: T.oliveLight, lineHeight: 1 }}>{stats.pct}%</div>
               {isMulti ? (
-                <div style={{ marginTop: 4 }}>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: T.oliveLight }}>
-                    {stats.greenDays} green day{stats.greenDays !== 1 ? 's' : ''}
+                <div style={{ marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: T.muted, marginBottom: 6 }}>
+                    {stats.total} total day{stats.total !== 1 ? 's' : ''}
                   </div>
-                  {stats.partialDays > 0 && (
-                    <div style={{ fontSize: 13, fontWeight: 500, color: ORANGE }}>
-                      {stats.partialDays} orange day{stats.partialDays !== 1 ? 's' : ''}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {[
+                      { bg: '#2A3A1A', color: T.oliveLight, count: stats.greenDays },
+                      { bg: '#3A2800', color: ORANGE,       count: stats.partialDays },
+                      { bg: '#3A1C1C', color: T.red,        count: stats.redDays },
+                    ].map(({ bg, color, count }) => (
+                      <div key={color} style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        background: bg, border: `1px solid ${color}50`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 15, fontWeight: 700, color,
+                      }}>
+                        {count}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div style={{ fontSize: 13, fontWeight: 500, color: T.text, marginTop: 4 }}>
