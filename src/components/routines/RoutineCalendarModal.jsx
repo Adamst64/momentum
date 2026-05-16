@@ -2,7 +2,9 @@ import React from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
-import { getScheduleForDate } from '../../hooks/useRoutines';
+import { getScheduleForDate, getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
+
+const ORANGE = '#FF9F0A';
 
 function wasPausedOn(routine, dateStr) {
   if (routine.paused && routine.pausedAt && dateStr >= routine.pausedAt) return true;
@@ -16,25 +18,35 @@ function getDayState(routine, dateStr, today) {
   const schedule = getScheduleForDate(routine, dateStr);
   if (!schedule.includes(dow)) return 'off';
   if (wasPausedOn(routine, dateStr)) return 'off';
-  if (routine.completions?.[dateStr]) return 'done';
+  const required = getRequiredForDate(routine, dateStr);
+  const count    = getCompletionCount(routine, dateStr);
+  if (count >= required) return 'done';
+  if (count > 0)         return 'partial';
   if (dateStr === today) return 'pending';
   return 'missed';
 }
 
 function computeStats(routine, today) {
   const created = routine.createdAt || today;
-  let done = 0, total = 0;
+  let progress = 0, total = 0;
   let d = new Date(created + 'T12:00:00');
   const end = new Date(today + 'T12:00:00');
   while (d <= end) {
     const ds    = d.toISOString().slice(0, 10);
     const state = getDayState(routine, ds, today);
-    if (state === 'done') { done++; total++; }
-    // today not done yet: day isn't over, don't count as missed
-    else if (state === 'missed' && ds !== today) { total++; }
+    if (state === 'done') {
+      progress += 1; total++;
+    } else if (state === 'partial') {
+      const required = getRequiredForDate(routine, ds);
+      const count    = getCompletionCount(routine, ds);
+      progress += count / required;
+      total++;
+    } else if (state === 'missed') {
+      total++;
+    }
     d.setDate(d.getDate() + 1);
   }
-  return { done, total, pct: total > 0 ? Math.round(done / total * 100) : null };
+  return { progress, total, pct: total > 0 ? Math.round(progress / total * 100) : null };
 }
 
 function computeStreak(routine, today) {
@@ -47,13 +59,12 @@ function computeStreak(routine, today) {
     const state = getDayState(routine, ds, today);
     if (state === 'done') {
       streak++;
-    } else if (state === 'missed') {
+    } else if (state === 'missed' || state === 'partial') {
       if (ds === today) { /* day not over — skip without breaking */ }
       else break;
     }
-    // 'off' / 'pre' / 'future': skip unapplicable days
     d.setDate(d.getDate() - 1);
-    if (streak > 3650) break; // safety
+    if (streak > 3650) break;
   }
   return streak;
 }
@@ -85,6 +96,7 @@ function MonthBlock({ routine, year, month, today }) {
           let bg    = 'transparent';
           let color = T.subtle;
           if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
+          if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
           if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
           if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
 
@@ -113,6 +125,10 @@ export default function RoutineCalendarModal({ routine, onClose }) {
   const stats  = computeStats(routine, today);
   const streak = computeStreak(routine, today);
 
+  const progressDisplay = Number.isInteger(stats.progress)
+    ? stats.progress
+    : stats.progress.toFixed(1);
+
   // Months newest-first, from today back to creation month
   const months = [];
   let y = todayDate.getFullYear(), m = todayDate.getMonth();
@@ -121,6 +137,15 @@ export default function RoutineCalendarModal({ routine, onClose }) {
     months.push({ year: y, month: m });
     if (m === 0) { m = 11; y--; } else m--;
   }
+
+  const isMulti = (routine.timesPerDay ?? 1) > 1 || Object.keys(routine.timesPerDayByDow || {}).length > 0;
+
+  const legend = [
+    ['#2A3A1A', T.oliveLight, 'Done'],
+    ...(isMulti ? [['#3A2800', ORANGE, 'Partial']] : []),
+    ['#3A2E00', T.khaki, 'Today'],
+    ['#3A1C1C', T.red, 'Missed'],
+  ];
 
   return ReactDOM.createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: T.bg, display: 'flex', flexDirection: 'column' }}>
@@ -149,7 +174,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 36, fontWeight: 800, color: T.oliveLight, lineHeight: 1 }}>{stats.pct}%</div>
               <div style={{ fontSize: 13, fontWeight: 500, color: T.text, marginTop: 4 }}>
-                {stats.done}/{stats.total} days done
+                {progressDisplay}/{stats.total} days done
               </div>
               <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
                 since {formatShortDate(routine.createdAt || today)}
@@ -165,7 +190,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
         )}
 
         <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          {[['#2A3A1A', T.oliveLight, 'Done'], ['#3A2E00', T.khaki, 'Today'], ['#3A1C1C', T.red, 'Missed']].map(([bg, c, label]) => (
+          {legend.map(([bg, c, label]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 12, height: 12, borderRadius: 3, background: bg, border: `1px solid ${c}` }} />
               <span style={{ fontSize: 11, color: T.muted }}>{label}</span>

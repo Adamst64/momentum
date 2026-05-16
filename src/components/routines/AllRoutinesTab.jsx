@@ -313,9 +313,9 @@ export default function AllRoutinesTab({ hook }) {
       {(showCreate || editing) && (
         <CreateRoutineModal
           initial={editing}
-          onSave={(name, days) => {
-            if (editing) updateRoutine(editing.id, name, days);
-            else addRoutine(name, days);
+          onSave={(name, days, timesPerDay, timesPerDayByDow) => {
+            if (editing) updateRoutine(editing.id, name, days, timesPerDay, timesPerDayByDow);
+            else addRoutine(name, days, timesPerDay, timesPerDayByDow);
           }}
           onClose={() => { setShowCreate(false); setEditing(null); }}
         />

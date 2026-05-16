@@ -4,6 +4,20 @@ import { db } from '../firebase';
 import { todayStr, getDOW, addDays } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
+export function getCompletionCount(routine, dateStr) {
+  const val = routine.completions?.[dateStr];
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  return 1; // legacy boolean
+}
+
+export function getRequiredForDate(routine, dateStr) {
+  const dow = getDOW(dateStr);
+  const overrides = routine.timesPerDayByDow || {};
+  if (String(dow) in overrides) return overrides[String(dow)];
+  return routine.timesPerDay ?? 1;
+}
+
 export function getScheduleForDate(routine, dateStr) {
   const history = routine.scheduleHistory;
   if (!history || !history.length) return routine.days;
@@ -30,20 +44,20 @@ export function useRoutines(userId) {
     });
   }, [userId]);
 
-  const addRoutine = useCallback(async (name, days) => {
+  const addRoutine = useCallback(async (name, days, timesPerDay = 1, timesPerDayByDow = {}) => {
     if (!userId) return;
     const id    = genId();
     const today = todayStr();
-    await setDoc(doc(db, 'users', userId, 'routines', id), {
-      name, days, completions: {}, createdAt: today,
-      scheduleHistory: [{ days, from: today }],
-    });
+    const data  = { name, days, completions: {}, createdAt: today, scheduleHistory: [{ days, from: today }] };
+    if (timesPerDay > 1) data.timesPerDay = timesPerDay;
+    if (Object.keys(timesPerDayByDow).length) data.timesPerDayByDow = timesPerDayByDow;
+    await setDoc(doc(db, 'users', userId, 'routines', id), data);
   }, [userId]);
 
-  const updateRoutine = useCallback(async (id, name, days) => {
+  const updateRoutine = useCallback(async (id, name, days, timesPerDay = 1, timesPerDayByDow = {}) => {
     if (!userId) return;
     const routine = routines.find(r => r.id === id);
-    const update  = { name, days };
+    const update  = { name, days, timesPerDay: timesPerDay > 1 ? timesPerDay : null, timesPerDayByDow };
     if (routine) {
       const prevDays    = routine.days || [];
       const daysChanged = days.length !== prevDays.length || !days.every(d => prevDays.includes(d));
@@ -116,13 +130,15 @@ export function useRoutines(userId) {
     await setDoc(doc(db, 'users', userId, 'routines', id), data);
   }, [userId]);
 
-  const toggleDay = useCallback(async (id, dateStr = todayStr()) => {
+  const incrementDay = useCallback(async (id, dateStr = todayStr()) => {
     if (!userId) return;
     const routine = routines.find(r => r.id === id);
     if (!routine) return;
+    const required    = getRequiredForDate(routine, dateStr);
+    const current     = getCompletionCount(routine, dateStr);
     const completions = { ...routine.completions };
-    if (completions[dateStr]) delete completions[dateStr];
-    else completions[dateStr] = true;
+    if (current >= required) delete completions[dateStr]; // wrap to 0
+    else completions[dateStr] = current + 1;
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
@@ -144,7 +160,10 @@ export function useRoutines(userId) {
   const todayStats = useCallback(() => {
     const today = todayStr();
     const list  = todayRoutines();
-    return { total: list.length, done: list.filter(r => r.completions[today]).length };
+    return {
+      total: list.length,
+      done: list.filter(r => getCompletionCount(r, today) >= getRequiredForDate(r, today)).length,
+    };
   }, [todayRoutines]);
 
   // Day ratio: excludes paused periods so historical charts aren't polluted
@@ -158,13 +177,18 @@ export function useRoutines(userId) {
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
     if (!list.length) return null;
-    return list.filter(r => r.completions?.[dateStr]).length / list.length;
+    const sum = list.reduce((acc, r) => {
+      const required = getRequiredForDate(r, dateStr);
+      const count    = getCompletionCount(r, dateStr);
+      return acc + Math.min(count, required) / required;
+    }, 0);
+    return sum / list.length;
   }, [routines]);
 
   return {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
     pauseRoutine, unpauseRoutine, addPausedRange,
-    toggleDay, forDate, todayRoutines, todayStats, dayRatio,
+    incrementDay, forDate, todayRoutines, todayStats, dayRatio,
   };
 }

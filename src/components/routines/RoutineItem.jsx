@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
 import { useLongPress } from '../../hooks/useLongPress';
+import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
 
-export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete, onShowCalendar }) {
+export default function RoutineItem({ routine, onIncrement, onEdit, onRequestDelete, onShowCalendar }) {
   const [expanded, setExpanded] = useState(false);
   const longPressRef = useLongPress(() => setExpanded(true));
-  const today          = todayStr();
-  const done           = !!routine.completions?.[today];
-  const dow            = getDOW(today);
+  const today        = todayStr();
+  const required     = getRequiredForDate(routine, today);
+  const count        = getCompletionCount(routine, today);
+  const done         = count >= required;
+  const dow          = getDOW(today);
   const scheduledToday = routine.days.includes(dow);
 
   return (
@@ -22,9 +25,9 @@ export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete
       borderLeftColor: done ? T.olive : (scheduledToday ? '#3A3A3C' : T.cardBorder),
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        {/* Checkbox */}
+        {/* Checkbox / dots */}
         <button
-          onClick={() => scheduledToday && onToggle(routine.id)}
+          onClick={() => scheduledToday && onIncrement(routine.id)}
           style={{
             width: 26, height: 26, borderRadius: 8, flexShrink: 0,
             border: `2px solid ${done ? T.olive : T.muted}`,
@@ -34,10 +37,25 @@ export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete
             opacity: scheduledToday ? 1 : 0.3,
           }}
         >
-          {done && (
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-              <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+          {required === 1 ? (
+            done && (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )
+          ) : (
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              {Array.from({ length: required }, (_, i) => (
+                <div key={i} style={{
+                  width: required <= 3 ? 5 : 4,
+                  height: required <= 3 ? 5 : 4,
+                  borderRadius: '50%',
+                  background: i < count ? '#fff' : 'transparent',
+                  border: `1.5px solid ${i < count ? '#fff' : 'rgba(255,255,255,0.4)'}`,
+                  flexShrink: 0,
+                }} />
+              ))}
+            </div>
           )}
         </button>
 
@@ -49,6 +67,11 @@ export default function RoutineItem({ routine, onToggle, onEdit, onRequestDelete
             textDecoration: done ? 'line-through' : 'none',
           }}>
             {routine.name}
+            {required > 1 && (
+              <span style={{ fontSize: 11, color: done ? T.muted : T.oliveLight, marginLeft: 6, fontWeight: 400 }}>
+                ×{required}
+              </span>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
             {DAYS_SHORT.map((label, i) => (

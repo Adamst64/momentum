@@ -11,12 +11,13 @@ import DeleteRoutineSheet from './DeleteRoutineSheet';
 import UndoToast from '../UndoToast';
 import CommitmentsTab from './CommitmentsTab';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
+import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
 
 export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
-    toggleDay, todayStats, dayRatio, forDate,
+    incrementDay, todayStats, dayRatio, forDate,
   } = hook;
 
   const calendarDayRatio = (dateStr) => {
@@ -44,8 +45,8 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       return r.days.includes(dow);
     })
     .sort((a, b) => {
-      const aDone = !!a.completions?.[today];
-      const bDone = !!b.completions?.[today];
+      const aDone = getCompletionCount(a, today) >= getRequiredForDate(a, today);
+      const bDone = getCompletionCount(b, today) >= getRequiredForDate(b, today);
       if (aDone !== bDone) return aDone ? 1 : -1;
       return a.name.localeCompare(b.name);
     });
@@ -157,7 +158,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
               <RoutineItem
                 key={r.id}
                 routine={r}
-                onToggle={id => toggleDay(id, today)}
+                onIncrement={id => incrementDay(id, today)}
                 onEdit={setEditing}
                 onRequestDelete={handleRequestDelete}
                 onShowCalendar={setCalendarRoutine}
@@ -210,7 +211,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       )}
 
       {selectedDay && (
-        <DayDetailModal dateStr={selectedDay} forDate={forDate} toggleDay={toggleDay} onClose={() => setSelectedDay(null)} />
+        <DayDetailModal dateStr={selectedDay} forDate={forDate} incrementDay={incrementDay} onClose={() => setSelectedDay(null)} />
       )}
 
       {pendingDelete && (
@@ -237,9 +238,9 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       {(showCreate || editing) && (
         <CreateRoutineModal
           initial={editing}
-          onSave={(name, days) => {
-            if (editing) updateRoutine(editing.id, name, days);
-            else addRoutine(name, days);
+          onSave={(name, days, timesPerDay, timesPerDayByDow) => {
+            if (editing) updateRoutine(editing.id, name, days, timesPerDay, timesPerDayByDow);
+            else addRoutine(name, days, timesPerDay, timesPerDayByDow);
           }}
           onClose={() => { setShowCreate(false); setEditing(null); }}
         />
