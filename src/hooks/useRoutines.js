@@ -12,6 +12,19 @@ export function getCompletionCount(routine, dateStr) {
 }
 
 export function getRequiredForDate(routine, dateStr) {
+  const history = routine.timesHistory;
+  if (history && history.length) {
+    const applicable = [...history]
+      .sort((a, b) => b.from.localeCompare(a.from))
+      .find(h => h.from <= dateStr);
+    if (applicable) {
+      const dow = getDOW(dateStr);
+      const overrides = applicable.timesPerDayByDow || {};
+      if (String(dow) in overrides) return overrides[String(dow)];
+      return applicable.timesPerDay ?? 1;
+    }
+  }
+  // Fallback for legacy routines without timesHistory
   const dow = getDOW(dateStr);
   const overrides = routine.timesPerDayByDow || {};
   if (String(dow) in overrides) return overrides[String(dow)];
@@ -52,6 +65,7 @@ export function useRoutines(userId) {
     const data      = { name, days, completions: initialCompletions, createdAt, scheduleHistory: [{ days, from: createdAt }] };
     if (timesPerDay > 1) data.timesPerDay = timesPerDay;
     if (Object.keys(timesPerDayByDow).length) data.timesPerDayByDow = timesPerDayByDow;
+    data.timesHistory = [{ from: createdAt, timesPerDay: timesPerDay ?? 1, timesPerDayByDow: timesPerDayByDow || {} }];
     await setDoc(doc(db, 'users', userId, 'routines', id), data);
   }, [userId]);
 
@@ -60,13 +74,22 @@ export function useRoutines(userId) {
     const routine = routines.find(r => r.id === id);
     const update  = { name, days, timesPerDay: timesPerDay > 1 ? timesPerDay : null, timesPerDayByDow };
     if (routine) {
+      const today = todayStr();
+
       const prevDays    = routine.days || [];
       const daysChanged = days.length !== prevDays.length || !days.every(d => prevDays.includes(d));
       if (daysChanged) {
-        const today    = todayStr();
         const existing = routine.scheduleHistory || [{ days: prevDays, from: routine.createdAt || today }];
-        const filtered = existing.filter(h => h.from !== today);
-        update.scheduleHistory = [...filtered, { days, from: today }];
+        update.scheduleHistory = [...existing.filter(h => h.from !== today), { days, from: today }];
+      }
+
+      const sortKeys = obj => JSON.stringify(Object.entries(obj).sort());
+      const prevTimes = routine.timesPerDay ?? 1;
+      const prevByDow = routine.timesPerDayByDow || {};
+      const timesChanged = prevTimes !== timesPerDay || sortKeys(prevByDow) !== sortKeys(timesPerDayByDow || {});
+      if (timesChanged) {
+        const existing = routine.timesHistory || [{ from: routine.createdAt || today, timesPerDay: prevTimes, timesPerDayByDow: prevByDow }];
+        update.timesHistory = [...existing.filter(h => h.from !== today), { from: today, timesPerDay, timesPerDayByDow: timesPerDayByDow || {} }];
       }
     }
     await updateDoc(doc(db, 'users', userId, 'routines', id), update);

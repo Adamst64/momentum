@@ -95,6 +95,7 @@ function MonthBlock({ routine, year, month, today }) {
 
           let bg    = 'transparent';
           let color = T.subtle;
+          if (state === 'off')     { color = T.text; }
           if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
           if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
           if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
