@@ -28,25 +28,25 @@ function getDayState(routine, dateStr, today) {
 
 function computeStats(routine, today) {
   const created = routine.createdAt || today;
-  let progress = 0, total = 0;
+  let progress = 0, total = 0, greenDays = 0, partialDays = 0;
   let d = new Date(created + 'T12:00:00');
   const end = new Date(today + 'T12:00:00');
   while (d <= end) {
     const ds    = d.toISOString().slice(0, 10);
     const state = getDayState(routine, ds, today);
     if (state === 'done') {
-      progress += 1; total++;
+      progress += 1; total++; greenDays++;
     } else if (state === 'partial') {
       const required = getRequiredForDate(routine, ds);
       const count    = getCompletionCount(routine, ds);
       progress += count / required;
-      total++;
+      total++; partialDays++;
     } else if (state === 'missed') {
       total++;
     }
     d.setDate(d.getDate() + 1);
   }
-  return { progress, total, pct: total > 0 ? Math.round(progress / total * 100) : null };
+  return { progress, total, pct: total > 0 ? Math.round(progress / total * 100) : null, greenDays, partialDays };
 }
 
 function computeStreak(routine, today) {
@@ -125,10 +125,6 @@ export default function RoutineCalendarModal({ routine, onClose }) {
   const stats  = computeStats(routine, today);
   const streak = computeStreak(routine, today);
 
-  const progressDisplay = Number.isInteger(stats.progress)
-    ? stats.progress
-    : stats.progress.toFixed(1);
-
   // Months newest-first, from today back to creation month
   const months = [];
   let y = todayDate.getFullYear(), m = todayDate.getMonth();
@@ -173,9 +169,22 @@ export default function RoutineCalendarModal({ routine, onClose }) {
           }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 36, fontWeight: 800, color: T.oliveLight, lineHeight: 1 }}>{stats.pct}%</div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: T.text, marginTop: 4 }}>
-                {progressDisplay}/{stats.total} days done
-              </div>
+              {isMulti ? (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: T.oliveLight }}>
+                    {stats.greenDays} green day{stats.greenDays !== 1 ? 's' : ''}
+                  </div>
+                  {stats.partialDays > 0 && (
+                    <div style={{ fontSize: 13, fontWeight: 500, color: ORANGE }}>
+                      {stats.partialDays} orange day{stats.partialDays !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: 13, fontWeight: 500, color: T.text, marginTop: 4 }}>
+                  {stats.greenDays}/{stats.total} days done
+                </div>
+              )}
               <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
                 since {formatShortDate(routine.createdAt || today)}
               </div>

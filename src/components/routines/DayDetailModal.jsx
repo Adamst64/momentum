@@ -35,15 +35,15 @@ export default function DayDetailModal({ dateStr, forDate, incrementDay, onClose
                   padding: '14px 16px',
                   background: T.bg,
                   borderRadius: 12,
-                  border: `1px solid ${isFuture ? T.cardBorder : done ? T.olive + '50' : partial ? '#FF9F0A40' : T.cardBorder}`,
+                  border: `1px solid ${isFuture ? T.cardBorder : done ? T.olive + '50' : partial ? '#FF9F0A40' : T.red + '40'}`,
                   cursor: isFuture ? 'default' : 'pointer',
                   opacity: isFuture ? 0.65 : 1,
                 }}
               >
                 <div style={{
                   width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                  border: `1.5px solid ${done ? T.oliveLight : partial ? '#FF9F0A' : T.subtle}`,
-                  background: done ? T.olive + '25' : partial ? '#FF9F0A20' : 'transparent',
+                  border: `1.5px solid ${done ? T.oliveLight : partial ? '#FF9F0A' : T.red}`,
+                  background: done ? T.olive + '25' : partial ? '#FF9F0A20' : T.red + '15',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                   {!isFuture && done && (
@@ -52,7 +52,7 @@ export default function DayDetailModal({ dateStr, forDate, incrementDay, onClose
                 </div>
                 <span style={{ fontSize: 15, color: T.text, flex: 1 }}>{r.name}</span>
                 {!isFuture && (
-                  <span style={{ fontSize: 12, color: done ? T.oliveLight : partial ? '#FF9F0A' : T.muted }}>
+                  <span style={{ fontSize: 12, color: done ? T.oliveLight : partial ? '#FF9F0A' : T.red }}>
                     {required > 1 ? `${count}/${required}` : done ? 'Done' : 'Missed'}
                   </span>
                 )}
