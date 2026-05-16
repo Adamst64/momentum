@@ -16,7 +16,9 @@ function getDayState(routine, dateStr, today) {
   const schedule = getScheduleForDate(routine, dateStr);
   if (!schedule.includes(dow)) return 'off';
   if (wasPausedOn(routine, dateStr)) return 'off';
-  return routine.completions?.[dateStr] ? 'done' : 'missed';
+  if (routine.completions?.[dateStr]) return 'done';
+  if (dateStr === today) return 'pending';
+  return 'missed';
 }
 
 function computeStats(routine, today) {
@@ -82,8 +84,9 @@ function MonthBlock({ routine, year, month, today }) {
 
           let bg    = 'transparent';
           let color = T.subtle;
-          if (state === 'done')   { bg = '#2A3A1A'; color = T.oliveLight; }
-          if (state === 'missed') { bg = '#3A1C1C'; color = T.red; }
+          if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
+          if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
+          if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
 
           return (
             <div key={day} style={{
@@ -162,7 +165,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
         )}
 
         <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
-          {[['#2A3A1A', T.oliveLight, 'Done'], ['#3A1C1C', T.red, 'Missed']].map(([bg, c, label]) => (
+          {[['#2A3A1A', T.oliveLight, 'Done'], ['#3A2E00', T.khaki, 'Today'], ['#3A1C1C', T.red, 'Missed']].map(([bg, c, label]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 12, height: 12, borderRadius: 3, background: bg, border: `1px solid ${c}` }} />
               <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
