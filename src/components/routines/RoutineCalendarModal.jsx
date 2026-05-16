@@ -70,46 +70,6 @@ function computeStreak(routine, today) {
   return streak;
 }
 
-function MonthGrid({ routine, year, month, today, gridRef }) {
-  const dim      = getDaysInMonth(year, month);
-  const firstDow = getFirstDOW(year, month);
-  const cells    = [];
-  for (let i = 0; i < firstDow; i++) cells.push(null);
-  for (let d = 1; d <= dim; d++)     cells.push(d);
-
-  return (
-    <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
-      {cells.map((day, i) => {
-        if (!day) return <div key={`e${i}`} />;
-        const dateStr = toDateStr(new Date(year, month, day));
-        const state   = getDayState(routine, dateStr, today);
-        const isToday = dateStr === today;
-
-        let bg    = 'transparent';
-        let color = T.subtle;
-        if (state === 'off')     { color = T.text; }
-        if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
-        if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
-        if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
-        if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
-
-        return (
-          <div key={day} style={{
-            aspectRatio: '1',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            borderRadius: 5, background: bg,
-            border: `1.5px solid ${isToday ? T.khaki : 'transparent'}`,
-            fontSize: 11, color,
-            fontWeight: isToday ? 700 : 400,
-          }}>
-            {day}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export default function RoutineCalendarModal({ routine, onClose }) {
   const today       = todayStr();
   const todayDate   = parseDate(today);
@@ -147,6 +107,13 @@ export default function RoutineCalendarModal({ routine, onClose }) {
     ['#3A1C1C', T.red, 'Missed'],
   ];
 
+  // Build calendar cells
+  const dim      = getDaysInMonth(year, month);
+  const firstDow = getFirstDOW(year, month);
+  const cells    = [];
+  for (let i = 0; i < firstDow; i++) cells.push(null);
+  for (let d = 1; d <= dim; d++)     cells.push(d);
+
   return ReactDOM.createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: T.bg, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
@@ -165,7 +132,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
         paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)',
       }}>
 
-        {/* Stats */}
+        {/* Stats card */}
         {stats.pct !== null && (
           <div style={{
             background: T.card, border: `1px solid ${T.cardBorder}`,
@@ -214,23 +181,31 @@ export default function RoutineCalendarModal({ routine, onClose }) {
           </div>
         )}
 
-        {/* Month navigator */}
+        {/* Calendar card — swipe target wraps everything */}
         <div ref={swipeRef} style={{
           background: T.card, border: `1px solid ${T.cardBorder}`,
           borderRadius: 14, padding: '14px 16px',
         }}>
-          {/* Month header with arrows */}
+          {/* Month nav */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
             <button
               type="button"
               onClick={prev}
-              style={{ fontSize: 22, color: canGoPrev ? T.muted : T.subtle, padding: '2px 8px', lineHeight: 1 }}
+              style={{
+                fontSize: 22, lineHeight: 1, padding: '2px 10px',
+                color: canGoPrev ? T.text : T.subtle,
+                opacity: canGoPrev ? 1 : 0.3,
+              }}
             >‹</button>
             <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{formatMonthYear(year, month)}</span>
             <button
               type="button"
               onClick={next}
-              style={{ fontSize: 22, color: canGoNext ? T.muted : T.subtle, padding: '2px 8px', lineHeight: 1 }}
+              style={{
+                fontSize: 22, lineHeight: 1, padding: '2px 10px',
+                color: canGoNext ? T.text : T.subtle,
+                opacity: canGoNext ? 1 : 0.3,
+              }}
             >›</button>
           </div>
 
@@ -241,9 +216,37 @@ export default function RoutineCalendarModal({ routine, onClose }) {
             ))}
           </div>
 
-          {/* Calendar grid */}
+          {/* Grid — overflow hidden clips the slide animation */}
           <div style={{ overflow: 'hidden' }}>
-            <MonthGrid routine={routine} year={year} month={month} today={today} gridRef={gridRef} />
+            <div ref={gridRef} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+              {cells.map((day, i) => {
+                if (!day) return <div key={`e${i}`} />;
+                const dateStr = toDateStr(new Date(year, month, day));
+                const state   = getDayState(routine, dateStr, today);
+                const isToday = dateStr === today;
+
+                let bg    = 'transparent';
+                let color = T.subtle;
+                if (state === 'off')     { color = T.text; }
+                if (state === 'done')    { bg = '#2A3A1A'; color = T.oliveLight; }
+                if (state === 'partial') { bg = '#3A2800'; color = ORANGE; }
+                if (state === 'missed')  { bg = '#3A1C1C'; color = T.red; }
+                if (state === 'pending') { bg = '#3A2E00'; color = T.khaki; }
+
+                return (
+                  <div key={day} style={{
+                    aspectRatio: '1',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 5, background: bg,
+                    border: `1.5px solid ${isToday ? T.khaki : 'transparent'}`,
+                    fontSize: 11, color,
+                    fontWeight: isToday ? 700 : 400,
+                  }}>
+                    {day}
+                  </div>
+                );
+              })}
+            </div>
           </div>
 
           {/* Legend */}
