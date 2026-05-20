@@ -185,8 +185,8 @@ export function useRoutines(userId) {
     const today = todayStr();
     const list  = todayRoutines();
     return {
-      total: list.length,
-      done: list.filter(r => getCompletionCount(r, today) >= getRequiredForDate(r, today)).length,
+      total: list.reduce((acc, r) => acc + getRequiredForDate(r, today), 0),
+      done:  list.reduce((acc, r) => acc + Math.min(getCompletionCount(r, today), getRequiredForDate(r, today)), 0),
     };
   }, [todayRoutines]);
 
@@ -201,10 +201,13 @@ export function useRoutines(userId) {
       return getScheduleForDate(r, dateStr).includes(getDOW(dateStr));
     });
     if (!list.length) return null;
+    const isToday = dateStr === todayStr();
     const sum = list.reduce((acc, r) => {
       const required = getRequiredForDate(r, dateStr);
       const count    = getCompletionCount(r, dateStr);
-      return acc + Math.min(count, required) / required;
+      // For today, treat each routine as binary (all-or-nothing) so partial
+      // multi-completion progress doesn't inflate the day's color.
+      return acc + (isToday ? (count >= required ? 1 : 0) : Math.min(count, required) / required);
     }, 0);
     return sum / list.length;
   }, [routines]);
