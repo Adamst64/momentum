@@ -38,10 +38,12 @@ function computeStats(routine, today) {
     if (state === 'done') {
       progress += 1; total++; greenDays++;
     } else if (state === 'partial') {
-      const required = getRequiredForDate(routine, ds);
-      const count    = getCompletionCount(routine, ds);
-      progress += count / required;
-      total++; partialDays++;
+      if (ds !== today) {
+        const required = getRequiredForDate(routine, ds);
+        const count    = getCompletionCount(routine, ds);
+        progress += count / required;
+        total++; partialDays++;
+      }
     } else if (state === 'missed') {
       total++; redDays++;
     }
