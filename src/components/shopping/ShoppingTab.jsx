@@ -109,7 +109,7 @@ export default function ShoppingTab({ hook, userId }) {
           tags={tags}
           onEdit={updateInventoryItem}
           onDelete={deleteInventoryItem}
-          onAddToList={(invItem) => { addItemFromInventory(invItem); setView('list'); }}
+          onAddToList={(invItem) => { addItemFromInventory(invItem); }}
           onAddTag={addTag}
           onUpdateTag={updateTag}
           onDeleteTag={deleteTag}
