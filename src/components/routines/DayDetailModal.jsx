@@ -4,9 +4,10 @@ import { T } from '../../theme';
 import { formatLongDate, todayStr } from '../../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
 
-export default function DayDetailModal({ dateStr, forDate, incrementDay, onClose }) {
+export default function DayDetailModal({ dateStr, forDate, incrementDay, editable = true, onClose }) {
   const today = todayStr();
   const isFuture = dateStr > today;
+  const canEdit = !isFuture && editable;
   const routinesForDay = forDate(dateStr);
 
   return (
@@ -29,14 +30,14 @@ export default function DayDetailModal({ dateStr, forDate, incrementDay, onClose
             return (
               <div
                 key={r.id}
-                onClick={isFuture ? undefined : () => incrementDay(r.id, dateStr)}
+                onClick={canEdit ? () => incrementDay(r.id, dateStr) : undefined}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '14px 16px',
                   background: T.bg,
                   borderRadius: 12,
                   border: `1px solid ${isFuture ? T.cardBorder : done ? T.olive + '50' : partial ? '#FF9F0A40' : T.red + '40'}`,
-                  cursor: isFuture ? 'default' : 'pointer',
+                  cursor: canEdit ? 'pointer' : 'default',
                   opacity: isFuture ? 0.65 : 1,
                 }}
               >
@@ -62,7 +63,7 @@ export default function DayDetailModal({ dateStr, forDate, incrementDay, onClose
         </div>
       )}
 
-      {!isFuture && routinesForDay.length > 0 && (
+      {canEdit && routinesForDay.length > 0 && (
         <div style={{ marginTop: 16, fontSize: 12, color: T.muted, textAlign: 'center' }}>
           Tap a routine to increment
         </div>

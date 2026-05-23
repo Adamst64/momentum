@@ -47,7 +47,8 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
           const dateStr   = toDateStr(new Date(year, month, day));
           const isToday   = dateStr === today;
           const isFuture  = dateStr > today;
-          const isEditable = !isFuture && (!minEditableDate || dateStr >= minEditableDate);
+          const isPast     = !isFuture;
+          const isEditable = isPast && (!minEditableDate || dateStr >= minEditableDate);
           const ratio     = isFuture ? null : dayRatio(dateStr);
           const hasData  = ratio !== null;
 
@@ -63,7 +64,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
             <div
               key={day}
               className={isToday ? 'cal-today-live' : undefined}
-              onClick={() => isEditable && onDayClick && onDayClick(dateStr)}
+              onClick={() => isPast && onDayClick && onDayClick(dateStr)}
               style={{
                 aspectRatio: '1',
                 borderRadius: 7,
@@ -77,7 +78,7 @@ export default function MonthlyCalendar({ dayRatio, onDayClick, minEditableDate 
                 justifyContent: 'center',
                 paddingTop: 3,
                 background: T.bg,
-                cursor: isEditable ? 'pointer' : 'default',
+                cursor: isPast ? 'pointer' : 'default',
               }}
             >
               {/* Water fill — rises from bottom */}

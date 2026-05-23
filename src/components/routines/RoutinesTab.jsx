@@ -212,7 +212,13 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       )}
 
       {selectedDay && (
-        <DayDetailModal dateStr={selectedDay} forDate={forDate} incrementDay={incrementDay} onClose={() => setSelectedDay(null)} />
+        <DayDetailModal
+          dateStr={selectedDay}
+          forDate={forDate}
+          incrementDay={incrementDay}
+          editable={selectedDay >= addDays(today, -6)}
+          onClose={() => setSelectedDay(null)}
+        />
       )}
 
       {pendingDelete && (
