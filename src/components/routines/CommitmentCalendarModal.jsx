@@ -35,6 +35,7 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
 
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
+  const [confirmDay, setConfirmDay] = useState(null);
 
   const gridRef = useRef(null);
 
@@ -130,7 +131,7 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
               return (
                 <div
                   key={day}
-                  onClick={isEditable ? () => onToggleFailed(commitment.id, ds) : undefined}
+                  onPointerUp={isEditable ? () => setConfirmDay({ ds, failed }) : undefined}
                   style={{
                     aspectRatio: '1',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -139,6 +140,8 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
                     fontSize: 12, fontWeight: isToday ? 700 : 400,
                     color: isToday && (isBefore || isFuture) ? T.khaki : textColor,
                     cursor: isEditable ? 'pointer' : 'default',
+                    touchAction: 'manipulation',
+                    userSelect: 'none',
                   }}
                 >
                   {day}
@@ -158,10 +161,48 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
           ))}
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, textAlign: 'center' }}>
-          Tap any day in the past week to toggle
+          Tap any highlighted day in the past week to edit
         </div>
 
       </div>
+
+      {confirmDay && ReactDOM.createPortal(
+        <div
+          onClick={() => setConfirmDay(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{
+            width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0',
+            padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
+          }}>
+            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+              {formatShortDate(confirmDay.ds)}
+            </div>
+            <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>
+              Currently marked as <strong style={{ color: confirmDay.failed ? T.red : T.green }}>
+                {confirmDay.failed ? 'Failed' : 'Clean'}
+              </strong>. Change to <strong style={{ color: confirmDay.failed ? T.green : T.red }}>
+                {confirmDay.failed ? 'Clean' : 'Failed'}
+              </strong>?
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                onClick={() => setConfirmDay(null)}
+                style={{ flex: 1, padding: 13, borderRadius: 12, background: T.subtle, color: T.muted, fontSize: 15, fontWeight: 600 }}
+              >Cancel</button>
+              <button
+                onClick={() => { onToggleFailed(commitment.id, confirmDay.ds); setConfirmDay(null); }}
+                style={{
+                  flex: 1, padding: 13, borderRadius: 12, fontSize: 15, fontWeight: 600,
+                  background: confirmDay.failed ? '#0D2A0D' : '#2A0D0D',
+                  color: confirmDay.failed ? T.green : T.red,
+                }}
+              >{confirmDay.failed ? 'Mark Clean' : 'Mark Failed'}</button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>,
     document.body
   );
