@@ -95,12 +95,22 @@ function InventoryItem({ item, tags, inList, onEdit, onDelete, onAddToList, onOp
 export default function InventoryTab({ inventory, items, tags, onEdit, onDelete, onAddToList, onAddTag, onUpdateTag, onDeleteTag }) {
   const [tagPickerItem, setTagPickerItem] = useState(null);
   const [search, setSearch] = useState('');
+  const [filterTagId, setFilterTagId] = useState(null);
 
   const listNames = new Set((items || []).map(i => i.name.toLowerCase()));
 
-  const filtered = search.trim()
-    ? inventory.filter(i => i.name.toLowerCase().includes(search.trim().toLowerCase()))
-    : inventory;
+  const sorted = [...inventory].sort((a, b) => {
+    const aInList = listNames.has(a.name.toLowerCase());
+    const bInList = listNames.has(b.name.toLowerCase());
+    if (aInList !== bInList) return aInList ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const filtered = sorted.filter(i => {
+    if (search.trim() && !i.name.toLowerCase().includes(search.trim().toLowerCase())) return false;
+    if (filterTagId && !(i.tagIds || []).includes(filterTagId)) return false;
+    return true;
+  });
 
   const handleTagPickerConfirm = async (selectedIds) => {
     if (tagPickerItem) await onEdit(tagPickerItem.id, { tagIds: selectedIds });
@@ -120,6 +130,34 @@ export default function InventoryTab({ inventory, items, tags, onEdit, onDelete,
           color: T.text, fontSize: 15, outline: 'none',
         }}
       />
+
+      {tags.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+          <button
+            onClick={() => setFilterTagId(null)}
+            style={{
+              flexShrink: 0, padding: '5px 12px', borderRadius: 20,
+              fontSize: 12, fontWeight: 600,
+              background: filterTagId === null ? T.olive : T.card,
+              color: filterTagId === null ? '#fff' : T.muted,
+              border: `1px solid ${filterTagId === null ? T.olive : T.cardBorder}`,
+            }}
+          >All</button>
+          {tags.map(tag => (
+            <button
+              key={tag.id}
+              onClick={() => setFilterTagId(filterTagId === tag.id ? null : tag.id)}
+              style={{
+                flexShrink: 0, padding: '5px 12px', borderRadius: 20,
+                fontSize: 12, fontWeight: 600,
+                background: filterTagId === tag.id ? tag.color + '33' : T.card,
+                color: filterTagId === tag.id ? tag.color : T.muted,
+                border: `1px solid ${filterTagId === tag.id ? tag.color : T.cardBorder}`,
+              }}
+            >{tag.name}</button>
+          ))}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <div style={{
