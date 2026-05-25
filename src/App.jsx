@@ -10,6 +10,7 @@ import BirthdaysTab from './components/birthdays/BirthdaysTab';
 import WorkTab from './components/work/WorkTab';
 import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
+import ResetPasswordScreen from './components/ResetPasswordScreen';
 import { useAuth } from './hooks/useAuth';
 import { useRoutines } from './hooks/useRoutines';
 import { useCommitments } from './hooks/useCommitments';
@@ -23,9 +24,13 @@ import { registerPushToken, getNotificationPermission } from './utils/pushNotifi
 const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays', work: 'Work' };
 
 export default function App() {
-  const { user, signIn, signUp, logOut, changePassword, resetPassword } = useAuth();
+  const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
   const [tab, setTab] = useState('routines');
   const [showSettings, setShowSettings] = useState(false);
+  const [resetCode] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    return p.get('mode') === 'resetPassword' ? p.get('oobCode') : null;
+  });
 
   const userId = user?.uid ?? null;
   const [features, setFeatures]         = useState({});
@@ -84,6 +89,10 @@ export default function App() {
         <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive }} />
       </div>
     );
+  }
+
+  if (resetCode) {
+    return <ResetPasswordScreen oobCode={resetCode} verifyResetCode={verifyResetCode} applyPasswordReset={applyPasswordReset} />;
   }
 
   if (!user) {

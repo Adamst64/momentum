@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
+import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, reauthenticateWithCredential, EmailAuthProvider, updatePassword, sendPasswordResetEmail, verifyPasswordResetCode, confirmPasswordReset } from 'firebase/auth';
 import { auth } from '../firebase';
 
 export function useAuth() {
@@ -19,7 +19,13 @@ export function useAuth() {
     await updatePassword(auth.currentUser, newPassword);
   };
 
-  const resetPassword = (email) => sendPasswordResetEmail(auth, email);
+  const resetPassword = (email) => sendPasswordResetEmail(auth, email, {
+    url: window.location.origin + import.meta.env.BASE_URL,
+    handleCodeInApp: true,
+  });
 
-  return { user, signIn, signUp, logOut, changePassword, resetPassword };
+  const applyPasswordReset = (oobCode, newPassword) => confirmPasswordReset(auth, oobCode, newPassword);
+  const verifyResetCode    = (oobCode) => verifyPasswordResetCode(auth, oobCode);
+
+  return { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode };
 }
