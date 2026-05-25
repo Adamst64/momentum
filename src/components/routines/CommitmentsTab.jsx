@@ -210,6 +210,7 @@ export default function CommitmentsTab({ hook }) {
       {calendarItem && (
         <CommitmentCalendarModal
           commitment={calendarItem}
+          onToggleFailed={toggleFailed}
           onClose={() => setCalendarItem(null)}
         />
       )}

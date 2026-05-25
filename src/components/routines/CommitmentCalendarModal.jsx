@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
-import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
+import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT, addDays } from '../../utils/dateUtils';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
 function pad(n) { return String(n).padStart(2, '0'); }
@@ -28,9 +28,10 @@ function computeStats(commitment, today) {
   return { clean, total, pct: total > 0 ? Math.round(clean / total * 100) : null };
 }
 
-export default function CommitmentCalendarModal({ commitment, onClose }) {
-  const today = todayStr();
-  const now   = new Date(today + 'T12:00:00');
+export default function CommitmentCalendarModal({ commitment, onToggleFailed, onClose }) {
+  const today           = todayStr();
+  const minEditableDate = addDays(today, -6);
+  const now             = new Date(today + 'T12:00:00');
 
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
@@ -114,10 +115,11 @@ export default function CommitmentCalendarModal({ commitment, onClose }) {
             {cells.map((day, i) => {
               if (!day) return <div key={`e${i}`} />;
               const ds       = `${year}-${pad(month + 1)}-${pad(day)}`;
-              const isBefore = ds < created;
-              const isFuture = ds > today;
-              const isToday  = ds === today;
-              const failed   = !!commitment.failures?.[ds];
+              const isBefore   = ds < created;
+              const isFuture   = ds > today;
+              const isToday    = ds === today;
+              const isEditable = !isBefore && !isFuture && ds >= minEditableDate;
+              const failed     = !!commitment.failures?.[ds];
 
               let bg = 'transparent', textColor = T.subtle;
               if (!isBefore && !isFuture) {
@@ -126,14 +128,19 @@ export default function CommitmentCalendarModal({ commitment, onClose }) {
               }
 
               return (
-                <div key={day} style={{
-                  aspectRatio: '1',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  borderRadius: 7, background: bg,
-                  border: `1.5px solid ${isToday ? T.khaki : 'transparent'}`,
-                  fontSize: 12, fontWeight: isToday ? 700 : 400,
-                  color: isToday && (isBefore || isFuture) ? T.khaki : textColor,
-                }}>
+                <div
+                  key={day}
+                  onClick={isEditable ? () => onToggleFailed(commitment.id, ds) : undefined}
+                  style={{
+                    aspectRatio: '1',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    borderRadius: 7, background: bg,
+                    border: `1.5px solid ${isToday ? T.khaki : isEditable ? (failed ? T.red + '88' : T.green + '88') : 'transparent'}`,
+                    fontSize: 12, fontWeight: isToday ? 700 : 400,
+                    color: isToday && (isBefore || isFuture) ? T.khaki : textColor,
+                    cursor: isEditable ? 'pointer' : 'default',
+                  }}
+                >
                   {day}
                 </div>
               );
@@ -149,6 +156,9 @@ export default function CommitmentCalendarModal({ commitment, onClose }) {
               <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
             </div>
           ))}
+        </div>
+        <div style={{ marginTop: 10, fontSize: 11, color: T.muted, textAlign: 'center' }}>
+          Tap any day in the past week to toggle
         </div>
 
       </div>
