@@ -152,7 +152,8 @@ export default function CommitmentsTab({ hook }) {
   const { commitments, addCommitment, updateCommitment, deleteCommitment, toggleFailed } = hook;
   const [showAdd, setShowAdd]           = useState(false);
   const [editing, setEditing]           = useState(null);
-  const [calendarItem, setCalendarItem] = useState(null);
+  const [calendarItemId, setCalendarItemId] = useState(null);
+  const calendarItem = commitments.find(c => c.id === calendarItemId) ?? null;
   const today = todayStr();
 
   const sorted = [...commitments].sort((a, b) => a.name.localeCompare(b.name));
@@ -186,7 +187,7 @@ export default function CommitmentsTab({ hook }) {
           onToggleFailed={toggleFailed}
           onEdit={setEditing}
           onDelete={deleteCommitment}
-          onShowCalendar={setCalendarItem}
+          onShowCalendar={c => setCalendarItemId(c.id)}
         />
       ))}
 
@@ -211,7 +212,7 @@ export default function CommitmentsTab({ hook }) {
         <CommitmentCalendarModal
           commitment={calendarItem}
           onToggleFailed={toggleFailed}
-          onClose={() => setCalendarItem(null)}
+          onClose={() => setCalendarItemId(null)}
         />
       )}
     </div>
