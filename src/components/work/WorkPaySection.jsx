@@ -35,12 +35,14 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
           </div>
         </div>
         <button
-          onClick={() => save(!paid)}
+          onClick={() => { if (!paid || editing) save(!paid); }}
           style={{
             padding: '6px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, flexShrink: 0,
             background: paid ? T.green + '22' : T.subtle,
             color: paid ? T.green : T.muted,
             border: `1px solid ${paid ? T.green + '44' : T.cardBorder}`,
+            cursor: paid && !editing ? 'default' : 'pointer',
+            opacity: paid && !editing ? 0.85 : 1,
           }}
         >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
       </div>
