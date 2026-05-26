@@ -123,13 +123,22 @@ export function useRoutines(userId) {
     if (!userId) return;
     const routine = routines.find(r => r.id === id);
     const today = todayStr();
+    const yesterday = addDays(today, -1);
     const rangeFrom = routine?.pausedAt || today;
     // "start today" excludes up to yesterday; "start tomorrow" excludes up to today
-    const rangeTo = startTomorrow ? today : addDays(today, -1);
-    const update = { paused: false, pausedAt: null, activeFrom: null };
+    const rangeTo = startTomorrow ? today : yesterday;
+    let ranges = routine?.pausedRanges || [];
     if (rangeFrom <= rangeTo) {
-      update.pausedRanges = [...(routine?.pausedRanges || []), { from: rangeFrom, to: rangeTo }];
+      ranges = [...ranges, { from: rangeFrom, to: rangeTo }];
     }
+    if (!startTomorrow) {
+      // If a prior "start tomorrow" decision added a range ending today, trim it so
+      // today is not excluded from progress counting.
+      ranges = ranges
+        .map(pr => pr.to >= today ? { ...pr, to: yesterday } : pr)
+        .filter(pr => pr.from <= pr.to);
+    }
+    const update = { paused: false, pausedAt: null, activeFrom: null, pausedRanges: ranges };
     if (startTomorrow) {
       update.activeFrom = addDays(today, 1);
     }
