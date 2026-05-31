@@ -90,8 +90,8 @@ export default function ShoppingTab({ hook, userId }) {
         </div>
       )}
 
-      {/* List / Inventory toggle — only shown when the list has inventory enabled */}
-      {activeList?.hasInventory && (
+      {/* List / Inventory toggle — shown when inventory is enabled or list already has inventory items */}
+      {(activeList?.hasInventory || inventory.length > 0) && (
         <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2, margin: '0 16px 12px' }}>
           {['list', 'inventory'].map(v => (
             <button key={v} onClick={() => setView(v)} style={{
@@ -107,7 +107,7 @@ export default function ShoppingTab({ hook, userId }) {
         </div>
       )}
 
-      {view === 'inventory' && activeList?.hasInventory ? (
+      {view === 'inventory' && (activeList?.hasInventory || inventory.length > 0) ? (
         <InventoryTab
           inventory={inventory}
           items={items}
