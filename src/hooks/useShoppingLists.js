@@ -90,7 +90,8 @@ export function useShoppingLists(userId) {
 
   // Listen to items, tags, and inventory for the active list
   useEffect(() => {
-    if (!activeListId) { setItems([]); setTags([]); setInventory([]); return; }
+    setItems([]); setTags([]); setInventory([]);
+    if (!activeListId) return;
 
     const itemsUnsub = onSnapshot(collection(db, 'lists', activeListId, 'items'), snap => {
       const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
