@@ -263,13 +263,14 @@ export function useShoppingLists(userId) {
   }, [userId, activeListId]);
 
   // ── List management ────────────────────────────────────────────────────────
-  const createList = useCallback(async (name) => {
+  const createList = useCallback(async (name, hasInventory = false) => {
     if (!userId || !name.trim()) return;
     const id = genId();
     await setDoc(doc(db, 'lists', id), {
       name: name.trim(), ownerId: userId,
       members: [userId], inviteCode: genInviteCode(),
       createdAt: new Date().toISOString(),
+      hasInventory,
     });
     setActiveListId(id);
   }, [userId]);

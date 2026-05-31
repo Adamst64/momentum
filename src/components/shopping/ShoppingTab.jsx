@@ -25,7 +25,10 @@ export default function ShoppingTab({ hook, userId }) {
   const [showShare, setShowShare]       = useState(false);
   const [showNewList, setShowNewList]   = useState(false);
   const [newListName, setNewListName]   = useState('');
+  const [newListInventory, setNewListInventory] = useState(false);
   const inputRef = useRef(null);
+
+  const closeNewList = () => { setShowNewList(false); setNewListName(''); setNewListInventory(false); };
 
   useEffect(() => { setFilterTagId(null); setView('list'); }, [activeListId]);
 
@@ -87,22 +90,24 @@ export default function ShoppingTab({ hook, userId }) {
         </div>
       )}
 
-      {/* List / Inventory toggle */}
-      <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2, margin: '0 16px 12px' }}>
-        {['list', 'inventory'].map(v => (
-          <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, padding: '7px 0', borderRadius: 8,
-            background: view === v ? T.card : 'transparent',
-            color: view === v ? T.text : T.muted,
-            fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
-            textTransform: 'capitalize',
-          }}>
-            {v === 'inventory' ? `Inventory${inventory.length > 0 ? ` (${inventory.length})` : ''}` : 'List'}
-          </button>
-        ))}
-      </div>
+      {/* List / Inventory toggle — only shown when the list has inventory enabled */}
+      {activeList?.hasInventory && (
+        <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2, margin: '0 16px 12px' }}>
+          {['list', 'inventory'].map(v => (
+            <button key={v} onClick={() => setView(v)} style={{
+              flex: 1, padding: '7px 0', borderRadius: 8,
+              background: view === v ? T.card : 'transparent',
+              color: view === v ? T.text : T.muted,
+              fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
+              textTransform: 'capitalize',
+            }}>
+              {v === 'inventory' ? `Inventory${inventory.length > 0 ? ` (${inventory.length})` : ''}` : 'List'}
+            </button>
+          ))}
+        </div>
+      )}
 
-      {view === 'inventory' ? (
+      {view === 'inventory' && activeList?.hasInventory ? (
         <InventoryTab
           inventory={inventory}
           items={items}
@@ -272,7 +277,7 @@ export default function ShoppingTab({ hook, userId }) {
 
       {showNewList && ReactDOM.createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
-          <div onClick={() => { setShowNewList(false); setNewListName(''); }}
+          <div onClick={closeNewList}
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -284,7 +289,7 @@ export default function ShoppingTab({ hook, userId }) {
               onChange={e => setNewListName(e.target.value)}
               onKeyDown={e => {
                 if (e.key === 'Enter' && newListName.trim()) {
-                  createList(newListName); setShowNewList(false); setNewListName('');
+                  createList(newListName, newListInventory); closeNewList();
                 }
               }}
               placeholder="List name"
@@ -295,13 +300,35 @@ export default function ShoppingTab({ hook, userId }) {
                 fontSize: 15, outline: 'none', boxSizing: 'border-box',
               }}
             />
+            <button
+              onClick={() => setNewListInventory(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                width: '100%', padding: '11px 14px', borderRadius: 10, marginBottom: 12,
+                background: T.bg, border: `1px solid ${newListInventory ? T.olive + '66' : T.cardBorder}`,
+                color: newListInventory ? T.text : T.muted, fontSize: 14, boxSizing: 'border-box',
+              }}
+            >
+              <span>Enable inventory</span>
+              <div style={{
+                width: 36, height: 20, borderRadius: 10, position: 'relative',
+                background: newListInventory ? T.olive : T.subtle,
+                transition: 'background 0.2s', flexShrink: 0,
+              }}>
+                <div style={{
+                  position: 'absolute', top: 3, left: newListInventory ? 19 : 3,
+                  width: 14, height: 14, borderRadius: '50%', background: '#fff',
+                  transition: 'left 0.2s',
+                }} />
+              </div>
+            </button>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => { setShowNewList(false); setNewListName(''); }} style={{
+              <button onClick={closeNewList} style={{
                 flex: 1, padding: '12px', borderRadius: 10, background: 'transparent',
                 border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 15,
               }}>Cancel</button>
               <button
-                onClick={() => { createList(newListName); setShowNewList(false); setNewListName(''); }}
+                onClick={() => { createList(newListName, newListInventory); closeNewList(); }}
                 disabled={!newListName.trim()}
                 style={{
                   flex: 1, padding: '12px', borderRadius: 10,
