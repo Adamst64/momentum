@@ -26,9 +26,24 @@ export default function ShoppingTab({ hook, userId }) {
   const [showNewList, setShowNewList]   = useState(false);
   const [newListName, setNewListName]   = useState('');
   const [newListInventory, setNewListInventory] = useState(false);
+  const [menuList, setMenuList]         = useState(null); // list object for the manage sheet
+  const [menuRenaming, setMenuRenaming] = useState(false);
+  const [menuNewName, setMenuNewName]   = useState('');
+  const [menuConfirmDelete, setMenuConfirmDelete] = useState(false);
+  const longPressTimer = useRef(null);
   const inputRef = useRef(null);
 
   const closeNewList = () => { setShowNewList(false); setNewListName(''); setNewListInventory(false); };
+  const closeMenu = () => { setMenuList(null); setMenuRenaming(false); setMenuNewName(''); setMenuConfirmDelete(false); };
+
+  const handleTabTouchStart = (list) => {
+    longPressTimer.current = setTimeout(() => {
+      setActiveListId(list.id);
+      setMenuList(list);
+      setMenuNewName(list.name);
+    }, 500);
+  };
+  const handleTabTouchEnd = () => clearTimeout(longPressTimer.current);
 
   useEffect(() => { setFilterTagId(null); setView('list'); }, [activeListId]);
 
@@ -62,13 +77,21 @@ export default function ShoppingTab({ hook, userId }) {
         <div style={{ display: 'flex', alignItems: 'center', padding: '0 16px 12px', gap: 8 }}>
           <div style={{ display: 'flex', gap: 6, flex: 1, overflowX: 'auto', paddingBottom: 2 }}>
             {lists.map(list => (
-              <button key={list.id} onClick={() => setActiveListId(list.id)} style={{
-                padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
-                whiteSpace: 'nowrap', flexShrink: 0,
-                background: list.id === activeListId ? T.olive : T.card,
-                color: list.id === activeListId ? T.text : T.muted,
-                border: `1px solid ${list.id === activeListId ? T.olive : T.cardBorder}`,
-              }}>
+              <button
+                key={list.id}
+                onClick={() => setActiveListId(list.id)}
+                onTouchStart={() => handleTabTouchStart(list)}
+                onTouchEnd={handleTabTouchEnd}
+                onTouchMove={handleTabTouchEnd}
+                onContextMenu={e => { e.preventDefault(); setActiveListId(list.id); setMenuList(list); setMenuNewName(list.name); }}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600,
+                  whiteSpace: 'nowrap', flexShrink: 0,
+                  background: list.id === activeListId ? T.olive : T.card,
+                  color: list.id === activeListId ? T.text : T.muted,
+                  border: `1px solid ${list.id === activeListId ? T.olive : T.cardBorder}`,
+                }}
+              >
                 {list.name}
               </button>
             ))}
@@ -337,6 +360,83 @@ export default function ShoppingTab({ hook, userId }) {
                 }}
               >Create</button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {menuList && ReactDOM.createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+          <div onClick={closeMenu} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
+          <div style={{
+            position: 'absolute', bottom: 0, left: 0, right: 0,
+            background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 20px 32px',
+          }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 16 }}>{menuList.name}</div>
+
+            {menuRenaming ? (
+              <div style={{ marginBottom: 12 }}>
+                <input
+                  value={menuNewName}
+                  onChange={e => setMenuNewName(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && menuNewName.trim()) {
+                      renameList(menuNewName); closeMenu();
+                    }
+                  }}
+                  autoFocus
+                  style={{
+                    width: '100%', padding: '12px 14px', borderRadius: 10, marginBottom: 8,
+                    background: T.bg, border: `1px solid ${T.olive}`, color: T.text,
+                    fontSize: 15, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setMenuRenaming(false)} style={{
+                    flex: 1, padding: '11px', borderRadius: 10, background: 'transparent',
+                    border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 14,
+                  }}>Cancel</button>
+                  <button onClick={() => { renameList(menuNewName); closeMenu(); }} disabled={!menuNewName.trim()} style={{
+                    flex: 1, padding: '11px', borderRadius: 10,
+                    background: menuNewName.trim() ? T.olive : T.subtle, color: T.text, fontSize: 14, fontWeight: 600,
+                  }}>Save</button>
+                </div>
+              </div>
+            ) : menuConfirmDelete ? (
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ fontSize: 14, color: T.muted, marginBottom: 14 }}>
+                  {menuList.ownerId === userId && (menuList.members?.length ?? 1) <= 1
+                    ? `Delete "${menuList.name}"? This can't be undone.`
+                    : `Leave "${menuList.name}"?`}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => setMenuConfirmDelete(false)} style={{
+                    flex: 1, padding: '11px', borderRadius: 10, background: 'transparent',
+                    border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 14,
+                  }}>Cancel</button>
+                  <button onClick={() => { leaveOrDeleteList(); closeMenu(); }} style={{
+                    flex: 1, padding: '11px', borderRadius: 10,
+                    background: T.red + '22', color: T.red,
+                    border: `1px solid ${T.red}44`, fontSize: 14, fontWeight: 600,
+                  }}>
+                    {menuList.ownerId === userId && (menuList.members?.length ?? 1) <= 1 ? 'Delete' : 'Leave'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button onClick={() => setMenuRenaming(true)} style={{
+                  padding: '13px 16px', borderRadius: 12, textAlign: 'left',
+                  background: T.bg, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 15,
+                }}>Rename</button>
+                <button onClick={() => setMenuConfirmDelete(true)} style={{
+                  padding: '13px 16px', borderRadius: 12, textAlign: 'left',
+                  background: 'transparent', border: `1px solid ${T.red}44`, color: T.red, fontSize: 15,
+                }}>
+                  {menuList.ownerId === userId && (menuList.members?.length ?? 1) <= 1 ? 'Delete list' : 'Leave list'}
+                </button>
+              </div>
+            )}
           </div>
         </div>,
         document.body
