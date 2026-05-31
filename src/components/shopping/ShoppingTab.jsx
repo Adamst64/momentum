@@ -90,6 +90,7 @@ export default function ShoppingTab({ hook, userId }) {
                   background: list.id === activeListId ? T.olive : T.card,
                   color: list.id === activeListId ? T.text : T.muted,
                   border: `1px solid ${list.id === activeListId ? T.olive : T.cardBorder}`,
+                  userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none',
                 }}
               >
                 {list.name}

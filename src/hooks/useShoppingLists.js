@@ -119,6 +119,7 @@ export function useShoppingLists(userId) {
   const addItem = useCallback(async (name, tagIds = []) => {
     if (!userId || !name.trim() || !activeListId) return;
     const normalizedName = name.trim().toLowerCase();
+    const invEnabled = lists.find(l => l.id === activeListId)?.hasInventory || inventory.length > 0;
 
     // If item with same name already exists in the list, update it instead of duplicating
     const existingItem = items.find(i => i.name.toLowerCase() === normalizedName);
@@ -127,7 +128,7 @@ export function useShoppingLists(userId) {
       await updateDoc(doc(db, 'lists', activeListId, 'items', existingItem.id), {
         checked: false, tagIds: mergedTags,
       });
-      await syncInventoryTags(activeListId, inventory, normalizedName, mergedTags);
+      if (invEnabled) await syncInventoryTags(activeListId, inventory, normalizedName, mergedTags);
       return;
     }
 
@@ -135,29 +136,35 @@ export function useShoppingLists(userId) {
     await setDoc(doc(db, 'lists', activeListId, 'items', id), {
       name: name.trim(), checked: false, order: Date.now(), tagIds,
     });
-    // Upsert to inventory (case-insensitive dedup by name)
-    const existingInv = inventory.find(i => i.name.toLowerCase() === normalizedName);
-    if (!existingInv) {
-      await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
-        name: name.trim(), tagIds,
-      });
-    } else {
-      await syncInventoryTags(activeListId, inventory, normalizedName, tagIds);
+    if (invEnabled) {
+      // Upsert to inventory (case-insensitive dedup by name)
+      const existingInv = inventory.find(i => i.name.toLowerCase() === normalizedName);
+      if (!existingInv) {
+        await setDoc(doc(db, 'lists', activeListId, 'inventory', genId()), {
+          name: name.trim(), tagIds,
+        });
+      } else {
+        await syncInventoryTags(activeListId, inventory, normalizedName, tagIds);
+      }
     }
-  }, [userId, activeListId, items, inventory]);
+  }, [userId, activeListId, lists, items, inventory]);
 
   const updateItemTags = useCallback(async (id, tagIds) => {
     if (!activeListId) return;
     const item = items.find(i => i.id === id);
     await updateDoc(doc(db, 'lists', activeListId, 'items', id), { tagIds });
-    if (item) await syncInventoryTags(activeListId, inventory, item.name.toLowerCase(), tagIds);
-  }, [activeListId, items, inventory]);
+    const invEnabled = lists.find(l => l.id === activeListId)?.hasInventory || inventory.length > 0;
+    if (item && invEnabled) await syncInventoryTags(activeListId, inventory, item.name.toLowerCase(), tagIds);
+  }, [activeListId, lists, items, inventory]);
 
   const renameItem = useCallback(async (id, name) => {
     if (!activeListId || !name.trim()) return;
     const item = items.find(i => i.id === id);
     await updateDoc(doc(db, 'lists', activeListId, 'items', id), { name: name.trim() });
     if (!item) return;
+
+    const invEnabled = lists.find(l => l.id === activeListId)?.hasInventory || inventory.length > 0;
+    if (!invEnabled) return;
 
     const oldNorm = item.name.toLowerCase();
     const newNorm = name.trim().toLowerCase();
@@ -184,7 +191,7 @@ export function useShoppingLists(userId) {
         });
       }
     }
-  }, [activeListId, items, inventory]);
+  }, [activeListId, lists, items, inventory]);
 
   const toggleItem = useCallback(async (id) => {
     if (!activeListId) return;
