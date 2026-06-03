@@ -2,6 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { T } from '../../theme';
 
 function Counter({ label, value, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [raw, setRaw] = useState('');
+
+  const startEdit = () => { setRaw(value === 0 ? '' : String(value)); setEditing(true); };
+  const commitEdit = () => {
+    const n = parseInt(raw, 10);
+    onChange(isNaN(n) || n < 0 ? 0 : n);
+    setEditing(false);
+  };
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 0' }}>
       <span style={{ fontSize: 15, color: T.text }}>{label}</span>
@@ -10,7 +20,23 @@ function Counter({ label, value, onChange }) {
           onClick={() => onChange(Math.max(0, value - 1))}
           style={{ width: 36, height: 36, borderRadius: 10, background: T.subtle, color: T.text, fontSize: 22, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >−</button>
-        <span style={{ minWidth: 30, textAlign: 'center', fontSize: 18, fontWeight: 700, color: T.text }}>{value}</span>
+        {editing ? (
+          <input
+            autoFocus
+            type="number"
+            inputMode="numeric"
+            value={raw}
+            onChange={e => setRaw(e.target.value)}
+            onBlur={commitEdit}
+            onKeyDown={e => { if (e.key === 'Enter') { e.target.blur(); } }}
+            style={{ width: 50, textAlign: 'center', fontSize: 18, fontWeight: 700, color: T.text, background: T.subtle, border: 'none', outline: 'none', borderRadius: 8, padding: '4px 0' }}
+          />
+        ) : (
+          <button
+            onClick={startEdit}
+            style={{ minWidth: 30, textAlign: 'center', fontSize: 18, fontWeight: 700, color: T.text, background: 'transparent', padding: '4px 6px', borderRadius: 8 }}
+          >{value}</button>
+        )}
         <button
           onClick={() => onChange(value + 1)}
           style={{ width: 36, height: 36, borderRadius: 10, background: T.subtle, color: T.text, fontSize: 22, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
