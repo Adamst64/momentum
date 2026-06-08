@@ -143,6 +143,28 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
   const allYearCrewIds = [...new Set([...Object.keys(yearDaysMap), ...Object.keys(yearData)])]
     .sort((a, b) => (yearDaysMap[b] || 0) - (yearDaysMap[a] || 0));
 
+  // Avg days/week for the year (exclude current week)
+  const yearCompletedWeeks = Object.entries(grouped)
+    .filter(([wk]) => wk.slice(0, 4) === effectiveSummaryYear && wk !== currentMondayId);
+  const avgDaysPerWeek = yearCompletedWeeks.length > 0
+    ? (yearCompletedWeeks.reduce((s, [, cm]) => s + Object.values(cm).reduce((a, st) => a + st.days.length, 0), 0) / yearCompletedWeeks.length)
+    : null;
+
+  // Avg $/week — only weeks where every crew entry is paid (exclude current week)
+  const fullyPaidWeeks = yearCompletedWeeks.filter(([wk, crewMap]) => {
+    const wd = weeksMap[wk] || {};
+    return Object.keys(crewMap).every(cid => parsePayEntry(wd[cid]).paid);
+  });
+  const avgAmtPerWeek = fullyPaidWeeks.length > 0
+    ? fullyPaidWeeks.reduce((s, [wk]) => {
+        const wd = weeksMap[wk] || {};
+        return s + Object.entries(wd).filter(([k]) => k !== 'id').reduce((a, [, v]) => {
+          const { paid, amount } = parsePayEntry(v);
+          return a + (paid ? amount : 0);
+        }, 0);
+      }, 0) / fullyPaidWeeks.length
+    : null;
+
   const hasAnyData = days.filter(d => !d.isOff).length > 0 || weeks.length > 0;
   if (!hasAnyData) {
     return (
@@ -207,6 +229,26 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
             </div>
             <span style={{ fontSize: 19, fontWeight: 800, color: T.khaki }}>{fmt(yearTotal)}</span>
           </div>
+
+          {/* Averages row */}
+          {(avgDaysPerWeek !== null || avgAmtPerWeek !== null) && (
+            <div style={{ padding: '10px 16px', display: 'flex', gap: 10, borderTop: `1px solid ${T.cardBorder}` }}>
+              {avgDaysPerWeek !== null && (
+                <div style={{ flex: 1, background: T.subtle, borderRadius: 10, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>Avg days / week</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{avgDaysPerWeek.toFixed(1)}</div>
+                  <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{yearCompletedWeeks.length} wk{yearCompletedWeeks.length !== 1 ? 's' : ''}</div>
+                </div>
+              )}
+              {avgAmtPerWeek !== null && (
+                <div style={{ flex: 1, background: T.subtle, borderRadius: 10, padding: '8px 12px' }}>
+                  <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>Avg $ / week</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: T.khaki }}>{fmt(avgAmtPerWeek)}</div>
+                  <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{fullyPaidWeeks.length} paid wk{fullyPaidWeeks.length !== 1 ? 's' : ''}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
