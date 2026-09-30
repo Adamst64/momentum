@@ -111,10 +111,10 @@ exports.sendDayOfReminders = onSchedule(
   }
 );
 
-// ── Task push notifications (every 15 minutes) ────────────────────────────────
+// ── Task push notifications (every 5 minutes) ─────────────────────────────────
 
 exports.sendTaskNotifications = onSchedule(
-  { schedule: 'every 15 minutes' },
+  { schedule: 'every 5 minutes' },
   async () => {
     const db        = getFirestore();
     const messaging = getMessaging();
@@ -142,10 +142,10 @@ exports.sendTaskNotifications = onSchedule(
         const domLocal    = nowInTz.getDate();
         const todayLocal  = `${ymLocal}-${String(domLocal).padStart(2, '0')}`;
 
-        // Check if this 15-minute slot matches the task's notify time
+        // Send once the notify time has passed, but skip if it's more than an hour late
         const [notifyHour, notifyMin] = task.notify.time.split(':').map(Number);
-        if (nowHour !== notifyHour) continue;
-        if (Math.floor(nowMin / 15) !== Math.floor(notifyMin / 15)) continue;
+        const minutesLate = (nowHour * 60 + nowMin) - (notifyHour * 60 + notifyMin);
+        if (minutesLate < 0 || minutesLate >= 60) continue;
 
         // Check if task is due today
         let dueToday = false;
