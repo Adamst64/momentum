@@ -119,7 +119,7 @@ export default function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDel
               onChange={e => setJoinCode(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && handleJoin()}
               placeholder="Enter code"
-              maxLength={6}
+              maxLength={8}
               style={{
                 flex: 1, padding: '11px 14px', borderRadius: 10,
                 background: T.bg, border: `1px solid ${T.cardBorder}`,

@@ -19,8 +19,21 @@ service cloud.firestore {
       allow create: if request.auth != null
                    && request.auth.uid == request.resource.data.ownerId
                    && request.auth.uid in request.resource.data.members;
-      allow update: if isMember();
-      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+      // Members may edit list settings, or remove only themselves (leave).
+      // Joining happens server-side in the joinListByCode function.
+      allow update: if isMember() && (
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['name', 'inviteCode', 'hasInventory'])
+        || (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+          && request.resource.data.members == resource.data.members.removeAll([request.auth.uid])
+        )
+      );
+      // Owner, or the last remaining member, may delete the list
+      allow delete: if request.auth != null && (
+        request.auth.uid == resource.data.ownerId
+        || (isMember() && resource.data.members.size() == 1)
+      );
 
       match /items/{itemId} {
         allow read, write: if request.auth != null

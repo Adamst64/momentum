@@ -20,7 +20,8 @@ export const TAG_COLORS = [
 ];
 
 function genInviteCode() {
-  return Math.random().toString(36).slice(2, 8).toUpperCase();
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint32Array(8)), n => chars[n % chars.length]).join('');
 }
 
 async function syncInventoryTags(listId, inventory, normalizedName, tagIds) {
