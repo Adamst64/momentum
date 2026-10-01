@@ -6,6 +6,7 @@ import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
 import { TAB_DEFS } from './BottomNav';
 import { registerPushToken } from '../utils/pushNotifications';
+import { RESET_CATEGORIES, resetData } from '../utils/resetData';
 
 
 export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork, notes, personalLists, dailyReview, onSaveDailyReview, userId }) {
@@ -51,6 +52,30 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
       setReviewStatus({ ok: true, msg: enabled ? `Reminder set for ${time}` : 'Reminder off' });
     } catch (e) {
       setReviewStatus({ ok: false, msg: e.message || 'Could not save' });
+    }
+  };
+
+  const [resetOpen, setResetOpen]       = useState(false);
+  const [resetKeys, setResetKeys]       = useState([]);
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetBusy, setResetBusy]       = useState(false);
+  const [resetStatus, setResetStatus]   = useState(null);
+  const resetChoices = RESET_CATEGORIES.filter(c => !c.workOnly || showWork);
+  const resetReady   = resetKeys.length > 0 && resetConfirm.trim().toUpperCase() === 'DELETE' && !resetBusy;
+
+  const handleReset = async () => {
+    if (!resetReady) return;
+    setResetBusy(true);
+    setResetStatus(null);
+    try {
+      await resetData(userId, resetKeys);
+      setResetStatus({ ok: true, msg: 'Done. Selected data was deleted.' });
+      setResetKeys([]);
+      setResetConfirm('');
+    } catch (e) {
+      setResetStatus({ ok: false, msg: e.message || 'Something went wrong. Nothing may have been deleted; try again.' });
+    } finally {
+      setResetBusy(false);
     }
   };
 
@@ -250,6 +275,64 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
               {featureStatus && (
                 <div style={{ fontSize: 13, color: featureStatus.ok ? T.green : T.red, marginTop: 8 }}>{featureStatus.msg}</div>
               )}
+            </div>
+          )}
+        </Group>
+
+        <Group>
+          <Row
+            label="Delete data"
+            onTap={() => { setResetOpen(o => !o); setResetStatus(null); }}
+            arrow
+            arrowOpen={resetOpen}
+          />
+          {resetOpen && (
+            <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
+                Choose what to delete. This can't be undone, so use <b style={{ color: T.text }}>Export as JSON</b> above first if you might want it back. Shared shopping lists aren't affected.
+              </div>
+              {resetChoices.map(c => {
+                const on = resetKeys.includes(c.key);
+                return (
+                  <button
+                    key={c.key}
+                    onClick={() => setResetKeys(k => on ? k.filter(x => x !== c.key) : [...k, c.key])}
+                    style={{ display: 'flex', gap: 12, alignItems: 'flex-start', textAlign: 'left', padding: '4px 0' }}
+                  >
+                    <span style={{
+                      width: 20, height: 20, borderRadius: 5, flexShrink: 0, marginTop: 1,
+                      border: `1.5px solid ${on ? T.red : T.subtle}`, background: on ? '#3A1C1C' : 'transparent',
+                      color: T.red, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>{on ? '✓' : ''}</span>
+                    <span>
+                      <span style={{ display: 'block', fontSize: 15, color: T.text }}>{c.label}</span>
+                      <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>{c.hint}</span>
+                    </span>
+                  </button>
+                );
+              })}
+              {resetKeys.length > 0 && (
+                <input
+                  value={resetConfirm}
+                  onChange={e => setResetConfirm(e.target.value)}
+                  placeholder="Type DELETE to confirm"
+                  autoCapitalize="characters"
+                  style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '11px 14px', color: T.text, fontSize: 15, outline: 'none' }}
+                />
+              )}
+              {resetStatus && (
+                <div style={{ fontSize: 13, color: resetStatus.ok ? T.green : T.red }}>{resetStatus.msg}</div>
+              )}
+              <button
+                onClick={handleReset}
+                disabled={!resetReady}
+                style={{
+                  padding: 12, borderRadius: 10, fontSize: 14, fontWeight: 600,
+                  background: resetReady ? T.red : T.subtle, color: '#fff',
+                }}
+              >
+                {resetBusy ? 'Deleting…' : resetKeys.length ? `Delete ${resetKeys.length} selected` : 'Select something to delete'}
+              </button>
             </div>
           )}
         </Group>
