@@ -2,7 +2,8 @@ import React, { useState, useMemo } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, PERIODS, CASH_ID } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK } from '../../utils/investing';
+import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -56,6 +57,14 @@ export default function InvestingTab({ hook, userId }) {
       setUpdating(false);
     }
   };
+
+  const bench = ret && !ret.unavailable ? benchmarkReturn(snapshots, ret.start, assets[BENCHMARK]?.price) : null;
+
+  // Holdings reporting earnings in the coming weeks
+  const upcoming = portfolio.holdings
+    .map(h => ({ symbol: h.symbol, next: assets[h.symbol]?.nextEarnings }))
+    .filter(x => x.next && x.next.date >= today)
+    .sort((a, b) => a.next.date.localeCompare(b.next.date));
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const slices = allocationSlices(portfolio, assets, cashTarget);
@@ -140,12 +149,36 @@ export default function InvestingTab({ hook, userId }) {
                   <span style={{ fontSize: 14, color: gainColor(ret.gain) }}>{signedMoney(ret.gain, hide)}</span>
                 </div>
               )}
+              {ret && !ret.unavailable && (
+                <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>
+                  S&P 500 same period:{' '}
+                  {bench !== null
+                    ? <span style={{ color: gainColor(bench), fontWeight: 600 }}>{pct(bench)}</span>
+                    : <span>not enough history yet</span>}
+                  {bench !== null && ret.pct !== null && (
+                    <span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(2)} pts</span>
+                  )}
+                </div>
+              )}
               <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Excludes cash you added or withdrew — only how your money performed.</div>
             </div>
             <div style={{ marginTop: 12 }}>
               <ValueChart points={chartPoints} hide={hide} />
             </div>
           </Card>
+
+          {upcoming.length > 0 && (
+            <Card>
+              <SectionTitle>Upcoming earnings</SectionTitle>
+              {upcoming.map(u => (
+                <button key={u.symbol} onClick={() => setOpen(u.symbol)} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '6px 0', fontSize: 14 }}>
+                  <span style={{ color: T.text, fontWeight: 700 }}>{u.symbol}</span>
+                  <span style={{ color: u.next.date <= toDateStr(new Date(Date.now() + 7 * 864e5)) ? T.khaki : T.muted, fontSize: 13 }}>{earningsLabel(u.next)}</span>
+                </button>
+              ))}
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>You'll get a reminder the evening before (with notifications on).</div>
+            </Card>
+          )}
 
           <Card style={{ padding: '6px 16px' }}>
             {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
@@ -208,6 +241,30 @@ export default function InvestingTab({ hook, userId }) {
               </div>
             )}
             <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>Tap “set target” to choose your own target %. Drift shows how far off you are.</div>
+          </Card>
+
+          <Card>
+            <SectionTitle>Sectors</SectionTitle>
+            {(() => {
+              const sectors = sectorBreakdown(portfolio.holdings, assets);
+              if (!sectors.length) return <div style={{ fontSize: 13, color: T.muted }}>No priced holdings yet.</div>;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  {sectors.map(s => (
+                    <div key={s.sector}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                        <span style={{ color: T.text }}>{s.sector}</span>
+                        <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>{(s.pct * 100).toFixed(1)}%{!hide && <span style={{ color: T.muted }}> · {money(s.value)}</span>}</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 3, background: T.bg }}>
+                        <div style={{ height: 6, borderRadius: 3, width: `${Math.max(2, s.pct * 100)}%`, background: '#3987e5' }} />
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: T.muted }}>Share of invested money (cash excluded). ETFs are grouped since the free data plan doesn't break them down.</div>
+                </div>
+              );
+            })()}
           </Card>
 
           <Card>

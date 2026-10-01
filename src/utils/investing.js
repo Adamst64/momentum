@@ -10,6 +10,7 @@ import { toDateStr, addDays } from './dateUtils';
 // Buys/sells/dividends/interest move money between cash and holdings and do count.
 
 export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
+export const BENCHMARK = 'SPY'; // S&P 500 ETF; its price is saved with each daily snapshot
 
 export function sortTx(txs) {
   return [...txs].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -179,4 +180,27 @@ export function cashInterestYear(txs, cash, today = toDateStr(new Date())) {
   const from = shiftMonths(today, -12);
   const total = txs.filter(t => t.type === 'interest' && t.date > from).reduce((a, t) => a + t.amount, 0);
   return { total, approxYield: cash > 0 && total > 0 ? total / cash : null };
+}
+
+// S&P 500 (SPY) price change over the same window as periodReturn, or null
+// until a snapshot with a saved SPY price exists at the period start
+export function benchmarkReturn(snapshots, start, spyNow) {
+  if (!start || !spyNow) return null;
+  const snap = [...snapshots].filter(s => s.date <= start && s.spy).sort((a, b) => b.date.localeCompare(a.date))[0];
+  return snap ? spyNow / snap.spy - 1 : null;
+}
+
+// Holdings value grouped by industry; ETFs and anything without a profile share a bucket
+export function sectorBreakdown(holdings, assets) {
+  const by = {};
+  let total = 0;
+  for (const h of holdings) {
+    if (!h.value) continue;
+    const sector = assets[h.symbol]?.industry || 'ETFs & other';
+    by[sector] = (by[sector] || 0) + h.value;
+    total += h.value;
+  }
+  return Object.entries(by)
+    .map(([sector, value]) => ({ sector, value, pct: total ? value / total : 0 }))
+    .sort((a, b) => b.value - a.value);
 }

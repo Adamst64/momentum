@@ -5,6 +5,7 @@ import { formatShortDate } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt, sortTx } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
+import StockInfo from './StockInfo';
 
 const timeAgo = iso => {
   if (!iso) return 'never';
@@ -54,7 +55,7 @@ export function TxList({ txs, hide, onDelete }) {
 }
 
 export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, alerts, setAsset, deleteTx, addAlert, toggleAlert, deleteAlert } = hook;
+  const { portfolio, assets, txs, alerts, setAsset, deleteTx, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
@@ -108,6 +109,10 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             </button>
           ))}
         </div>
+
+        {asset.source === 'finnhub' && (
+          <StockInfo symbol={symbol} price={asset.price} stockInfo={stockInfo} hide={hide} />
+        )}
 
         <div>
           <SectionTitle>Price</SectionTitle>

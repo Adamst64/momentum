@@ -5,7 +5,7 @@ import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { toDateStr } from '../utils/dateUtils';
-import { computePortfolio, CASH_ID } from '../utils/investing';
+import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
 // users/{uid}/invAssets/{SYMBOL} — { symbol, name, source: 'finnhub'|'manual', price, prevClose,
@@ -58,7 +58,9 @@ export function useInvesting(userId) {
     const p = computePortfolio(txs, merged);
     const date = toDateStr(new Date());
     await setDoc(ref('invSnapshots', date), {
-      date, value: p.value, cash: p.cash, netDeposits: p.netDeposits, updatedAt: new Date().toISOString(),
+      date, value: p.value, cash: p.cash, netDeposits: p.netDeposits,
+      spy: merged[BENCHMARK]?.price ?? null,
+      updatedAt: new Date().toISOString(),
     });
   }, [txs, assets, ref]);
 
@@ -82,6 +84,12 @@ export function useInvesting(userId) {
     return 'manual';
   }, [assets, refreshPrices, setAsset]);
 
+  // Key stats, past earnings, profile and recent news for one symbol
+  const stockInfo = useCallback(async (symbol) => {
+    const fn = httpsCallable(getFunctions(getApp()), 'stockInfo');
+    return (await fn({ symbol })).data;
+  }, []);
+
   const addAlert = useCallback((symbol, direction, target) =>
     setDoc(ref('invAlerts', genId()), { symbol, direction, target, enabled: true, createdAt: new Date().toISOString() }), [ref]);
 
@@ -92,7 +100,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
-    addTx, deleteTx, setAsset, removeAsset, refreshPrices, ensureAsset,
+    addTx, deleteTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo,
     addAlert, toggleAlert, deleteAlert,
   };
 }

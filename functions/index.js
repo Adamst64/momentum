@@ -37,6 +37,7 @@ exports.joinListByCode = onCall(async (request) => {
 // ── Investing: live prices on demand ─────────────────────────────────────────
 
 exports.refreshPrices = onCall(request => investing.refreshPrices(getFirestore(), request));
+exports.stockInfo     = onCall(request => investing.stockInfo(getFirestore(), request));
 
 // ── Birthday push notifications ──────────────────────────────────────────────
 

@@ -50,6 +50,39 @@ function summarize(txs, prices) {
   return { cash, netDeposits, holdingsValue, value: cash + holdingsValue, qty };
 }
 
+// ── Extra data kept on each invAssets doc ───────────────────────────────────
+
+const HOURS = h => h * 3600 * 1000;
+const isStale = (iso, ms) => !iso || Date.now() - new Date(iso).getTime() > ms;
+const ymd = d => d.toISOString().slice(0, 10);
+const BENCHMARK = 'SPY'; // S&P 500 ETF, used to compare returns
+
+// Name, industry (sector) and logo. Finnhub's free profile covers stocks, not ETFs.
+async function fetchProfile(sym, key) {
+  const p = await finnhub(`stock/profile2?symbol=${encodeURIComponent(sym)}`, key);
+  return {
+    ...(p?.name ? { name: p.name } : {}),
+    industry: p?.finnhubIndustry || null,
+    logo: p?.logo || null,
+    weburl: p?.weburl || null,
+    profileCheckedAt: new Date().toISOString(),
+  };
+}
+
+// Next earnings report within ~5 weeks, or null
+async function fetchNextEarnings(sym, key) {
+  const from = new Date();
+  const to = new Date(Date.now() + 35 * 864e5);
+  const res = await finnhub(`calendar/earnings?from=${ymd(from)}&to=${ymd(to)}&symbol=${encodeURIComponent(sym)}`, key);
+  const next = (res?.earningsCalendar || [])
+    .filter(e => e.symbol === sym && e.date >= ymd(from))
+    .sort((a, b) => a.date.localeCompare(b.date))[0];
+  return {
+    nextEarnings: next ? { date: next.date, hour: next.hour || null, epsEstimate: next.epsEstimate ?? null } : null,
+    earningsCheckedAt: new Date().toISOString(),
+  };
+}
+
 // ── Callable: refresh prices for the signed-in user ──────────────────────────
 
 async function refreshPrices(db, request) {
@@ -59,30 +92,106 @@ async function refreshPrices(db, request) {
   if (!key) throw new HttpsError('failed-precondition', 'Price service is not set up yet (missing Finnhub key).');
 
   const assetsCol = db.collection('users').doc(uid).collection('invAssets');
-  let symbols = Array.isArray(request.data?.symbols)
+  const explicit = Array.isArray(request.data?.symbols);
+  let symbols = explicit
     ? request.data.symbols.map(s => String(s).trim().toUpperCase()).filter(Boolean)
     : (await assetsCol.where('source', '==', 'finnhub').get()).docs.map(d => d.id);
-  symbols = [...new Set(symbols)].slice(0, 50);
+  if (!explicit) symbols.push(BENCHMARK);
+  symbols = [...new Set(symbols)].slice(0, 40);
+
+  // Free tier allows ~60 calls/minute: quotes first, then profile/earnings
+  // refreshes while budget remains (the rest catch up on the next update)
+  let budget = 55;
+  const call = async fn => { budget--; return fn(); };
 
   const now = new Date().toISOString();
   const prices = {};
   const notFound = [];
   for (const sym of symbols) {
-    const q = await quote(sym, key);
+    const q = await call(() => quote(sym, key));
     if (!q) { notFound.push(sym); continue; }
     prices[sym] = q;
     const ref = assetsCol.doc(sym);
-    const existing = await ref.get();
+    const existing = (await ref.get()).data() || {};
     const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now };
-    if (!existing.exists || !existing.data().name) {
-      try {
-        const p = await finnhub(`stock/profile2?symbol=${encodeURIComponent(sym)}`, key);
-        if (p?.name) update.name = p.name;
-      } catch { /* name is optional */ }
+    if (sym === BENCHMARK && !existing.watch) update.benchmark = true;
+
+    if (sym !== BENCHMARK || existing.watch) {
+      if (budget > symbols.length && (!existing.name || isStale(existing.profileCheckedAt, HOURS(24 * 7)))) {
+        try { Object.assign(update, await call(() => fetchProfile(sym, key))); } catch { /* optional */ }
+      }
+      if (budget > symbols.length && isStale(existing.earningsCheckedAt, HOURS(20))) {
+        try { Object.assign(update, await call(() => fetchNextEarnings(sym, key))); } catch { /* optional */ }
+      }
     }
     await ref.set(update, { merge: true });
   }
   return { prices, notFound, updatedAt: now };
+}
+
+// ── Callable: details for one stock (stats, past earnings, news) ─────────────
+
+async function stockInfo(db, request) {
+  const uid = request.auth?.uid;
+  if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in');
+  const sym = String(request.data?.symbol || '').trim().toUpperCase();
+  if (!sym) throw new HttpsError('invalid-argument', 'Symbol required');
+  const key = await getFinnhubKey(db);
+  if (!key) throw new HttpsError('failed-precondition', 'Price service is not set up yet (missing Finnhub key).');
+
+  const ref = db.collection('users').doc(uid).collection('invAssets').doc(sym);
+  const cached = (await ref.get()).data() || {};
+  const update = {};
+
+  // Key stats and past earnings change at most daily, so cache them
+  if (isStale(cached.metricsAt, HOURS(20))) {
+    try {
+      const m = (await finnhub(`stock/metric?symbol=${encodeURIComponent(sym)}&metric=all`, key))?.metric || {};
+      update.metrics = {
+        high52: m['52WeekHigh'] ?? null,
+        low52: m['52WeekLow'] ?? null,
+        pe: m.peTTM ?? m.peBasicExclExtraTTM ?? null,
+        marketCap: m.marketCapitalization ?? null, // millions of USD
+        dividendYield: m.currentDividendYieldTTM ?? m.dividendYieldIndicatedAnnual ?? null, // percent
+        beta: m.beta ?? null,
+      };
+      const e = await finnhub(`stock/earnings?symbol=${encodeURIComponent(sym)}`, key);
+      update.earningsHistory = (Array.isArray(e) ? e : []).slice(0, 4).map(x => ({
+        period: x.period, actual: x.actual ?? null, estimate: x.estimate ?? null, surprisePercent: x.surprisePercent ?? null,
+      }));
+      update.metricsAt = new Date().toISOString();
+    } catch (err) {
+      if (err instanceof HttpsError) throw err;
+    }
+  }
+  if (!cached.profileCheckedAt) {
+    try { Object.assign(update, await fetchProfile(sym, key)); } catch { /* optional */ }
+  }
+  if (isStale(cached.earningsCheckedAt, HOURS(20))) {
+    try { Object.assign(update, await fetchNextEarnings(sym, key)); } catch { /* optional */ }
+  }
+  if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
+
+  // News is fetched fresh each time (last two weeks, newest first)
+  let news = [];
+  try {
+    const to = new Date(), from = new Date(Date.now() - 14 * 864e5);
+    const items = await finnhub(`company-news?symbol=${encodeURIComponent(sym)}&from=${ymd(from)}&to=${ymd(to)}`, key);
+    news = (Array.isArray(items) ? items : [])
+      .filter(n => n.headline && /^https?:\/\//.test(n.url || ''))
+      .sort((a, b) => b.datetime - a.datetime)
+      .slice(0, 8)
+      .map(n => ({ id: n.id, headline: n.headline, source: n.source, url: n.url, datetime: n.datetime, summary: (n.summary || '').slice(0, 240) }));
+  } catch { /* news is optional */ }
+
+  const merged = { ...cached, ...update };
+  return {
+    metrics: merged.metrics || null,
+    earningsHistory: merged.earningsHistory || [],
+    nextEarnings: merged.nextEarnings || null,
+    profile: { name: merged.name || null, industry: merged.industry || null, logo: merged.logo || null, weburl: merged.weburl || null },
+    news,
+  };
 }
 
 // ── Scheduled per-user work, called from the every-5-minutes job ─────────────
@@ -125,9 +234,27 @@ async function maybeSnapshot(db, userDoc, key, et) {
     }
   }
 
+  let spy = null;
+  if (key) {
+    try {
+      const q = await quote(BENCHMARK, key);
+      if (q) {
+        spy = q.price;
+        await userRef.collection('invAssets').doc(BENCHMARK).set(
+          { symbol: BENCHMARK, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: new Date().toISOString() }, { merge: true });
+      }
+    } catch { /* benchmark is optional */ }
+
+    // Keep upcoming earnings dates fresh for holdings
+    for (const a of assets.filter(x => x.source === 'finnhub' && held.includes(x.symbol) && isStale(x.earningsCheckedAt, HOURS(20)))) {
+      try { await userRef.collection('invAssets').doc(a.symbol).set(await fetchNextEarnings(a.symbol, key), { merge: true }); }
+      catch { /* optional */ }
+    }
+  }
+
   const s = summarize(txs, prices);
   await userRef.collection('invSnapshots').doc(et.today).set({
-    date: et.today, value: s.value, cash: s.cash, netDeposits: s.netDeposits, updatedAt: new Date().toISOString(),
+    date: et.today, value: s.value, cash: s.cash, netDeposits: s.netDeposits, spy, updatedAt: new Date().toISOString(),
   });
 }
 
@@ -155,6 +282,28 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
   }
 }
 
+// Evening before a holding reports earnings (7:00–8:00 PM ET), one push per day
+async function maybeEarningsReminder(userDoc, et, notify) {
+  if (et.minutes < 19 * 60 || et.minutes >= 20 * 60) return;
+  if (userDoc.data().investing?.lastEarningsReminder === et.today) return;
+
+  const tomorrow = new Date(et.today + 'T12:00:00Z');
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const tmr = tomorrow.toISOString().slice(0, 10);
+
+  const assets = (await userDoc.ref.collection('invAssets').where('nextEarnings.date', '==', tmr).get()).docs.map(d => d.data());
+  if (!assets.length) return;
+  const txs = (await userDoc.ref.collection('invTransactions').get()).docs.map(d => d.data());
+  const { qty } = summarize(txs, {});
+  const reporting = assets.filter(a => (qty[a.symbol] || 0) > 1e-9);
+  if (!reporting.length) return;
+
+  await userDoc.ref.set({ investing: { lastEarningsReminder: et.today } }, { merge: true });
+  const when = h => (h === 'bmo' ? 'before the open' : h === 'amc' ? 'after the close' : '');
+  const list = reporting.map(a => `${a.symbol}${when(a.nextEarnings.hour) ? ' ' + when(a.nextEarnings.hour) : ''}`).join(', ');
+  await notify('📊 Earnings tomorrow', `${list} report${reporting.length === 1 ? 's' : ''} tomorrow.`);
+}
+
 async function runInvestingJobs(db, userDoc, notify) {
   const et = easternNow();
   const key = await getFinnhubKey(db);
@@ -163,7 +312,9 @@ async function runInvestingJobs(db, userDoc, notify) {
   if (notify) {
     try { await maybeCheckAlerts(db, userDoc, key, et, notify); }
     catch (e) { console.error(`Alerts for ${userDoc.id} failed:`, e.message); }
+    try { await maybeEarningsReminder(userDoc, et, notify); }
+    catch (e) { console.error(`Earnings reminder for ${userDoc.id} failed:`, e.message); }
   }
 }
 
-module.exports = { refreshPrices, runInvestingJobs };
+module.exports = { refreshPrices, stockInfo, runInvestingJobs, BENCHMARK };
