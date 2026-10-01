@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, PERIODS, CASH_ID } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, PERIODS, CASH_ID } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -178,7 +178,12 @@ export default function InvestingTab({ hook, userId }) {
 
       {view === 'activity' && txs.length > 0 && (
         <Card>
-          <SectionTitle right={<button onClick={() => setTrade({ type: 'dividend' })} style={{ fontSize: 12, color: T.khaki }}>+ Dividend</button>}>
+          <SectionTitle right={
+            <span style={{ display: 'flex', gap: 12 }}>
+              <button onClick={() => setTrade({ type: 'interest' })} style={{ fontSize: 12, color: T.khaki }}>+ Interest</button>
+              <button onClick={() => setTrade({ type: 'dividend' })} style={{ fontSize: 12, color: T.khaki }}>+ Dividend</button>
+            </span>
+          }>
             All transactions
           </SectionTitle>
           <TxList txs={txs} hide={hide} onDelete={deleteTx} />
@@ -220,6 +225,15 @@ export default function InvestingTab({ hook, userId }) {
             <TotalRow label="Money added (net)" value={money(portfolio.netDeposits, hide)} />
             <TotalRow label="Realized gains (sells)" value={signedMoney(portfolio.realized, hide)} color={gainColor(portfolio.realized)} />
             <TotalRow label="Dividends received" value={money(portfolio.dividends, hide)} />
+            <TotalRow label="Interest on cash" value={money(portfolio.interest, hide)} />
+            {(() => {
+              const y = cashInterestYear(txs, portfolio.cash);
+              return y.total > 0 && (
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+                  {money(y.total, hide)} in the last 12 months{y.approxYield !== null ? ` · roughly ${(y.approxYield * 100).toFixed(1)}% a year on today's cash` : ''}
+                </div>
+              );
+            })()}
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
         </>

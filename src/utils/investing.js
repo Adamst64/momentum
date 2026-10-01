@@ -4,8 +4,10 @@ import { toDateStr, addDays } from './dateUtils';
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
 //   buy / sell:         { type, date, symbol, quantity, price, fee? }
 //   dividend:           { type, date, symbol, amount }       — paid into cash
+//   interest:           { type, date, amount }               — earned on cash itself (e.g. Vanguard's
+//                                                              VMFXX settlement fund, which stays at $1/share)
 // Deposits/withdrawals are external money, so they never count as return.
-// Buys/sells/dividends move money between cash and holdings and do count.
+// Buys/sells/dividends/interest move money between cash and holdings and do count.
 
 export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
 
@@ -16,7 +18,7 @@ export function sortTx(txs) {
 // Replays every transaction in date order. Average-cost method: a sell removes
 // cost at the current average, so the average itself doesn't change on sells.
 export function replay(txs) {
-  let cash = 0, netDeposits = 0, minCash = 0;
+  let cash = 0, netDeposits = 0, minCash = 0, interest = 0;
   const h = {};
   const hold = sym => (h[sym] = h[sym] || { symbol: sym, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null });
   const problems = [];
@@ -25,6 +27,7 @@ export function replay(txs) {
     if (t.type === 'deposit')  { cash += t.amount; netDeposits += t.amount; }
     if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
     if (t.type === 'dividend') { cash += t.amount; hold(t.symbol).dividends += t.amount; }
+    if (t.type === 'interest') { cash += t.amount; interest += t.amount; }
     if (t.type === 'buy') {
       const x = hold(t.symbol);
       const total = t.quantity * t.price + (t.fee || 0);
@@ -46,12 +49,12 @@ export function replay(txs) {
     }
     minCash = Math.min(minCash, cash);
   }
-  return { cash, netDeposits, minCash, holdings: h, problems };
+  return { cash, netDeposits, minCash, interest, holdings: h, problems };
 }
 
 // Full picture with current prices. assets: { [symbol]: { price, prevClose, name, ... } }
 export function computePortfolio(txs, assets) {
-  const { cash, netDeposits, holdings } = replay(txs);
+  const { cash, netDeposits, interest, holdings } = replay(txs);
   let holdingsValue = 0, dayChange = 0, realized = 0, dividends = 0;
 
   const rows = Object.values(holdings).map(x => {
@@ -80,7 +83,7 @@ export function computePortfolio(txs, assets) {
   const open = rows.filter(r => r.qty > 0).sort((a, b) => (b.value || 0) - (a.value || 0));
   const value = cash + holdingsValue;
   return {
-    cash, netDeposits, holdingsValue, value, dayChange, realized, dividends,
+    cash, netDeposits, holdingsValue, value, dayChange, realized, dividends, interest,
     totalGain: value - netDeposits,
     holdings: open,
     closed: rows.filter(r => r.qty === 0),
@@ -160,7 +163,7 @@ export function monthlyFlows(txs) {
     if (t.type === 'withdraw') x.deposited -= t.amount;
     if (t.type === 'buy')      x.invested  += t.quantity * t.price + (t.fee || 0);
     if (t.type === 'sell')     x.invested  -= t.quantity * t.price - (t.fee || 0);
-    if (t.type === 'dividend') x.dividends += t.amount;
+    if (t.type === 'dividend' || t.type === 'interest') x.dividends += t.amount;
   }
   return Object.values(m).sort((a, b) => b.month.localeCompare(a.month));
 }
@@ -170,3 +173,10 @@ export const money = (n, hide = false) => (hide ? '••••' : n === null ||
 export const signedMoney = (n, hide = false) => (hide ? '••••' : n === null ? '—' : (n > 0 ? '+' : '') + usd.format(n));
 export const pct = (r) => (r === null || r === undefined ? '—' : `${r > 0 ? '+' : ''}${(r * 100).toFixed(2)}%`);
 export const qtyFmt = (q) => Number(q.toFixed(6)).toLocaleString('en-US', { maximumFractionDigits: 6 });
+
+// Interest on cash over the last 12 months, and that as a rough yield on today's cash
+export function cashInterestYear(txs, cash, today = toDateStr(new Date())) {
+  const from = shiftMonths(today, -12);
+  const total = txs.filter(t => t.type === 'interest' && t.date > from).reduce((a, t) => a + t.amount, 0);
+  return { total, approxYield: cash > 0 && total > 0 ? total / cash : null };
+}

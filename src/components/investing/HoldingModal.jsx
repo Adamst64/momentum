@@ -21,6 +21,7 @@ export function TxList({ txs, hide, onDelete }) {
   const describe = t => {
     if (t.type === 'buy' || t.type === 'sell') return `${t.type === 'buy' ? 'Bought' : 'Sold'} ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'dividend') return `${t.symbol} dividend`;
+    if (t.type === 'interest') return 'Interest on cash';
     return t.note || (t.type === 'deposit' ? 'Cash added' : 'Cash withdrawn');
   };
   const amount = t => {

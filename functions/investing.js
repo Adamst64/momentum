@@ -41,7 +41,7 @@ function summarize(txs, prices) {
     if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
     if (t.type === 'buy')      { cash -= t.quantity * t.price + (t.fee || 0); qty[t.symbol] = (qty[t.symbol] || 0) + t.quantity; }
     if (t.type === 'sell')     { cash += t.quantity * t.price - (t.fee || 0); qty[t.symbol] = (qty[t.symbol] || 0) - t.quantity; }
-    if (t.type === 'dividend') { cash += t.amount; }
+    if (t.type === 'dividend' || t.type === 'interest') { cash += t.amount; }
   }
   let holdingsValue = 0;
   for (const [sym, q] of Object.entries(qty)) {

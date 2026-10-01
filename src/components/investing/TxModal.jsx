@@ -11,6 +11,7 @@ const TYPES = [
   { value: 'deposit',  label: 'Add cash' },
   { value: 'withdraw', label: 'Withdraw' },
   { value: 'dividend', label: 'Dividend' },
+  { value: 'interest', label: 'Cash interest' },
 ];
 
 const num = v => {
@@ -41,6 +42,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   if (isTrade && sym && q > 0 && p > 0) tx = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}) };
   if ((type === 'deposit' || type === 'withdraw') && a > 0) tx = { type, date, amount: a, ...(note.trim() ? { note: note.trim() } : {}) };
   if (type === 'dividend' && sym && a > 0) tx = { type, date, symbol: sym, amount: a };
+  if (type === 'interest' && a > 0) tx = { type, date, amount: a };
 
   const check = tx ? validateTx(txs, tx) : null;
   const blocked = !tx || check.errors.length > 0 || (check.cashShort && !allowShort);
@@ -104,9 +106,16 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         )}
 
         {!isTrade && (
-          <Field label={type === 'dividend' ? 'Amount received' : 'Amount'}>
+          <Field label={type === 'dividend' || type === 'interest' ? 'Amount received' : 'Amount'}>
             <input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="$0.00" style={inputStyle} />
           </Field>
+        )}
+
+        {type === 'interest' && (
+          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
+            For what your cash earns on its own — like the monthly dividend from Vanguard's settlement fund (VMFXX).
+            It's added to free cash and counts as return, unlike salary deposits.
+          </div>
         )}
 
         {(type === 'deposit' || type === 'withdraw') && (
