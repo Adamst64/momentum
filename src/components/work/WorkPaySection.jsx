@@ -165,6 +165,29 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
       }, 0) / fullyPaidWeeks.length
     : null;
 
+  // Days off / weekend work for the year. A day off is any elapsed day with no work
+  // logged (marked off or left empty), counted from the first logged day onward.
+  // Today only counts once it has an entry.
+  const ymdStr = d => { const pad = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+  const todayStr  = ymdStr(new Date());
+  const dayById   = {};
+  days.forEach(d => { dayById[d.id] = d; });
+  const firstLogged = days.map(d => d.id).sort()[0];
+  let offTotal = 0, offWeekdays = 0, weekendWorked = 0;
+  if (firstLogged) {
+    const from = [`${effectiveSummaryYear}-01-01`, firstLogged].sort()[1];
+    const to   = [`${effectiveSummaryYear}-12-31`, todayStr].sort()[0];
+    for (const d = new Date(from + 'T12:00:00'); ymdStr(d) <= to; d.setDate(d.getDate() + 1)) {
+      const id = ymdStr(d);
+      const entry = dayById[id];
+      if (id === todayStr && !entry) continue;
+      const weekend = d.getDay() === 0 || d.getDay() === 6;
+      const worked  = entry && !entry.isOff;
+      if (!worked) { offTotal++; if (!weekend) offWeekdays++; }
+      else if (weekend) weekendWorked++;
+    }
+  }
+
   const hasAnyData = days.filter(d => !d.isOff).length > 0 || weeks.length > 0;
   if (!hasAnyData) {
     return (
@@ -247,6 +270,22 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                   <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{fullyPaidWeeks.length} paid wk{fullyPaidWeeks.length !== 1 ? 's' : ''}</div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Days off / weekend work row */}
+          {firstLogged && (
+            <div style={{ padding: '0 16px 10px', display: 'flex', gap: 10, borderTop: avgDaysPerWeek !== null || avgAmtPerWeek !== null ? 'none' : `1px solid ${T.cardBorder}`, paddingTop: avgDaysPerWeek !== null || avgAmtPerWeek !== null ? 0 : 10 }}>
+              <div style={{ flex: 1, background: T.subtle, borderRadius: 10, padding: '8px 12px' }}>
+                <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>Days off</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{offTotal}</div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{offWeekdays} on weekdays</div>
+              </div>
+              <div style={{ flex: 1, background: T.subtle, borderRadius: 10, padding: '8px 12px' }}>
+                <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>Weekend work</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{weekendWorked}</div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>day{weekendWorked !== 1 ? 's' : ''} on Sat/Sun</div>
+              </div>
             </div>
           )}
         </div>
