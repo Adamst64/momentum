@@ -21,6 +21,7 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
   };
 
   const dc = stats.days.length;
+  const leadDays = stats.days.filter(d => d.isCrewLead).length;
 
   return (
     <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
@@ -32,10 +33,14 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
           </div>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
             {dc} day{dc !== 1 ? 's' : ''} · {stats.windows} win · {stats.doors} doors
+            {leadDays > 0 && <span style={{ color: T.green }}> · {leadDays} lead</span>}
           </div>
           {[...stats.days].sort((a, b) => a.id.localeCompare(b.id)).map(d => (
             <div key={d.id} style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
               <span style={{ color: T.text }}>{new Date(d.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</span>
+              {d.isCrewLead && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.green, background: T.green + '22', border: `1px solid ${T.green}44`, borderRadius: 6, padding: '0 5px', marginLeft: 5 }}>LEAD</span>
+              )}
               {' · '}{d.windows || 0}w · {d.doors || 0}dr
               {d.comment ? <span> · {d.comment}</span> : null}
             </div>
