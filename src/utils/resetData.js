@@ -2,16 +2,12 @@ import { collection, getDocs, writeBatch, deleteField } from 'firebase/firestore
 import { db } from '../firebase';
 import { todayStr } from './dateUtils';
 
-// What each category clears. "Progress" categories keep the items themselves
-// and restart their history from today; the others delete the items.
+// Progress resets only: routines, commitments and tasks themselves are kept,
+// their completion history is cleared and starts again from today.
 export const RESET_CATEGORIES = [
-  { key: 'routines',    label: 'Routine progress',   hint: 'Check-offs, streaks and stats. Routines stay and start fresh today.' },
-  { key: 'commitments', label: 'Commitment history', hint: 'Marked failures. Commitments stay and start fresh today.' },
-  { key: 'tasks',       label: 'Task history',       hint: 'Deletes finished one-time and backlog tasks; clears monthly task check-offs.' },
-  { key: 'notes',       label: 'Journal entries',    hint: 'Deletes every note.' },
-  { key: 'lists',       label: 'Lists',              hint: 'Deletes all to-try lists and checklists.' },
-  { key: 'birthdays',   label: 'Birthdays',          hint: 'Deletes every birthday.' },
-  { key: 'work',        label: 'Work log',           hint: 'Deletes logged work days and weekly pay. Crews and members stay.', workOnly: true },
+  { key: 'routines',    label: 'Routine progress',    hint: 'Check-offs, streaks and stats. Routines stay and start fresh today.' },
+  { key: 'commitments', label: 'Commitment progress', hint: 'Marked failures. Commitments stay and start fresh today.' },
+  { key: 'tasks',       label: 'Task progress',       hint: 'Removes finished one-time and backlog tasks and clears monthly check-offs. Open tasks stay.' },
 ];
 
 // Firestore batches allow 500 writes; stay under it
@@ -29,7 +25,6 @@ export async function resetData(userId, keys) {
   if (!userId || !keys.length) return;
   const today = todayStr();
   const ops = [];
-  const wipe = async (name) => (await docsOf(userId, name)).forEach(d => ops.push(b => b.delete(d.ref)));
 
   if (keys.includes('routines')) {
     for (const d of await docsOf(userId, 'routines')) {
@@ -61,14 +56,6 @@ export async function resetData(userId, keys) {
         ops.push(b => b.delete(d.ref));
       }
     }
-  }
-
-  if (keys.includes('notes'))     await wipe('notes');
-  if (keys.includes('lists'))     await wipe('personalLists');
-  if (keys.includes('birthdays')) await wipe('birthdays');
-  if (keys.includes('work')) {
-    await wipe('workDays');
-    await wipe('workWeeks');
   }
 
   await commitInChunks(ops);

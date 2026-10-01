@@ -60,8 +60,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
   const [resetConfirm, setResetConfirm] = useState('');
   const [resetBusy, setResetBusy]       = useState(false);
   const [resetStatus, setResetStatus]   = useState(null);
-  const resetChoices = RESET_CATEGORIES.filter(c => !c.workOnly || showWork);
-  const resetReady   = resetKeys.length > 0 && resetConfirm.trim().toUpperCase() === 'DELETE' && !resetBusy;
+  const resetReady   = resetKeys.length > 0 && resetConfirm.trim().toUpperCase() === 'RESET' && !resetBusy;
 
   const handleReset = async () => {
     if (!resetReady) return;
@@ -69,11 +68,11 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     setResetStatus(null);
     try {
       await resetData(userId, resetKeys);
-      setResetStatus({ ok: true, msg: 'Done. Selected data was deleted.' });
+      setResetStatus({ ok: true, msg: 'Done. Progress was reset.' });
       setResetKeys([]);
       setResetConfirm('');
     } catch (e) {
-      setResetStatus({ ok: false, msg: e.message || 'Something went wrong. Nothing may have been deleted; try again.' });
+      setResetStatus({ ok: false, msg: e.message || 'Something went wrong. Try again.' });
     } finally {
       setResetBusy(false);
     }
@@ -281,7 +280,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
 
         <Group>
           <Row
-            label="Delete data"
+            label="Reset progress"
             onTap={() => { setResetOpen(o => !o); setResetStatus(null); }}
             arrow
             arrowOpen={resetOpen}
@@ -289,9 +288,9 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           {resetOpen && (
             <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
-                Choose what to delete. This can't be undone, so use <b style={{ color: T.text }}>Export as JSON</b> above first if you might want it back. Shared shopping lists aren't affected.
+                Choose what progress to clear. Your routines, commitments and tasks stay. This can't be undone, so use <b style={{ color: T.text }}>Export as JSON</b> above first if you might want it back.
               </div>
-              {resetChoices.map(c => {
+              {RESET_CATEGORIES.map(c => {
                 const on = resetKeys.includes(c.key);
                 return (
                   <button
@@ -315,7 +314,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
                 <input
                   value={resetConfirm}
                   onChange={e => setResetConfirm(e.target.value)}
-                  placeholder="Type DELETE to confirm"
+                  placeholder="Type RESET to confirm"
                   autoCapitalize="characters"
                   style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '11px 14px', color: T.text, fontSize: 15, outline: 'none' }}
                 />
@@ -331,7 +330,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
                   background: resetReady ? T.red : T.subtle, color: '#fff',
                 }}
               >
-                {resetBusy ? 'Deleting…' : resetKeys.length ? `Delete ${resetKeys.length} selected` : 'Select something to delete'}
+                {resetBusy ? 'Resetting…' : resetKeys.length ? `Reset ${resetKeys.length} selected` : 'Select what to reset'}
               </button>
             </div>
           )}
