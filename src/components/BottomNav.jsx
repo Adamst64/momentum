@@ -74,6 +74,15 @@ const TAB_DEFS = {
       </svg>
     ),
   },
+  investing: {
+    label: 'Investing',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M3 17l6-6 4 4 8-8" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M15 7h6v6" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
 };
 
 export { TAB_DEFS };

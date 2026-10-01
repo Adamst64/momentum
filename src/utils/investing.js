@@ -1,0 +1,172 @@
+import { toDateStr, addDays } from './dateUtils';
+
+// Transactions (users/{uid}/invTransactions):
+//   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
+//   buy / sell:         { type, date, symbol, quantity, price, fee? }
+//   dividend:           { type, date, symbol, amount }       — paid into cash
+// Deposits/withdrawals are external money, so they never count as return.
+// Buys/sells/dividends move money between cash and holdings and do count.
+
+export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
+
+export function sortTx(txs) {
+  return [...txs].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
+}
+
+// Replays every transaction in date order. Average-cost method: a sell removes
+// cost at the current average, so the average itself doesn't change on sells.
+export function replay(txs) {
+  let cash = 0, netDeposits = 0, minCash = 0;
+  const h = {};
+  const hold = sym => (h[sym] = h[sym] || { symbol: sym, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null });
+  const problems = [];
+
+  for (const t of sortTx(txs)) {
+    if (t.type === 'deposit')  { cash += t.amount; netDeposits += t.amount; }
+    if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
+    if (t.type === 'dividend') { cash += t.amount; hold(t.symbol).dividends += t.amount; }
+    if (t.type === 'buy') {
+      const x = hold(t.symbol);
+      const total = t.quantity * t.price + (t.fee || 0);
+      cash -= total;
+      x.qty += t.quantity;
+      x.cost += total;
+      x.firstDate = x.firstDate || t.date;
+    }
+    if (t.type === 'sell') {
+      const x = hold(t.symbol);
+      if (t.quantity > x.qty + 1e-9) problems.push({ tx: t, msg: `Sells more ${t.symbol} than held on ${t.date}` });
+      const avg = x.qty > 0 ? x.cost / x.qty : 0;
+      const sold = Math.min(t.quantity, x.qty);
+      cash += t.quantity * t.price - (t.fee || 0);
+      x.realized += sold * (t.price - avg) - (t.fee || 0);
+      x.cost -= avg * sold;
+      x.qty -= sold;
+      if (x.qty < 1e-9) { x.qty = 0; x.cost = 0; }
+    }
+    minCash = Math.min(minCash, cash);
+  }
+  return { cash, netDeposits, minCash, holdings: h, problems };
+}
+
+// Full picture with current prices. assets: { [symbol]: { price, prevClose, name, ... } }
+export function computePortfolio(txs, assets) {
+  const { cash, netDeposits, holdings } = replay(txs);
+  let holdingsValue = 0, dayChange = 0, realized = 0, dividends = 0;
+
+  const rows = Object.values(holdings).map(x => {
+    const a = assets[x.symbol] || {};
+    const price = a.price ?? null;
+    const value = price !== null ? x.qty * price : null;
+    const unrealized = value !== null ? value - x.cost : null;
+    realized += x.realized;
+    dividends += x.dividends;
+    if (x.qty > 0 && value !== null) {
+      holdingsValue += value;
+      if (a.prevClose) dayChange += x.qty * (price - a.prevClose);
+    }
+    return {
+      ...x,
+      name: a.name || null,
+      source: a.source || 'manual',
+      price, prevClose: a.prevClose ?? null, priceUpdatedAt: a.priceUpdatedAt || null,
+      avgCost: x.qty > 0 ? x.cost / x.qty : null,
+      value, unrealized,
+      unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
+      dayPct: price && a.prevClose ? (price - a.prevClose) / a.prevClose : null,
+    };
+  });
+
+  const open = rows.filter(r => r.qty > 0).sort((a, b) => (b.value || 0) - (a.value || 0));
+  const value = cash + holdingsValue;
+  return {
+    cash, netDeposits, holdingsValue, value, dayChange, realized, dividends,
+    totalGain: value - netDeposits,
+    holdings: open,
+    closed: rows.filter(r => r.qty === 0),
+  };
+}
+
+// Checks a new/edited transaction against the rest before saving
+export function validateTx(txs, tx) {
+  const before = replay(txs);
+  const after  = replay([...txs, tx]);
+  const errors = after.problems.filter(p => !before.problems.some(b => b.tx === p.tx)).map(p => p.msg);
+  const cashShort = after.minCash < -0.005 && after.minCash < before.minCash - 0.005;
+  return { errors, cashShort, cashAfter: after.cash };
+}
+
+export const PERIODS = [
+  { key: '1W',  label: '1W',  start: t => addDays(t, -7) },
+  { key: '1M',  label: '1M',  start: t => shiftMonths(t, -1) },
+  { key: '3M',  label: '3M',  start: t => shiftMonths(t, -3) },
+  { key: 'YTD', label: 'YTD', start: t => `${Number(t.slice(0, 4)) - 1}-12-31` },
+  { key: '1Y',  label: '1Y',  start: t => shiftMonths(t, -12) },
+  { key: 'ALL', label: 'All', start: null },
+];
+
+function shiftMonths(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setMonth(d.getMonth() + n);
+  return toDateStr(d);
+}
+
+const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5);
+
+// Modified Dietz return: gain excluding deposits/withdrawals, divided by the
+// average money at work. Needs the portfolio value at the period start, from a
+// saved daily snapshot — or zero when the period starts before the first trade.
+export function periodReturn(txs, snapshots, currentValue, periodKey, today = toDateStr(new Date())) {
+  const sorted = sortTx(txs);
+  if (!sorted.length) return null;
+  const first = sorted[0].date;
+  const p = PERIODS.find(x => x.key === periodKey);
+  let start = p.start ? p.start(today) : addDays(first, -1);
+
+  let startValue;
+  if (start < first) {
+    start = addDays(first, -1);
+    startValue = 0;
+  } else {
+    const snap = [...snapshots].filter(s => s.date <= start).sort((a, b) => b.date.localeCompare(a.date))[0];
+    if (!snap) {
+      const firstSnap = [...snapshots].sort((a, b) => a.date.localeCompare(b.date))[0];
+      return { unavailable: true, trackingSince: firstSnap?.date || null };
+    }
+    startValue = snap.value;
+  }
+
+  const span = Math.max(1, daysBetween(start, today));
+  let flows = 0, weighted = 0;
+  for (const t of sorted) {
+    if (t.date <= start || t.date > today) continue;
+    const f = t.type === 'deposit' ? t.amount : t.type === 'withdraw' ? -t.amount : 0;
+    if (!f) continue;
+    flows += f;
+    weighted += f * (daysBetween(t.date, today) / span);
+  }
+  const gain  = currentValue - startValue - flows;
+  const basis = startValue + weighted;
+  return { gain, pct: basis > 0 ? gain / basis : null, start, startValue };
+}
+
+// Per month: money deposited (net of withdrawals), net invested in assets, dividends
+export function monthlyFlows(txs) {
+  const m = {};
+  for (const t of txs) {
+    const k = t.date.slice(0, 7);
+    const x = (m[k] = m[k] || { month: k, deposited: 0, invested: 0, dividends: 0 });
+    if (t.type === 'deposit')  x.deposited += t.amount;
+    if (t.type === 'withdraw') x.deposited -= t.amount;
+    if (t.type === 'buy')      x.invested  += t.quantity * t.price + (t.fee || 0);
+    if (t.type === 'sell')     x.invested  -= t.quantity * t.price - (t.fee || 0);
+    if (t.type === 'dividend') x.dividends += t.amount;
+  }
+  return Object.values(m).sort((a, b) => b.month.localeCompare(a.month));
+}
+
+const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+export const money = (n, hide = false) => (hide ? '••••' : n === null || n === undefined ? '—' : usd.format(n));
+export const signedMoney = (n, hide = false) => (hide ? '••••' : n === null ? '—' : (n > 0 ? '+' : '') + usd.format(n));
+export const pct = (r) => (r === null || r === undefined ? '—' : `${r > 0 ? '+' : ''}${(r * 100).toFixed(2)}%`);
+export const qtyFmt = (q) => Number(q.toFixed(6)).toLocaleString('en-US', { maximumFractionDigits: 6 });

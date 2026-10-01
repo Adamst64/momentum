@@ -3,6 +3,7 @@ const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
+const investing = require('./investing');
 
 initializeApp();
 
@@ -32,6 +33,10 @@ exports.joinListByCode = onCall(async (request) => {
   await listDoc.ref.update({ members: FieldValue.arrayUnion(uid) });
   return { listId: listDoc.id, listName: listData.name };
 });
+
+// ── Investing: live prices on demand ─────────────────────────────────────────
+
+exports.refreshPrices = onCall(request => investing.refreshPrices(getFirestore(), request));
 
 // ── Birthday push notifications ──────────────────────────────────────────────
 
@@ -183,6 +188,11 @@ exports.sendTaskNotifications = onSchedule(
     await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
       const uid    = userDoc.id;
       const tokens = userDoc.data().fcmTokens || [];
+
+      // Portfolio snapshots run even without notifications set up
+      await investing.runInvestingJobs(db, userDoc,
+        tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body) : null);
+
       if (!tokens.length) return;
 
       await maybeSendDailyReview(db, messaging, userDoc, tokens);

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export const ALL_TABS = ['routines', 'tasks', 'work', 'shopping', 'birthdays', 'notes', 'lists'];
+export const ALL_TABS = ['routines', 'tasks', 'work', 'shopping', 'birthdays', 'notes', 'lists', 'investing'];
 
 export function useTabOrder() {
   return useState([...ALL_TABS]);
