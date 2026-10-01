@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo from './StockInfo';
@@ -60,6 +60,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
   const myAlerts = alerts.filter(a => a.symbol === symbol);
+  const ext = asset.source === 'finnhub' ? extendedPrice(asset) : null;
 
   const [manualPrice, setManualPrice] = useState(asset.price ? String(asset.price) : '');
   const [target, setTarget]       = useState(asset.targetPct != null ? String(asset.targetPct) : '');
@@ -123,6 +124,12 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             options={[{ value: 'finnhub', label: 'Auto (live)' }, { value: 'manual', label: 'Manual' }]}
           />
           <div style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>Updated {timeAgo(asset.priceUpdatedAt)}</div>
+          {ext && (
+            <div style={{ fontSize: 13, color: T.text, marginTop: 6 }}>
+              {ext.label}: {money(ext.price, hide)} <span style={{ color: gainColor(ext.pct) }}>({pct(ext.pct)})</span>
+              <span style={{ fontSize: 12, color: T.muted }}> · {new Date(ext.time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</span>
+            </div>
+          )}
           {(asset.source || 'manual') === 'manual' && (
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <input value={manualPrice} onChange={e => setManualPrice(e.target.value)} inputMode="decimal" placeholder="Current price" style={inputStyle} />
@@ -182,7 +189,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             >Add</button>
           </div>
           <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
-            Checked every 15 minutes during US market hours{asset.source !== 'finnhub' ? ' — needs Auto (live) price' : ''}.
+            Checked every 15 minutes, 4 AM–8 PM ET on weekdays (including pre-market and after hours){asset.source !== 'finnhub' ? ' — needs Auto (live) price' : ''}.
           </div>
         </div>
 

@@ -27,6 +27,42 @@ async function fetchQuotes(symbols, key) {
   return out;
 }
 
+// ── Extended hours (pre-market 4:00–9:30, after hours 16:00–20:00 ET) ─────────
+// Finnhub's free quote only covers the regular session, so outside it we read
+// Yahoo's chart endpoint (unofficial and keyless; can change without notice).
+// The extended price is stored apart from price/prevClose so day change,
+// returns and snapshots stay tied to the official close.
+
+// Latest pre/after-hours trade: { extPrice, extSession: 'pre'|'post', extTime },
+// or null when the latest trade is from the regular session or there is none
+async function extendedQuote(symbol) {
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1m&range=1d&includePrePost=true`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+  const r = (await res.json())?.chart?.result?.[0];
+  const ts = r?.timestamp || [];
+  const closes = r?.indicators?.quote?.[0]?.close || [];
+  for (let i = ts.length - 1; i >= 0; i--) {
+    if (!(closes[i] > 0)) continue;
+    const when = new Date(ts[i] * 1000);
+    const m = easternNow(when).minutes;
+    const session = m < 9 * 60 + 30 ? 'pre' : m >= 16 * 60 ? 'post' : null;
+    return session ? { extPrice: Math.round(closes[i] * 1e4) / 1e4, extSession: session, extTime: when.toISOString() } : null;
+  }
+  return null;
+}
+
+const NO_EXT = { extPrice: null, extSession: null, extTime: null };
+
+// Fields to merge into an invAssets doc: the extended price outside the regular
+// session, cleared during it. Errors leave the existing values alone.
+async function extendedFields(symbol, et) {
+  if (isRegularSession(et)) return NO_EXT;
+  try { return (await extendedQuote(symbol)) || NO_EXT; }
+  catch (e) { console.warn(`Extended quote for ${symbol} failed:`, e.message); return {}; }
+}
+
 // ── Portfolio math (mirrors src/utils/investing.js, kept minimal) ────────────
 
 function sortTx(txs) {
@@ -105,6 +141,7 @@ async function refreshPrices(db, request) {
   const call = async fn => { budget--; return fn(); };
 
   const now = new Date().toISOString();
+  const et = easternNow();
   const prices = {};
   const notFound = [];
   for (const sym of symbols) {
@@ -113,7 +150,8 @@ async function refreshPrices(db, request) {
     prices[sym] = q;
     const ref = assetsCol.doc(sym);
     const existing = (await ref.get()).data() || {};
-    const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now };
+    const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now,
+      ...(await extendedFields(sym, et)) };
     if (sym === BENCHMARK && !existing.watch) update.benchmark = true;
 
     if (sym !== BENCHMARK || existing.watch) {
@@ -196,14 +234,30 @@ async function stockInfo(db, request) {
 
 // ── Scheduled per-user work, called from the every-5-minutes job ─────────────
 
-function easternNow() {
-  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+function easternNow(date = new Date()) {
+  const now = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   return {
     today: `${ym}-${String(now.getDate()).padStart(2, '0')}`,
     minutes: now.getHours() * 60 + now.getMinutes(),
     weekday: now.getDay() >= 1 && now.getDay() <= 5,
   };
+}
+
+// Weekday 9:30–16:00 ET (market holidays aren't tracked)
+const isRegularSession = et => et.weekday && et.minutes >= 9 * 60 + 30 && et.minutes < 16 * 60;
+// Weekday 4:00–20:00 ET: regular session plus pre-market and after hours
+const isTradingDay = et => et.weekday && et.minutes >= 4 * 60 && et.minutes <= 20 * 60;
+
+// Pre-market and after hours: refresh extended prices of auto-priced assets every 15 minutes
+async function maybeRefreshExtended(userDoc, et) {
+  if (!isTradingDay(et) || isRegularSession(et)) return;
+  if (et.minutes % 15 >= 5) return;
+  const assets = (await userDoc.ref.collection('invAssets').where('source', '==', 'finnhub').get()).docs.slice(0, 40);
+  for (const a of assets) {
+    const fields = await extendedFields(a.id, et);
+    if (Object.keys(fields).length) await a.ref.set(fields, { merge: true });
+  }
 }
 
 // Daily snapshot after US market close (16:30–17:30 ET), for the value chart
@@ -258,16 +312,28 @@ async function maybeSnapshot(db, userDoc, key, et) {
   });
 }
 
-// Price alerts: every 15 minutes during US market hours on weekdays
+// Price alerts: every 15 minutes, 4:00–20:00 ET on weekdays. The regular session
+// uses Finnhub; pre-market and after hours use the extended price.
 async function maybeCheckAlerts(db, userDoc, key, et, notify) {
-  if (!key || !et.weekday) return;
-  if (et.minutes < 9 * 60 + 30 || et.minutes > 16 * 60 + 15) return;
+  if (!isTradingDay(et)) return;
   if (et.minutes % 15 >= 5) return;
+  const regular = isRegularSession(et);
+  if (regular && !key) return;
 
   const alertsSnap = await userDoc.ref.collection('invAlerts').where('enabled', '==', true).get();
   if (alertsSnap.empty) return;
   const alerts = alertsSnap.docs;
-  const quotes = await fetchQuotes([...new Set(alerts.map(a => a.data().symbol))], key);
+  const symbols = [...new Set(alerts.map(a => a.data().symbol))];
+  let quotes = {};
+  if (regular) quotes = await fetchQuotes(symbols, key);
+  else {
+    for (const s of symbols) {
+      try {
+        const x = await extendedQuote(s);
+        quotes[s] = x && { price: x.extPrice, session: x.extSession };
+      } catch (e) { console.warn(`Extended quote for ${s} failed:`, e.message); }
+    }
+  }
 
   for (const a of alerts) {
     const { symbol, direction, target } = a.data();
@@ -277,8 +343,9 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
     if (!hit) continue;
     // One-shot: disable before sending so it can't fire twice
     await a.ref.update({ enabled: false, triggeredAt: new Date().toISOString(), triggeredPrice: q.price });
+    const label = q.session === 'pre' ? ' (pre-market)' : q.session === 'post' ? ' (after hours)' : '';
     await notify(`📈 ${symbol} ${direction === 'above' ? 'rose above' : 'fell below'} $${target}`,
-      `Now $${q.price.toFixed(2)}`);
+      `Now $${q.price.toFixed(2)}${label}`);
   }
 }
 
@@ -309,6 +376,8 @@ async function runInvestingJobs(db, userDoc, notify) {
   const key = await getFinnhubKey(db);
   try { await maybeSnapshot(db, userDoc, key, et); }
   catch (e) { console.error(`Snapshot for ${userDoc.id} failed:`, e.message); }
+  try { await maybeRefreshExtended(userDoc, et); }
+  catch (e) { console.error(`Extended prices for ${userDoc.id} failed:`, e.message); }
   if (notify) {
     try { await maybeCheckAlerts(db, userDoc, key, et, notify); }
     catch (e) { console.error(`Alerts for ${userDoc.id} failed:`, e.message); }

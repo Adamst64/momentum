@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
@@ -83,6 +83,11 @@ export default function InvestingTab({ hook, userId }) {
             <div style={{ fontSize: 13, color: gainColor(portfolio.dayChange), marginTop: 2 }}>
               {signedMoney(portfolio.dayChange, hide)} today
             </div>
+            {portfolio.ext && (
+              <div style={{ fontSize: 12, color: gainColor(portfolio.ext.change), marginTop: 1 }}>
+                {signedMoney(portfolio.ext.change, hide)} {portfolio.ext.label.toLowerCase()}
+              </div>
+            )}
           </div>
           <button onClick={toggleHide} aria-label={hide ? 'Show amounts' : 'Hide amounts'} style={{ padding: 6 }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
@@ -202,6 +207,7 @@ export default function InvestingTab({ hook, userId }) {
                   <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
                     {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
                   </div>
+                  {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
                 </div>
               </button>
             ))}
@@ -395,6 +401,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
       {items.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Track stocks you don't own yet. Prices refresh with “Update prices”.</div>}
       {items.map((a, i) => {
         const day = a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null;
+        const ext = extendedPrice(a);
         return (
           <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
             <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
@@ -404,6 +411,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
             <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
               <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
+              {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
             </div>
             <button onClick={() => removeAsset(a.symbol)} aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}>×</button>
           </div>

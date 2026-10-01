@@ -12,6 +12,25 @@ import { toDateStr, addDays } from './dateUtils';
 export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
 export const BENCHMARK = 'SPY'; // S&P 500 ETF; its price is saved with each daily snapshot
 
+// Pre-market / after-hours price saved on an invAssets doc (extPrice, extSession,
+// extTime), compared with the last regular-session price. Null during the
+// regular session (weekdays 9:30–16:00 ET) or when it's older than 4 days.
+export function extendedPrice(a, now = new Date()) {
+  if (!a?.extPrice || !a.price || !a.extTime) return null;
+  if (now - new Date(a.extTime) > 4 * 864e5) return null;
+  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const m = et.getHours() * 60 + et.getMinutes();
+  if (et.getDay() >= 1 && et.getDay() <= 5 && m >= 9 * 60 + 30 && m < 16 * 60) return null;
+  return {
+    price: a.extPrice,
+    session: a.extSession,
+    label: a.extSession === 'pre' ? 'Pre-market' : 'After hours',
+    change: a.extPrice - a.price,
+    pct: (a.extPrice - a.price) / a.price,
+    time: a.extTime,
+  };
+}
+
 export function sortTx(txs) {
   return [...txs].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
 }
@@ -57,17 +76,20 @@ export function replay(txs) {
 export function computePortfolio(txs, assets) {
   const { cash, netDeposits, interest, holdings } = replay(txs);
   let holdingsValue = 0, dayChange = 0, realized = 0, dividends = 0;
+  let extChange = 0, extLabel = null;
 
   const rows = Object.values(holdings).map(x => {
     const a = assets[x.symbol] || {};
     const price = a.price ?? null;
     const value = price !== null ? x.qty * price : null;
     const unrealized = value !== null ? value - x.cost : null;
+    const ext = extendedPrice(a);
     realized += x.realized;
     dividends += x.dividends;
     if (x.qty > 0 && value !== null) {
       holdingsValue += value;
       if (a.prevClose) dayChange += x.qty * (price - a.prevClose);
+      if (ext) { extChange += x.qty * ext.change; extLabel = ext.label; }
     }
     return {
       ...x,
@@ -78,6 +100,7 @@ export function computePortfolio(txs, assets) {
       value, unrealized,
       unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
       dayPct: price && a.prevClose ? (price - a.prevClose) / a.prevClose : null,
+      ext,
     };
   });
 
@@ -85,6 +108,8 @@ export function computePortfolio(txs, assets) {
   const value = cash + holdingsValue;
   return {
     cash, netDeposits, holdingsValue, value, dayChange, realized, dividends, interest,
+    // Pre-market / after-hours move on top of the last close (not part of value)
+    ext: extLabel ? { label: extLabel, change: extChange } : null,
     totalGain: value - netDeposits,
     holdings: open,
     closed: rows.filter(r => r.qty === 0),
