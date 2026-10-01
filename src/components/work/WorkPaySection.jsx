@@ -321,7 +321,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
               if (paid) { paidCount++; paidAmt += amount; }
             });
             const status = paidCount === crewIds.length ? 'paid' : paidCount > 0 ? 'partial' : 'unpaid';
-            const statusColor = status === 'paid' ? T.green : status === 'partial' ? T.khaki : T.muted;
+            const statusColor = status === 'paid' ? T.green : status === 'partial' ? T.khaki : '#C9625B'; // muted red
 
             return (
               <div key={mondayId} style={{ borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
@@ -346,7 +346,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: paidAmt > 0 ? T.khaki : T.muted }}>{fmt(paidAmt)}</div>
                     <div style={{ fontSize: 11, color: statusColor, marginTop: 1 }}>
-                      {status === 'paid' ? 'Paid ✓' : status === 'partial' ? `${paidCount}/${crewIds.length} paid` : 'Unpaid'}
+                      {status === 'paid' ? 'Paid ✓' : status === 'partial' ? 'Partially paid' : 'Unpaid'}
                     </div>
                   </div>
                   <span style={{ fontSize: 12, color: T.muted, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>›</span>
