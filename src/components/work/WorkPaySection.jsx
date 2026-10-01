@@ -33,6 +33,13 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
           <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
             {dc} day{dc !== 1 ? 's' : ''} · {stats.windows} win · {stats.doors} doors
           </div>
+          {[...stats.days].sort((a, b) => a.id.localeCompare(b.id)).map(d => (
+            <div key={d.id} style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+              <span style={{ color: T.text }}>{new Date(d.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</span>
+              {' · '}{d.windows || 0}w · {d.doors || 0}dr
+              {d.comment ? <span> · {d.comment}</span> : null}
+            </div>
+          ))}
         </div>
         <button
           onClick={() => { if (!paid || editing) save(!paid); }}
@@ -90,6 +97,13 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
   const currentYear    = String(new Date().getFullYear());
   const currentMondayId = getMondayId((() => { const d = new Date(); const pad = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; })());
   const [summaryYear, setSummaryYear] = useState(currentYear);
+  // Expanded weeks in the list; the current week starts open so its pay is easy to enter
+  const [openWeeks, setOpenWeeks] = useState(() => new Set([currentMondayId]));
+  const toggleWeek = id => setOpenWeeks(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
 
   const weeksMap = {};
   weeks.forEach(w => { weeksMap[w.id] = w; });
@@ -291,35 +305,73 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
         </div>
       )}
 
-      {/* ── Weekly rows ── */}
-      {sortedWeekIds.map(mondayId => {
-        const crewEntries = grouped[mondayId];
-        const weekDoc     = weeksMap[mondayId] || {};
+      {/* ── Weekly rows: compact list, tap a week for details ── */}
+      {sortedWeekIds.length > 0 && (
+        <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
+          {sortedWeekIds.map((mondayId, i) => {
+            const crewEntries = grouped[mondayId];
+            const weekDoc     = weeksMap[mondayId] || {};
+            const isOpen      = openWeeks.has(mondayId);
 
-        let totalW = 0, totalD = 0, totalDays = 0;
-        Object.values(crewEntries).forEach(s => { totalW += s.windows; totalD += s.doors; totalDays += s.days.length; });
+            let totalW = 0, totalD = 0, totalDays = 0, paidAmt = 0, paidCount = 0;
+            const crewIds = Object.keys(crewEntries);
+            Object.values(crewEntries).forEach(st => { totalW += st.windows; totalD += st.doors; totalDays += st.days.length; });
+            crewIds.forEach(cid => {
+              const { paid, amount } = parsePayEntry(weekDoc[cid]);
+              if (paid) { paidCount++; paidAmt += amount; }
+            });
+            const status = paidCount === crewIds.length ? 'paid' : paidCount > 0 ? 'partial' : 'unpaid';
+            const statusColor = status === 'paid' ? T.green : status === 'partial' ? T.khaki : T.muted;
 
-        return (
-          <div key={mondayId} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
-            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{formatWeekRange(mondayId)}</span>
-              <span style={{ fontSize: 12, color: T.muted }}>{totalDays}d · {totalW}w · {totalD}dr</span>
-            </div>
-            {Object.entries(crewEntries).map(([crewId, stats]) => (
-              <WeekCrewRow
-                key={crewId}
-                mondayId={mondayId}
-                crewId={crewId}
-                stats={stats}
-                rawEntry={weekDoc[crewId]}
-                crews={crews}
-                onSetPayment={onSetPayment}
-                isCurrentWeek={mondayId === currentMondayId}
-              />
-            ))}
-          </div>
-        );
-      })}
+            return (
+              <div key={mondayId} style={{ borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+                <button
+                  onClick={() => toggleWeek(mondayId)}
+                  aria-expanded={isOpen}
+                  style={{ width: '100%', padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: isOpen ? T.subtle + '55' : 'transparent' }}
+                >
+                  <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
+                    {crewIds.map(cid => {
+                      const c = crews.find(x => x.id === cid);
+                      return <div key={cid} style={{ width: 7, height: 7, borderRadius: '50%', background: c?.color || T.muted }} />;
+                    })}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>
+                      {formatWeekRange(mondayId)}
+                      {mondayId === currentMondayId && <span style={{ fontSize: 11, color: T.khaki, fontWeight: 500, marginLeft: 6 }}>this week</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.muted, marginTop: 1 }}>{totalDays}d · {totalW}w · {totalD}dr</div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: paidAmt > 0 ? T.khaki : T.muted }}>{fmt(paidAmt)}</div>
+                    <div style={{ fontSize: 11, color: statusColor, marginTop: 1 }}>
+                      {status === 'paid' ? 'Paid ✓' : status === 'partial' ? `${paidCount}/${crewIds.length} paid` : 'Unpaid'}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 12, color: T.muted, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>›</span>
+                </button>
+                {isOpen && (
+                  <div style={{ borderTop: `1px solid ${T.cardBorder}`, background: T.bg + '55' }}>
+                    {Object.entries(crewEntries).map(([crewId, stats]) => (
+                      <WeekCrewRow
+                        key={crewId}
+                        mondayId={mondayId}
+                        crewId={crewId}
+                        stats={stats}
+                        rawEntry={weekDoc[crewId]}
+                        crews={crews}
+                        onSetPayment={onSetPayment}
+                        isCurrentWeek={mondayId === currentMondayId}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
