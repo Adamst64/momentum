@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { T } from '../theme';
+import Modal from './Modal';
 
 const TAB_DEFS = {
   routines: {
@@ -54,12 +55,48 @@ const TAB_DEFS = {
       </svg>
     ),
   },
+  notes: {
+    label: 'Notes',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M6 3h9l4 4v14H6z" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinejoin="round" />
+        <path d="M9 11h7M9 15h7M9 7h4" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  lists: {
+    label: 'Lists',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="4" width="5" height="5" rx="1.2" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <rect x="3" y="15" width="5" height="5" rx="1.2" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <path d="M11 6.5h10M11 17.5h10" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 };
 
 export { TAB_DEFS };
 
+const MAX_SLOTS = 5;
+
+const moreIcon = (on) => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+    {[6, 12, 18].map(x => <circle key={x} cx={x} cy="12" r="1.8" fill={on ? T.khaki : T.muted} />)}
+  </svg>
+);
+
 export default function BottomNav({ active, onChange, tabOrder }) {
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // With more tabs than fit, the last slot becomes "More" and lists the rest
+  const overflow = tabOrder.length > MAX_SLOTS;
+  const primary  = overflow ? tabOrder.slice(0, MAX_SLOTS - 1) : tabOrder;
+  const extra    = overflow ? tabOrder.slice(MAX_SLOTS - 1) : [];
+  const moreOn   = extra.includes(active);
+
   return (
+    <>
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 50,
       background: '#161618',
@@ -68,7 +105,7 @@ export default function BottomNav({ active, onChange, tabOrder }) {
       paddingBottom: 'env(safe-area-inset-bottom)',
       height: `calc(${T.navH}px + env(safe-area-inset-bottom))`,
     }}>
-      {tabOrder.map(id => {
+      {primary.map(id => {
         const def = TAB_DEFS[id];
         if (!def) return null;
         const on = active === id;
@@ -91,6 +128,53 @@ export default function BottomNav({ active, onChange, tabOrder }) {
           </button>
         );
       })}
+      {overflow && (
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          style={{
+            flex: 1,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 3, paddingTop: 8,
+            color: moreOn ? T.khaki : T.muted,
+            fontSize: 10, fontWeight: moreOn ? 600 : 400,
+          }}
+        >
+          {moreOn ? TAB_DEFS[active].icon(true) : moreIcon(false)}
+          {moreOn ? TAB_DEFS[active].label : 'More'}
+        </button>
+      )}
     </nav>
+
+    {moreOpen && (
+      <Modal title="More" onClose={() => setMoreOpen(false)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {extra.map(id => {
+            const def = TAB_DEFS[id];
+            if (!def) return null;
+            const on = active === id;
+            return (
+              <button
+                key={id}
+                onClick={() => { onChange(id); setMoreOpen(false); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px',
+                  borderRadius: 12, background: on ? '#2A3A1A' : T.bg,
+                  border: `1px solid ${on ? T.olive : T.cardBorder}`,
+                  color: on ? T.khaki : T.text, fontSize: 15, textAlign: 'left',
+                }}
+              >
+                {def.icon(on)}
+                {def.label}
+              </button>
+            );
+          })}
+          <div style={{ fontSize: 12, color: T.muted, textAlign: 'center', marginTop: 4 }}>
+            Reorder tabs in Settings to choose what's in the bar.
+          </div>
+        </div>
+      </Modal>
+    )}
+    </>
   );
 }

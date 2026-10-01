@@ -2,12 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
-import BottomNav from './components/BottomNav';
+import BottomNav, { TAB_DEFS } from './components/BottomNav';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
 import BirthdaysTab from './components/birthdays/BirthdaysTab';
 import WorkTab from './components/work/WorkTab';
+import NotesTab from './components/notes/NotesTab';
+import ListsTab from './components/lists/ListsTab';
+import NoteEditor from './components/notes/NoteEditor';
+import CreateTaskModal from './components/tasks/CreateTaskModal';
+import QuickAddSheet from './components/QuickAddSheet';
+import DailyReviewModal from './components/DailyReviewModal';
 import SettingsModal from './components/SettingsModal';
 import AuthScreen from './components/AuthScreen';
 import ResetPasswordScreen from './components/ResetPasswordScreen';
@@ -18,15 +24,27 @@ import { useTasks } from './hooks/useTasks';
 import { useShoppingLists } from './hooks/useShoppingLists';
 import { useBirthdays } from './hooks/useBirthdays';
 import { useWork } from './hooks/useWork';
+import { useNotes } from './hooks/useNotes';
+import { usePersonalLists } from './hooks/usePersonalLists';
 import { useTabOrder, ALL_TABS } from './hooks/useTabOrder';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
-const TAB_LABELS = { routines: 'Routines', tasks: 'Tasks', shopping: 'Shopping', birthdays: 'Birthdays', work: 'Work' };
+// Home-screen shortcuts and links can open the app at ?action=<one of these>
+const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'review'];
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
   const [tab, setTab] = useState('routines');
   const [showSettings, setShowSettings] = useState(false);
+  const [quickAdd, setQuickAdd]         = useState(null); // null | { mode }
+  const [newTask, setNewTask]           = useState(false);
+  const [newNote, setNewNote]           = useState(false);
+  const [showReview, setShowReview]     = useState(false);
+  const [dailyReview, setDailyReview]   = useState(null);
+  const [urlAction] = useState(() => {
+    const a = new URLSearchParams(window.location.search).get('action');
+    return URL_ACTIONS.includes(a) ? a : null;
+  });
   const [resetCode] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     return p.get('mode') === 'resetPassword' ? p.get('oobCode') : null;
@@ -42,6 +60,7 @@ export default function App() {
       .then(snap => {
         const data = snap.data() || {};
         setFeatures(data.features || {});
+        setDailyReview(data.preferences?.dailyReview || null);
         const stored = data.preferences?.tabOrder;
         if (Array.isArray(stored) && stored.length > 0) {
           const valid = [
@@ -74,6 +93,29 @@ export default function App() {
   const shoppingHook  = useShoppingLists(userId);
   const birthdaysHook = useBirthdays(userId);
   const workHook      = useWork(showWork ? userId : null);
+  const notesHook     = useNotes(userId);
+  const listsHook     = usePersonalLists(userId);
+
+  // Open whatever a shortcut link asked for, once signed in
+  useEffect(() => {
+    if (!userId || !urlAction) return;
+    if (urlAction === 'add-task')      setNewTask(true);
+    if (urlAction === 'new-note')      setNewNote(true);
+    if (urlAction === 'review')        setShowReview(true);
+    if (urlAction === 'add-item')      setQuickAdd({ mode: 'shopping' });
+    if (urlAction === 'add-list-item') setQuickAdd({ mode: 'list' });
+    window.history.replaceState(null, '', window.location.pathname);
+  }, [userId, urlAction]);
+
+  const saveDailyReview = async (prefs) => {
+    await setDoc(doc(db, 'users', userId), { preferences: { dailyReview: prefs } }, { merge: true });
+    setDailyReview(d => ({ ...d, ...prefs }));
+  };
+
+  const handleQuickTask = (data) => {
+    tasksHook.addTask(data);
+    if (data.notify?.enabled) registerPushToken(userId);
+  };
 
   // Re-register push token on load if permission was already granted
   useEffect(() => {
@@ -118,8 +160,14 @@ export default function App() {
               fontSize: 12, fontWeight: 600, color: T.khaki,
               background: '#2A3A1A', padding: '4px 10px', borderRadius: 20,
             }}>
-              {TAB_LABELS[tab]}
+              {TAB_DEFS[tab]?.label}
             </div>
+            <HeaderButton label="Daily review" onClick={() => setShowReview(true)}>
+              <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" stroke={T.olive} strokeWidth="1.8" strokeLinejoin="round" />
+            </HeaderButton>
+            <HeaderButton label="Quick add" onClick={() => setQuickAdd({ mode: null })}>
+              <path d="M12 5v14M5 12h14" stroke={T.olive} strokeWidth="2" strokeLinecap="round" />
+            </HeaderButton>
             <button
               onClick={() => setShowSettings(true)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
@@ -143,6 +191,30 @@ export default function App() {
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
         {tab === 'work'      && showWork && <WorkTab hook={workHook} />}
+        {tab === 'notes'     && <NotesTab hook={notesHook} />}
+        {tab === 'lists'     && <ListsTab hook={listsHook} />}
+
+        {quickAdd && (
+          <QuickAddSheet
+            initialMode={quickAdd.mode}
+            shoppingHook={shoppingHook}
+            listsHook={listsHook}
+            onPick={key => { setQuickAdd(null); key === 'task' ? setNewTask(true) : setNewNote(true); }}
+            onClose={() => setQuickAdd(null)}
+          />
+        )}
+        {newTask && <CreateTaskModal onSave={handleQuickTask} onClose={() => setNewTask(false)} />}
+        {newNote && <NoteEditor onSave={notesHook.addNote} onClose={() => setNewNote(false)} />}
+        {showReview && (
+          <DailyReviewModal
+            routinesHook={routinesHook}
+            tasksHook={tasksHook}
+            birthdays={birthdaysHook.birthdays}
+            onIncrement={id => routinesHook.incrementDay(id)}
+            onWriteEntry={() => { setShowReview(false); setNewNote(true); }}
+            onClose={() => setShowReview(false)}
+          />
+        )}
 
         {showSettings && (
           <SettingsModal
@@ -158,6 +230,11 @@ export default function App() {
             tabOrder={tabOrder}
             setTabOrder={setTabOrder}
             showWork={showWork}
+            notes={notesHook.notes}
+            personalLists={listsHook.lists}
+            dailyReview={dailyReview}
+            onSaveDailyReview={saveDailyReview}
+            userId={userId}
           />
         )}
 
@@ -165,5 +242,17 @@ export default function App() {
 
       <BottomNav active={tab} onChange={setTab} tabOrder={visibleTabs} />
     </div>
+  );
+}
+
+function HeaderButton({ label, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">{children}</svg>
+    </button>
   );
 }

@@ -111,6 +111,65 @@ exports.sendDayOfReminders = onSchedule(
   }
 );
 
+// ── Shared helpers ───────────────────────────────────────────────────────────
+
+// Current date/time parts in a timezone
+function localNow(tz) {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
+  const ym  = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  return {
+    minutes: now.getHours() * 60 + now.getMinutes(),
+    ym,
+    dom:   now.getDate(),
+    today: `${ym}-${String(now.getDate()).padStart(2, '0')}`,
+  };
+}
+
+// True once "HH:MM" has passed today, but not more than an hour ago
+function isDue(time, minutesNow) {
+  const [h, m] = time.split(':').map(Number);
+  const late = minutesNow - (h * 60 + m);
+  return late >= 0 && late < 60;
+}
+
+async function sendPush(db, messaging, uid, tokens, title, body) {
+  const staleTokens = [];
+  await Promise.allSettled(tokens.map(async (token) => {
+    try {
+      await messaging.send({
+        token,
+        notification: { title, body },
+        webpush: {
+          notification: {
+            icon:  'https://adamst64.github.io/momentum/icon-192.png',
+            badge: 'https://adamst64.github.io/momentum/icon-192.png',
+          },
+          headers: { TTL: '86400' },
+        },
+      });
+    } catch (err) {
+      if (err.code === 'messaging/registration-token-not-registered') staleTokens.push(token);
+      else console.error(`Push to ${uid} failed:`, err.code || err.message);
+    }
+  }));
+  if (staleTokens.length) {
+    await db.collection('users').doc(uid).update({ fcmTokens: FieldValue.arrayRemove(...staleTokens) });
+  }
+}
+
+// Evening review reminder: users/{uid}.preferences.dailyReview = { enabled, time, timezone, lastSentDate }
+async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
+  const pref = userDoc.data().preferences?.dailyReview;
+  if (!pref?.enabled || !pref.time) return;
+  const now = localNow(pref.timezone || 'UTC');
+  if (!isDue(pref.time, now.minutes) || pref.lastSentDate === now.today) return;
+
+  // Mark first so an overlapping run can't double-send
+  await userDoc.ref.update({ 'preferences.dailyReview.lastSentDate': now.today });
+  await sendPush(db, messaging, userDoc.id, tokens,
+    '🌙 Daily review', 'Take a minute to look back on today and plan tomorrow.');
+}
+
 // ── Task push notifications (every 5 minutes) ─────────────────────────────────
 
 exports.sendTaskNotifications = onSchedule(
@@ -126,26 +185,16 @@ exports.sendTaskNotifications = onSchedule(
       const tokens = userDoc.data().fcmTokens || [];
       if (!tokens.length) return;
 
+      await maybeSendDailyReview(db, messaging, userDoc, tokens);
+
       const tasksSnap = await db.collection('users').doc(uid).collection('tasks').get();
 
       for (const taskDoc of tasksSnap.docs) {
         const task = taskDoc.data();
         if (!task.notify?.enabled || !task.notify?.time) continue;
 
-        const tz = task.notify.timezone || 'UTC';
-
-        // Get current local date/time in the task's timezone
-        const nowInTz     = new Date(new Date().toLocaleString('en-US', { timeZone: tz }));
-        const nowHour     = nowInTz.getHours();
-        const nowMin      = nowInTz.getMinutes();
-        const ymLocal     = `${nowInTz.getFullYear()}-${String(nowInTz.getMonth() + 1).padStart(2, '0')}`;
-        const domLocal    = nowInTz.getDate();
-        const todayLocal  = `${ymLocal}-${String(domLocal).padStart(2, '0')}`;
-
-        // Send once the notify time has passed, but skip if it's more than an hour late
-        const [notifyHour, notifyMin] = task.notify.time.split(':').map(Number);
-        const minutesLate = (nowHour * 60 + nowMin) - (notifyHour * 60 + notifyMin);
-        if (minutesLate < 0 || minutesLate >= 60) continue;
+        const { minutes, ym: ymLocal, dom: domLocal, today: todayLocal } = localNow(task.notify.timezone || 'UTC');
+        if (!isDue(task.notify.time, minutes)) continue;
 
         // Check if task is due today
         let dueToday = false;
@@ -167,32 +216,7 @@ exports.sendTaskNotifications = onSchedule(
         // Update lastSentDate before sending to minimise duplicates
         await taskDoc.ref.update({ 'notify.lastSentDate': todayLocal });
 
-        const staleTokens = [];
-        await Promise.allSettled(tokens.map(async (token) => {
-          try {
-            await messaging.send({
-              token,
-              notification: { title: notifTitle, body: notifBody },
-              webpush: {
-                notification: {
-                  icon:  'https://adamst64.github.io/momentum/icon-192.png',
-                  badge: 'https://adamst64.github.io/momentum/icon-192.png',
-                },
-                headers: { TTL: '86400' },
-              },
-            });
-          } catch (err) {
-            if (err.code === 'messaging/registration-token-not-registered') {
-              staleTokens.push(token);
-            }
-          }
-        }));
-
-        if (staleTokens.length) {
-          await db.collection('users').doc(uid).update({
-            fcmTokens: FieldValue.arrayRemove(...staleTokens),
-          });
-        }
+        await sendPush(db, messaging, uid, tokens, notifTitle, notifBody);
       }
     }));
   }

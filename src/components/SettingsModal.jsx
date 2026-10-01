@@ -4,10 +4,11 @@ import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
+import { TAB_DEFS } from './BottomNav';
+import { registerPushToken } from '../utils/pushNotifications';
 
-const TAB_NAMES = { routines: 'Routines', tasks: 'Tasks', work: 'Work', shopping: 'Shopping', birthdays: 'Birthdays' };
 
-export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork }) {
+export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork, notes, personalLists, dailyReview, onSaveDailyReview, userId }) {
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');
   const [newPw, setNewPw]           = useState('');
@@ -26,6 +27,30 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
       setFeatureStatus({ ok: true, msg: 'Work tab unlocked!' });
     } else {
       setFeatureStatus({ ok: false, msg: 'Invalid code' });
+    }
+  };
+
+  const [reviewTime, setReviewTime]     = useState(dailyReview?.time || '21:00');
+  const [reviewStatus, setReviewStatus] = useState(null);
+  const reviewOn = !!dailyReview?.enabled;
+
+  const saveReview = async (enabled, time) => {
+    setReviewStatus(null);
+    try {
+      if (enabled) {
+        const ok = await registerPushToken(userId);
+        if (!ok) {
+          setReviewStatus({ ok: false, msg: 'Allow notifications for Momentum first (iPhone Settings → Notifications).' });
+          return;
+        }
+      }
+      await onSaveDailyReview({
+        enabled, time,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      });
+      setReviewStatus({ ok: true, msg: enabled ? `Reminder set for ${time}` : 'Reminder off' });
+    } catch (e) {
+      setReviewStatus({ ok: false, msg: e.message || 'Could not save' });
     }
   };
 
@@ -62,7 +87,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
       })
     );
 
-    const data = { exportedAt: new Date().toISOString(), version: 2, routines, tasks, shopping: shoppingExport };
+    const data = { exportedAt: new Date().toISOString(), version: 3, routines, tasks, shopping: shoppingExport, notes, lists: personalLists };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -121,9 +146,39 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
         <Group>
           <Row
             label="Export as JSON"
-            detail={`${routines.length}r · ${tasks.length}t · ${(shoppingLists || []).length} lists`}
+            detail={`${routines.length}r · ${tasks.length}t · ${(notes || []).length}n · ${(shoppingLists || []).length + (personalLists || []).length} lists`}
             onTap={handleExport}
           />
+        </Group>
+
+        <Group>
+          <div style={{ padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div>
+                <div style={{ fontSize: 15, color: T.text }}>Evening review reminder</div>
+                <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>A nudge to look back on your day</div>
+              </div>
+              <button
+                onClick={() => saveReview(!reviewOn, reviewTime)}
+                aria-label="Toggle evening review reminder"
+                style={{ width: 44, height: 26, borderRadius: 13, background: reviewOn ? T.olive : T.subtle, position: 'relative', flexShrink: 0 }}
+              >
+                <span style={{ position: 'absolute', top: 3, left: reviewOn ? 21 : 3, width: 20, height: 20, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </button>
+            </div>
+            {reviewOn && (
+              <input
+                type="time"
+                value={reviewTime}
+                onChange={e => setReviewTime(e.target.value)}
+                onBlur={() => reviewTime && reviewTime !== dailyReview?.time && saveReview(true, reviewTime)}
+                style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '9px 12px', color: T.text, fontSize: 15, outline: 'none', colorScheme: 'dark' }}
+              />
+            )}
+            {reviewStatus && (
+              <div style={{ fontSize: 13, color: reviewStatus.ok ? T.green : T.red }}>{reviewStatus.msg}</div>
+            )}
+          </div>
         </Group>
 
         {tabOrder && (
@@ -133,7 +188,10 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
             </div>
             {tabOrder.filter(id => id !== 'work' || showWork).map((id, i, arr) => (
               <div key={id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '11px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
-                <span style={{ fontSize: 15, color: T.text }}>{TAB_NAMES[id]}</span>
+                <span style={{ fontSize: 15, color: T.text }}>
+                  {TAB_DEFS[id]?.label}
+                  {arr.length > 5 && i >= 4 && <span style={{ fontSize: 11, color: T.muted, marginLeft: 8 }}>in More</span>}
+                </span>
                 <div style={{ display: 'flex', gap: 2 }}>
                   <button
                     disabled={i === 0}

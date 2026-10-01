@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
-import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT } from '../../utils/dateUtils';
+import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT, DAYS_FULL } from '../../utils/dateUtils';
 import { getScheduleForDate, getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 
@@ -72,6 +72,55 @@ function computeStreak(routine, today) {
   return streak;
 }
 
+// Longest run, per-weekday completion and month-over-month rate
+function computeInsights(routine, today) {
+  const created = routine.createdAt || today;
+  const byDow = Array.from({ length: 7 }, () => ({ done: 0, total: 0 }));
+  const months = {};
+  let longest = 0, run = 0;
+  let d = new Date(created + 'T12:00:00');
+  const end = new Date(today + 'T12:00:00');
+  while (d <= end) {
+    const ds    = d.toISOString().slice(0, 10);
+    const state = getDayState(routine, ds, today);
+    const counts = state === 'done' || state === 'missed' || (state === 'partial' && ds !== today);
+    if (state === 'done') {
+      run++;
+      longest = Math.max(longest, run);
+    } else if (counts) {
+      run = 0;
+    }
+    if (counts) {
+      const dow = d.getDay();
+      const m   = ds.slice(0, 7);
+      months[m] = months[m] || { done: 0, total: 0 };
+      byDow[dow].total++;
+      months[m].total++;
+      if (state === 'done') { byDow[dow].done++; months[m].done++; }
+    }
+    d.setDate(d.getDate() + 1);
+  }
+
+  const rated = byDow
+    .map((v, dow) => ({ dow, total: v.total, pct: v.total ? Math.round(v.done / v.total * 100) : null }))
+    .filter(v => v.total >= 3);
+  const best  = rated.length > 1 ? rated.reduce((a, b) => (b.pct > a.pct ? b : a)) : null;
+  const worst = rated.length > 1 ? rated.reduce((a, b) => (b.pct < a.pct ? b : a)) : null;
+
+  const pctOf = m => (months[m]?.total ? Math.round(months[m].done / months[m].total * 100) : null);
+  const thisM = today.slice(0, 7);
+  const prev  = new Date(today.slice(0, 7) + '-01T12:00:00');
+  prev.setMonth(prev.getMonth() - 1);
+  const lastM = prev.toISOString().slice(0, 7);
+
+  return {
+    longest, byDow: byDow.map((v, dow) => ({ dow, ...v })),
+    best: best && worst && best.pct !== worst.pct ? best : null,
+    worst: best && worst && best.pct !== worst.pct ? worst : null,
+    thisMonth: pctOf(thisM), lastMonth: pctOf(lastM),
+  };
+}
+
 export default function RoutineCalendarModal({ routine, onClose }) {
   const today       = todayStr();
   const todayDate   = parseDate(today);
@@ -100,6 +149,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
 
   const stats  = computeStats(routine, today);
   const streak = computeStreak(routine, today);
+  const insights = computeInsights(routine, today);
   const isMulti = (routine.timesPerDay ?? 1) > 1 || Object.keys(routine.timesPerDayByDow || {}).length > 0;
 
   const legend = [
@@ -262,8 +312,75 @@ export default function RoutineCalendarModal({ routine, onClose }) {
           </div>
         </div>
 
+        {stats.total > 0 && <InsightsCard insights={insights} />}
+
       </div>
     </div>,
     document.body
+  );
+}
+
+function InsightsCard({ insights }) {
+  const { longest, byDow, best, worst, thisMonth, lastMonth } = insights;
+  const diff = thisMonth !== null && lastMonth !== null ? thisMonth - lastMonth : null;
+  const maxTotal = Math.max(1, ...byDow.map(d => d.total));
+
+  return (
+    <div style={{
+      background: T.card, border: `1px solid ${T.cardBorder}`,
+      borderRadius: 14, padding: '14px 16px', marginTop: 20,
+      display: 'flex', flexDirection: 'column', gap: 14,
+    }}>
+      <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Insights</div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <Stat value={longest} label="longest streak" />
+        <Stat
+          value={thisMonth !== null ? `${thisMonth}%` : '—'}
+          label={diff === null ? 'this month' : diff === 0 ? 'this month · same as last' : `this month · ${diff > 0 ? '+' : ''}${diff} vs last`}
+          color={diff === null || diff === 0 ? T.oliveLight : diff > 0 ? T.green : T.red}
+        />
+      </div>
+
+      {/* Completion by weekday; bar height = completion rate, faded when rarely scheduled */}
+      <div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 64 }}>
+          {byDow.map(d => {
+            const pct = d.total ? d.done / d.total : 0;
+            return (
+              <div key={d.dow} style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
+                <div style={{
+                  height: d.total ? `${Math.max(6, pct * 100)}%` : 3,
+                  background: d.total ? T.oliveLight : T.subtle,
+                  opacity: d.total ? 0.35 + 0.65 * (d.total / maxTotal) : 1,
+                  borderRadius: 4,
+                }} />
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+          {byDow.map(d => (
+            <div key={d.dow} style={{ flex: 1, textAlign: 'center', fontSize: 9, color: T.muted }}>{DAYS_SHORT[d.dow]}</div>
+          ))}
+        </div>
+      </div>
+
+      {best && worst && (
+        <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5 }}>
+          Best on <span style={{ color: T.oliveLight, fontWeight: 600 }}>{DAYS_FULL[best.dow]}s</span> ({best.pct}%),
+          toughest on <span style={{ color: T.red, fontWeight: 600 }}>{DAYS_FULL[worst.dow]}s</span> ({worst.pct}%).
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stat({ value, label, color = T.oliveLight }) {
+  return (
+    <div style={{ background: T.bg, borderRadius: 10, padding: '10px 12px' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>{label}</div>
+    </div>
   );
 }
