@@ -185,12 +185,19 @@ export default function App() {
                 {TAB_DEFS[tab].label}
               </div>
             )}
-            <HeaderButton label="Daily review" onClick={() => setShowReview(true)}>
-              <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" stroke={T.olive} strokeWidth="1.8" strokeLinejoin="round" />
-            </HeaderButton>
-            <HeaderButton label="Quick add" onClick={() => setQuickAdd({ mode: null })}>
-              <path d="M12 5v14M5 12h14" stroke={T.olive} strokeWidth="2" strokeLinecap="round" />
-            </HeaderButton>
+            <button
+              onClick={() => setShowReview(true)}
+              aria-label="Daily review"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 20,
+                background: '#2A3A1A', border: `1px solid ${T.olive}`, color: T.khaki, fontSize: 13, fontWeight: 700,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" stroke={T.khaki} strokeWidth="2" strokeLinejoin="round" />
+              </svg>
+              Review
+            </button>
             <button
               onClick={() => setShowSettings(true)}
               style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
@@ -236,7 +243,6 @@ export default function App() {
             routinesHook={routinesHook}
             tasksHook={tasksHook}
             birthdays={birthdaysHook.birthdays}
-            onWriteEntry={() => { setShowReview(false); setNewNote(true); }}
             onClose={() => setShowReview(false)}
           />
         )}
@@ -291,18 +297,6 @@ export default function App() {
       )}
 
     </div>
-  );
-}
-
-function HeaderButton({ label, onClick, children }) {
-  return (
-    <button
-      onClick={onClick}
-      aria-label={label}
-      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px 0', display: 'flex', alignItems: 'center' }}
-    >
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none">{children}</svg>
-    </button>
   );
 }
 

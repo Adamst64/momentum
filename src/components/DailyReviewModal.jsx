@@ -1,7 +1,7 @@
 import React from 'react';
 import Modal from './Modal';
 import { T } from '../theme';
-import { todayStr, addDays, formatLongDate } from '../utils/dateUtils';
+import { todayStr, addDays, formatLongDate, formatShortDate } from '../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../hooks/useRoutines';
 import { daysUntil } from '../utils/birthdayUtils';
 import RoutineItem from './routines/RoutineItem';
@@ -9,8 +9,8 @@ import RoutineItem from './routines/RoutineItem';
 const TASK_BLUE = '#7FA9FF';
 
 // Evening check-in: today's routines and tasks (check them off right here),
-// tomorrow's tasks and birthdays in the next week
-export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, onWriteEntry, onClose }) {
+// overdue tasks, tomorrow's tasks and birthdays in the next week
+export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, onClose }) {
   const today    = todayStr();
   const tomorrow = addDays(today, 1);
 
@@ -20,6 +20,11 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
   const tasksToday = tasksHook.tasksForDate(today).filter(t => t.task.type !== 'backlog');
   const doneT      = tasksToday.filter(t => t.done);
   const leftT      = tasksToday.filter(t => !t.done);
+
+  // Past-due one-time tasks; ones checked off today stay listed (as done) until tomorrow
+  const overdue = tasksHook.tasks
+    .filter(t => t.type === 'one-time' && t.date < today && (!t.completedAt || t.completedAt === today))
+    .sort((a, b) => !!a.completedAt - !!b.completedAt || a.date.localeCompare(b.date));
 
   const tasksTomorrow    = tasksHook.tasksForDate(tomorrow).filter(t => t.task.type !== 'backlog');
   const birthdaysSoon    = birthdays
@@ -54,8 +59,8 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
           )}
         </div>
 
-        {routines.length > 0 && (
-          <Section title={`Routines (${doneR.length}/${routines.length})`}>
+        <Section title={routines.length ? `Routines (${doneR.length}/${routines.length})` : 'Routines'}>
+          {routines.length === 0 ? <Empty>No routines today.</Empty> : (
             <Card>
               {[...leftR, ...doneR].map((r, i) => (
                 <RoutineItem
@@ -67,52 +72,53 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
                 />
               ))}
             </Card>
-          </Section>
-        )}
+          )}
+        </Section>
 
-        {tasksToday.length > 0 && (
-          <Section title={`Today's tasks (${doneT.length}/${tasksToday.length})`}>
+        {overdue.length > 0 && (
+          <Section title={`Overdue tasks (${overdue.filter(t => !t.completedAt).length})`} color={T.red}>
             <Card>
-              {[...leftT, ...doneT].map(({ task, done }, i) => (
-                <TaskRow key={task.id} first={i === 0} name={task.name} done={done} onToggle={() => tasksHook.toggleTaskForDate(task.id, today)} />
+              {overdue.map((t, i) => (
+                <TaskRow key={t.id} first={i === 0} name={t.name} done={!!t.completedAt}
+                  detail={`due ${formatShortDate(t.date)}`} detailColor={T.red}
+                  onToggle={() => tasksHook.toggleTaskForDate(t.id, today)} />
               ))}
             </Card>
           </Section>
         )}
 
+        <Section title={tasksToday.length ? `Today's tasks (${doneT.length}/${tasksToday.length})` : "Today's tasks"}>
+          {tasksToday.length === 0 ? <Empty>No tasks today.</Empty> : (
+            <Card>
+              {[...leftT, ...doneT].map(({ task, done }, i) => (
+                <TaskRow key={task.id} first={i === 0} name={task.name} done={done} onToggle={() => tasksHook.toggleTaskForDate(task.id, today)} />
+              ))}
+            </Card>
+          )}
+        </Section>
+
         <Section title="Tomorrow's tasks">
-          {tasksTomorrow.length === 0 ? (
-            <div style={{ fontSize: 13, color: T.muted, padding: '4px 2px' }}>Nothing scheduled.</div>
-          ) : (
+          {tasksTomorrow.length === 0 ? <Empty>No tasks tomorrow.</Empty> : (
             <Card>
               {tasksTomorrow.map(({ task }, i) => <TaskRow key={task.id} first={i === 0} name={task.name} />)}
             </Card>
           )}
         </Section>
 
-        {birthdaysSoon.length > 0 && (
-          <Section title="Birthdays in the next 7 days">
-            {birthdaysSoon.map(b => (
-              <Line key={b.id} text={b.name} detail={b.days === 0 ? 'today' : b.days === 1 ? 'tomorrow' : `in ${b.days} days`} />
-            ))}
-          </Section>
-        )}
-
-        <button
-          onClick={onWriteEntry}
-          style={{ padding: 13, borderRadius: 12, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}
-        >
-          Write a journal entry
-        </button>
+        <Section title="Birthdays in the next 7 days">
+          {birthdaysSoon.length === 0 ? <Empty>No birthdays in the next 7 days.</Empty> : birthdaysSoon.map(b => (
+            <Line key={b.id} text={b.name} detail={b.days === 0 ? 'today' : b.days === 1 ? 'tomorrow' : `in ${b.days} days`} />
+          ))}
+        </Section>
       </div>
     </Modal>
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, color, children }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>{title}</div>
+      <div style={{ fontSize: 12, color: color || T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>{title}</div>
       {children}
     </div>
   );
@@ -130,12 +136,16 @@ function Line({ text, detail }) {
   );
 }
 
+function Empty({ children }) {
+  return <div style={{ fontSize: 13, color: T.muted, padding: '4px 2px' }}>{children}</div>;
+}
+
 function Card({ children }) {
   return <div style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 14 }}>{children}</div>;
 }
 
 // A task row; with onToggle its circle checks it off (like the routine rows)
-function TaskRow({ name, done, onToggle, first }) {
+function TaskRow({ name, done, onToggle, first, detail, detailColor }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 50, padding: '4px 14px', borderTop: first ? 'none' : `1px solid ${T.cardBorder}` }}>
       {onToggle && (
@@ -160,6 +170,7 @@ function TaskRow({ name, done, onToggle, first }) {
       <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: done ? T.muted : T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: onToggle ? 0 : '8px 0' }}>
         {name}
       </span>
+      {detail && <span style={{ fontSize: 11, color: done ? T.muted : detailColor || T.muted, flexShrink: 0 }}>{detail}</span>}
     </div>
   );
 }
