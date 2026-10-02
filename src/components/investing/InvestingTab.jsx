@@ -68,6 +68,13 @@ export default function InvestingTab({ hook, userId }) {
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const slices = allocationSlices(portfolio, assets, cashTarget);
+  const sliceColor = Object.fromEntries(slices.map(x => [x.key, x.color]));
+  // Most underweight holding (by target %), at least 2 pts and $1 short
+  const nextBuy = slices
+    .filter(x => x.key !== 'cash' && x.key !== 'other' && x.target !== null && x.target !== undefined)
+    .map(x => ({ symbol: x.key, target: x.target, under: x.target - x.pct * 100, amount: (x.target / 100) * portfolio.value - x.value }))
+    .filter(x => x.under >= 2 && x.amount >= 1)
+    .sort((a, b) => b.under - a.under)[0] || null;
   const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
 
   return (
@@ -194,12 +201,14 @@ export default function InvestingTab({ hook, userId }) {
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left' }}
               >
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
+                    {sliceColor[h.symbol] && <span style={{ width: 8, height: 8, borderRadius: 2, background: sliceColor[h.symbol], flexShrink: 0 }} />}
                     {h.symbol}
                     {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400, marginLeft: 6 }}>manual</span>}
                   </div>
                   <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
+                    {portfolio.value > 0 && h.value ? ` · ${((h.value / portfolio.value) * 100).toFixed(0)}%` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -212,6 +221,30 @@ export default function InvestingTab({ hook, userId }) {
               </button>
             ))}
           </Card>
+
+          {slices.length > 0 && (
+            <Card>
+              <SectionTitle>Allocation</SectionTitle>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <AllocationDonut slices={slices} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <AllocationLegend slices={slices} onEditTarget={setTargetFor} />
+                </div>
+              </div>
+              {nextBuy ? (
+                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#2A2616', border: '1px solid #5A5130' }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Next buy idea</div>
+                  <div style={{ fontSize: 13, color: T.muted, marginTop: 3, lineHeight: 1.4 }}>
+                    {nextBuy.symbol} is {nextBuy.under.toFixed(1)} pts under its {nextBuy.target}% target — about {money(nextBuy.amount, hide)} more would get it there.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>
+                  {slices.some(x => x.target !== null && x.target !== undefined) ? 'Everything is close to its target.' : 'Tap “set target” on a holding to get buy suggestions.'}
+                </div>
+              )}
+            </Card>
+          )}
         </>
       )}
 
