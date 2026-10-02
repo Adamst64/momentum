@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { getMondayId, formatWeekRange, parsePayEntry, dayEntries } from '../../utils/workUtils';
 
+const NO_LEAD = '#E8875A'; // orange tag for days worked without being crew lead
+
 function fmt(n) {
   if (!n) return '—';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -32,15 +34,22 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
             <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{crew?.name || 'No crew'}</span>
           </div>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-            {dc} day{dc !== 1 ? 's' : ''} · {stats.windows} win · {stats.doors} doors
-            {leadDays > 0 && <span style={{ color: T.green }}> · {leadDays} lead</span>}
+            {dc} day{dc !== 1 ? 's' : ''}
+            {' · '}<span style={{ color: T.green }}>{leadDays} lead</span>
+            {' · '}<span style={{ color: NO_LEAD }}>{dc - leadDays} no lead</span>
+            {' · '}{stats.windows} win · {stats.doors} doors
           </div>
           {[...stats.days].sort((a, b) => a.id.localeCompare(b.id)).map(d => (
             <div key={d.id} style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
               <span style={{ color: T.text }}>{new Date(d.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</span>
-              {d.isCrewLead && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: T.green, background: T.green + '22', border: `1px solid ${T.green}44`, borderRadius: 6, padding: '0 5px', marginLeft: 5 }}>LEAD</span>
-              )}
+              {(() => {
+                const c = d.isCrewLead ? T.green : NO_LEAD;
+                return (
+                  <span style={{ fontSize: 10, fontWeight: 700, color: c, background: c + '22', border: `1px solid ${c}44`, borderRadius: 6, padding: '0 5px', marginLeft: 5 }}>
+                    {d.isCrewLead ? 'LEAD' : 'NO LEAD'}
+                  </span>
+                );
+              })()}
               {' · '}{d.windows || 0}w · {d.doors || 0}dr
               {d.comment ? <span> · {d.comment}</span> : null}
             </div>
