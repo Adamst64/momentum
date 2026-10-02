@@ -52,6 +52,10 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       return a.name.localeCompare(b.name);
     });
 
+  const isDone  = r => getCompletionCount(r, today) >= getRequiredForDate(r, today);
+  const todo     = sorted.filter(r => !isDone(r));
+  const doneList = sorted.filter(isDone);
+
   const handleRequestDelete = (routine) => setPendingDelete(routine);
 
   const handleConfirmDelete = async (keepHistory) => {
@@ -103,70 +107,56 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
 
       {subTab === 'routines' && <>
 
-      {/* Header card */}
+      {/* Today's progress */}
       <div style={{
         background: T.card, border: `1px solid ${T.cardBorder}`,
-        borderRadius: 16, padding: '20px',
-        display: 'flex', alignItems: 'center', gap: 20,
+        borderRadius: 16, padding: '14px 16px',
+        display: 'flex', alignItems: 'center', gap: 16,
       }}>
-        <DonutChart done={stats.done} total={stats.total} />
-        <div>
-          <div style={{ fontSize: 12, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>
-            Today's Progress
+        <DonutChart done={stats.done} total={stats.total} size={68} />
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.3 }}>
+            {stats.total ? `${stats.done} of ${stats.total} done` : 'Nothing today'}
           </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: T.text }}>
-            {stats.done}/{stats.total}
-            <span style={{ fontSize: 14, color: T.muted, fontWeight: 400, marginLeft: 6 }}>done</span>
+          <div style={{ fontSize: 13, color: T.muted, marginTop: 2 }}>
+            {stats.total > stats.done ? `${stats.total - stats.done} left · ` : stats.total ? 'All done · ' : ''}{formatLongDate(today)}
           </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatLongDate(today)}</div>
         </div>
       </div>
 
-      {/* Add routine */}
-      <button
-        type="button"
-        onClick={() => setShowCreate(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: 14, borderRadius: 14,
-          border: `1.5px dashed ${T.cardBorder}`,
-          color: T.muted, fontSize: 15, background: 'transparent',
-        }}
-      >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Routine
-      </button>
-
-      {/* Today's routines */}
-      <div>
-        <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-          Routines
-          {sorted.length > 0 && (
-            <span style={{ color: T.subtle, marginLeft: 6 }}>({sorted.length})</span>
-          )}
+      {sorted.length === 0 ? (
+        <div style={{
+          background: T.card, border: `1px solid ${T.cardBorder}`,
+          borderRadius: 14, padding: '24px 16px', textAlign: 'center',
+          color: T.muted, fontSize: 14,
+        }}>
+          No routines scheduled for today
         </div>
+      ) : (
+        [['Still to do', todo], ['Done', doneList]].map(([label, list]) => list.length > 0 && (
+          <div key={label}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: label === 'Done' ? T.muted : '#A9BB6C', textTransform: 'uppercase', letterSpacing: 0.6, margin: '0 0 8px 4px' }}>
+              {label} <span style={{ color: T.subtle }}>({list.length})</span>
+            </div>
+            <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16 }}>
+              {list.map((r, i) => (
+                <RoutineItem
+                  key={r.id}
+                  first={i === 0}
+                  routine={r}
+                  onIncrement={id => incrementDay(id, today)}
+                  onEdit={setEditing}
+                  onRequestDelete={handleRequestDelete}
+                  onShowCalendar={r => setCalendarRoutineId(r.id)}
+                />
+              ))}
+            </div>
+          </div>
+        ))
+      )}
 
-        {sorted.length === 0 ? (
-          <div style={{
-            background: T.card, border: `1px solid ${T.cardBorder}`,
-            borderRadius: 14, padding: '24px 16px', textAlign: 'center',
-            color: T.muted, fontSize: 14,
-          }}>
-            No routines scheduled for today
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {sorted.map(r => (
-              <RoutineItem
-                key={r.id}
-                routine={r}
-                onIncrement={id => incrementDay(id, today)}
-                onEdit={setEditing}
-                onRequestDelete={handleRequestDelete}
-                onShowCalendar={r => setCalendarRoutineId(r.id)}
-              />
-            ))}
-          </div>
-        )}
+      <div style={{ fontSize: 12, color: T.muted, textAlign: 'center', marginTop: -8 }}>
+        Tap a name for its history · hold for Edit / Delete
       </div>
 
       {/* All Routines nav */}
@@ -191,6 +181,24 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
         </div>
         <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
       </div>
+
+      {/* Space so the add button never covers the last row */}
+      <div style={{ height: 56 }} />
+
+      <button
+        type="button"
+        onClick={() => setShowCreate(true)}
+        aria-label="Add routine"
+        style={{
+          position: 'fixed', zIndex: 45,
+          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + 24px)',
+          width: 58, height: 58, borderRadius: 29, background: T.olive,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+        }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
+      </button>
 
       </>}
 
