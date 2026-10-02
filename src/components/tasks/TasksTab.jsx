@@ -217,7 +217,7 @@ export default function TasksTab({ hook, userId }) {
   const {
     addTask, deleteTask, rescheduleTask, updateTask,
     toggleTaskForDate, tasksForDate,
-    todayTasks, backlogTasks, scheduledTasks, monthlyTasks, todayStats,
+    todayTasks, backlogTasks, scheduledTasks, monthlyTasks,
   } = hook;
 
   const [showCreate, setShowCreate]     = useState(false);
@@ -246,7 +246,6 @@ export default function TasksTab({ hook, userId }) {
   // viewYM derived from the shared calendar month (calMonth is 0-indexed)
   const viewYM = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
 
-  const stats     = todayStats();
   const todays    = todayTasks();
   const backlog   = backlogTasks();
   const scheduled = scheduledTasks();
@@ -280,46 +279,16 @@ export default function TasksTab({ hook, userId }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* Today's progress */}
-      <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: '14px 16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
-            {stats.total ? `${stats.done} of ${stats.total} done today` : 'Nothing scheduled today'}
-          </span>
-          <span style={{ fontSize: 12, color: T.muted }}>{formatLongDate(today)}</span>
-        </div>
-        {stats.total > 0 && (
-          <div style={{ height: 6, borderRadius: 3, background: T.cardBorder, marginTop: 10 }}>
-            <div style={{ height: 6, borderRadius: 3, background: BLUE, width: `${(stats.done / stats.total) * 100}%`, transition: 'width 0.3s' }} />
-          </div>
-        )}
-      </div>
-
-      {/* Quick add for today; "More" opens the full form (dates, monthly, reminders) */}
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input
-          value={quick}
-          onChange={e => setQuick(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && addQuick()}
-          placeholder="Add a task for today…"
-          aria-label="New task for today"
-          style={{
-            flex: 1, minWidth: 0, padding: '0 14px', height: 46, borderRadius: 12,
-            background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 15, outline: 'none',
-          }}
-        />
-        <button
-          type="button"
-          onClick={quick.trim() ? addQuick : () => setShowCreate(true)}
-          aria-label={quick.trim() ? 'Add task' : 'New task with options'}
-          style={{ width: 46, height: 46, borderRadius: 12, background: quick.trim() ? '#2F5FB8' : T.subtle, color: '#fff', fontSize: 22, flexShrink: 0 }}
-        >+</button>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          style={{ height: 46, padding: '0 12px', borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13, flexShrink: 0 }}
-        >More</button>
-      </div>
+      <button
+        type="button"
+        onClick={() => setShowCreate(true)}
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          height: 48, borderRadius: 14, background: '#2F5FB8', color: '#fff', fontSize: 15, fontWeight: 600,
+        }}
+      >
+        <span style={{ fontSize: 22, lineHeight: 1, marginTop: -2 }}>+</span> New task
+      </button>
 
       <Section title="Overdue" count={overdue.length} color={T.red}>
         {overdue.map(({ task, missed }) => (
@@ -334,26 +303,50 @@ export default function TasksTab({ hook, userId }) {
       </Section>
 
       <div>
-        <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
-          Today <span style={{ color: T.subtle }}>({todayOpen.length})</span>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+            Today {todays.length > 0 && <span style={{ color: T.subtle }}>({todayDone.length}/{todays.length} done)</span>}
+          </span>
+          <span style={{ fontSize: 12, color: T.muted }}>{formatLongDate(today)}</span>
         </div>
-        {todayOpen.length === 0 ? (
-          <div style={{
-            background: T.card, border: `1px solid ${T.cardBorder}`,
-            borderRadius: 14, padding: '18px 16px', textAlign: 'center', color: T.muted, fontSize: 14,
-          }}>{todays.length ? 'All done for today' : 'Nothing due today'}</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {todayOpen.map(t => (
-              <TodayItem
-                key={t.id} task={t} today={today}
-                onToggle={() => toggleTaskForDate(t.id, today)}
-                onEdit={setEditing}
-                onDelete={deleteTask}
-              />
-            ))}
+        {todays.length > 0 && (
+          <div style={{ height: 4, borderRadius: 2, background: T.cardBorder, marginBottom: 10 }}>
+            <div style={{ height: 4, borderRadius: 2, background: BLUE, width: `${(todayDone.length / todays.length) * 100}%`, transition: 'width 0.3s' }} />
           </div>
         )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {todayOpen.length === 0 && (
+            <div style={{ fontSize: 14, color: T.muted, padding: '4px 2px' }}>{todays.length ? 'All done for today 🎉' : 'Nothing due today'}</div>
+          )}
+          {todayOpen.map(t => (
+            <TodayItem
+              key={t.id} task={t} today={today}
+              onToggle={() => toggleTaskForDate(t.id, today)}
+              onEdit={setEditing}
+              onDelete={deleteTask}
+            />
+          ))}
+
+          {/* Quick add straight into today */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '0 6px 0 14px', height: 46, borderRadius: 12,
+            border: `1px dashed ${T.cardBorder}`,
+          }}>
+            <span style={{ color: BLUE, fontSize: 20, lineHeight: 1 }}>+</span>
+            <input
+              value={quick}
+              onChange={e => setQuick(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addQuick()}
+              placeholder="Quick add for today"
+              aria-label="Quick add a task for today"
+              enterKeyHint="done"
+              style={{ flex: 1, minWidth: 0, height: '100%', background: 'transparent', border: 'none', color: T.text, fontSize: 15, outline: 'none' }}
+            />
+            {quick.trim() && (
+              <button type="button" onClick={addQuick} style={{ padding: '6px 12px', borderRadius: 8, background: '#2F5FB8', color: '#fff', fontSize: 13, fontWeight: 600 }}>Add</button>
+            )}
+          </div>
+        </div>
         {todayDone.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <button
