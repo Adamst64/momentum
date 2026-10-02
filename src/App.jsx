@@ -66,7 +66,9 @@ export default function App() {
   const [tabOrder, setTabOrderState]    = useTabOrder(cachedPrefs?.tabOrder);
 
   useEffect(() => {
-    if (!userId) { setFeatures({}); return; }
+    // user is undefined while auth is still loading: keep the saved prefs then,
+    // and clear them only on an actual sign-out
+    if (!userId) { if (user === null) setFeatures({}); return; }
     if (cachedPrefs && cachedPrefs.uid !== userId) { setFeatures({}); setTabOrderState([...ALL_TABS]); }
     // onSnapshot answers from the offline cache right away; getDoc would wait
     // on the server, keeping the Work tab hidden for a second or more on launch
