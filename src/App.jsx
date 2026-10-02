@@ -33,6 +33,12 @@ import { useInvesting } from './hooks/useInvesting';
 import { useTabOrder, ALL_TABS } from './hooks/useTabOrder';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
+// Last-known features and tab order, so the menu (including the Work tile)
+// is right on the first frame instead of waiting on Firestore's cache
+const PREFS_KEY = 'momentum:prefs';
+const readPrefs = () => { try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || null; } catch { return null; } };
+const writePrefs = v => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(v)); } catch { /* storage unavailable */ } };
+
 // Home-screen shortcuts and links can open the app at ?action=<one of these>
 const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'review'];
 
@@ -55,11 +61,13 @@ export default function App() {
   });
 
   const userId = user?.uid ?? null;
-  const [features, setFeatures]         = useState({});
-  const [tabOrder, setTabOrderState]    = useTabOrder();
+  const [cachedPrefs] = useState(readPrefs);
+  const [features, setFeatures]         = useState(() => cachedPrefs?.features || {});
+  const [tabOrder, setTabOrderState]    = useTabOrder(cachedPrefs?.tabOrder);
 
   useEffect(() => {
     if (!userId) { setFeatures({}); return; }
+    if (cachedPrefs && cachedPrefs.uid !== userId) { setFeatures({}); setTabOrderState([...ALL_TABS]); }
     // onSnapshot answers from the offline cache right away; getDoc would wait
     // on the server, keeping the Work tab hidden for a second or more on launch
     return onSnapshot(doc(db, 'users', userId), snap => {
@@ -76,6 +84,10 @@ export default function App() {
         }
       }, () => {});
   }, [userId]);
+
+  useEffect(() => {
+    if (userId) writePrefs({ uid: userId, features, tabOrder });
+  }, [userId, features, tabOrder]);
 
   const handleUnlockFeature = async (featureKey) => {
     const updated = { ...features, [featureKey]: true };
