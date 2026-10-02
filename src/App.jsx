@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
 import { TAB_DEFS } from './components/BottomNav';
@@ -60,8 +60,9 @@ export default function App() {
 
   useEffect(() => {
     if (!userId) { setFeatures({}); return; }
-    getDoc(doc(db, 'users', userId))
-      .then(snap => {
+    // onSnapshot answers from the offline cache right away; getDoc would wait
+    // on the server, keeping the Work tab hidden for a second or more on launch
+    return onSnapshot(doc(db, 'users', userId), snap => {
         const data = snap.data() || {};
         setFeatures(data.features || {});
         setDailyReview(data.preferences?.dailyReview || null);
@@ -73,8 +74,7 @@ export default function App() {
           ];
           setTabOrderState(valid);
         }
-      })
-      .catch(() => {});
+      }, () => {});
   }, [userId]);
 
   const handleUnlockFeature = async (featureKey) => {
