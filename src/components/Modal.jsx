@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../theme';
+import { useBackHandler } from '../hooks/useBackHandler';
 
 export default function Modal({ title, onClose, children }) {
+  useBackHandler(true, onClose);
   const [kbHeight, setKbHeight] = useState(0);
 
   useEffect(() => {

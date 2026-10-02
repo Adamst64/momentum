@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export default function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenerate, onRename }) {
+  useBackHandler(true, onClose);
   const [joinCode, setJoinCode]   = useState('');
   const [joining, setJoining]     = useState(false);
   const [joinError, setJoinError] = useState('');

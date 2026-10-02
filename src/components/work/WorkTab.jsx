@@ -5,6 +5,7 @@ import WorkCalendar from './WorkCalendar';
 import WorkPaySection from './WorkPaySection';
 import CrewManager from './CrewManager';
 import { formatDayFull } from '../../utils/workUtils';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function todayStr() {
@@ -18,6 +19,7 @@ export default function WorkTab({ hook }) {
   const [selectedDay, setSelectedDay]   = useState(null);
   const [showDaySheet, setShowDaySheet] = useState(false);
   const [showCrewMgr, setShowCrewMgr]   = useState(false);
+  useBackHandler(showDaySheet, () => setShowDaySheet(false));
 
   const today = todayStr();
 

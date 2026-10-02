@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export default function BirthdayForm({ initial, onSave, onClose }) {
+  useBackHandler(true, onClose);
   const [name,  setName]  = useState(initial?.name  || '');
   const [month, setMonth] = useState(initial?.month || 1);
   const [day,   setDay]   = useState(initial?.day   || 1);

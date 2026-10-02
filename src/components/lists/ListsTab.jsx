@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const KINDS = {
   try:       { label: 'To-try',    hint: 'Movies, books, restaurants, places — check off when done' },
@@ -24,6 +25,7 @@ export default function ListsTab({ hook }) {
   const [showManage, setShowManage] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState(null);
+  useBackHandler(!!activeId, () => setActiveId(null));
 
   // Back to the overview if the open list gets deleted
   useEffect(() => {

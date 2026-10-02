@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { CREW_COLORS } from '../../utils/workUtils';
 import SortableList, { DragHandle } from '../SortableList';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 function AddInput({ placeholder, onAdd, nextColor }) {
   const [val, setVal] = useState('');
@@ -80,6 +81,7 @@ function MemberList({ members, onDelete, onReorder }) {
 }
 
 export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onAddMember, onDeleteMember, onReorderCrews, onReorderMembers, onClose }) {
+  useBackHandler(true, onClose);
   const nextCrewColor = CREW_COLORS[crews.length % CREW_COLORS.length];
 
   return (

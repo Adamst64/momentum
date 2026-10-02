@@ -4,6 +4,7 @@ import { db } from './firebase';
 import { T } from './theme';
 import { TAB_DEFS } from './components/BottomNav';
 import HomeMenu from './components/HomeMenu';
+import { runBack } from './hooks/useBackHandler';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
@@ -251,6 +252,8 @@ export default function App() {
 
       </main>
 
+      <SwipeBack onBack={() => { if (!runBack() && tab !== 'home') setTab('home'); }} />
+
       {/* Main menu button: bottom-right, within thumb reach */}
       {tab !== 'home' && (
         <button
@@ -287,5 +290,68 @@ function HeaderButton({ label, onClick, children }) {
     >
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none">{children}</svg>
     </button>
+  );
+}
+
+// Swipe in from the left edge to go back: closes the newest sheet or sub-screen,
+// otherwise returns to the main menu. An arrow follows the finger.
+const EDGE = 28, TRIGGER = 80;
+function SwipeBack({ onBack }) {
+  const [dx, setDx] = useState(0);
+  const back = React.useRef(onBack);
+  back.current = onBack;
+
+  useEffect(() => {
+    let start = null; // { x, y, active }
+    const onStart = e => {
+      const t = e.touches[0];
+      start = e.touches.length === 1 && t.clientX <= EDGE ? { x: t.clientX, y: t.clientY, active: false, dead: false } : null;
+    };
+    const onMove = e => {
+      if (!start || start.dead) return;
+      const t = e.touches[0];
+      const mx = t.clientX - start.x, my = Math.abs(t.clientY - start.y);
+      if (!start.active) {
+        if (my > 12 && my > mx) { start.dead = true; return; } // vertical scroll, not a swipe
+        if (mx > 10) start.active = true;
+      }
+      if (start.active) {
+        if (e.cancelable) e.preventDefault();
+        setDx(Math.max(0, Math.min(140, mx)));
+      }
+    };
+    const onEnd = e => {
+      if (start?.active) {
+        const t = e.changedTouches[0];
+        if (t.clientX - start.x >= TRIGGER) back.current();
+      }
+      start = null;
+      setDx(0);
+    };
+    document.addEventListener('touchstart', onStart, { passive: true });
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onEnd);
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
+  if (!dx) return null;
+  const ready = dx >= TRIGGER;
+  return (
+    <div style={{
+      position: 'fixed', zIndex: 1000, top: '50%', left: 0, pointerEvents: 'none',
+      transform: `translate(${Math.min(dx, TRIGGER) - 44}px, -50%)`,
+      width: 40, height: 40, borderRadius: 20,
+      background: ready ? T.olive : T.card, border: `1px solid ${T.subtle}`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.5)', transition: 'background 0.15s',
+    }}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
+    </div>
   );
 }

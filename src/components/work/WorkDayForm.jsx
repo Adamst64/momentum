@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { T } from '../../theme';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 function Counter({ label, value, onChange }) {
   const [editing, setEditing] = useState(false);
@@ -110,6 +111,8 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   const [confirmClear, setConfirmClear]   = useState(false);
   const [showCrewPicker, setShowCrewPicker]     = useState(false); // false | 'first' | 'second'
   const [showMemberPicker, setShowMemberPicker] = useState(false); // false | 'first' | 'second'
+  useBackHandler(!!showCrewPicker, () => setShowCrewPicker(false));
+  useBackHandler(!!showMemberPicker, () => setShowMemberPicker(false));
 
   useEffect(() => {
     setForm(norm(initial));
@@ -199,11 +202,14 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
 
           {/* Second crew (rare split day), kept below everything for the first crew */}
           {form.second ? (
-            <>
-              <div style={{ fontSize: 12, fontWeight: 700, color: secondCrew?.color || T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '10px 0 -4px 4px' }}>
+            <div style={{
+              marginTop: 8, padding: 12, borderRadius: 18, display: 'flex', flexDirection: 'column', gap: 10,
+              border: `1.5px solid ${secondCrew?.color || T.subtle}`, background: (secondCrew?.color || T.subtle) + '10',
+            }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: secondCrew?.color || T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: 4 }}>
                 Second crew{secondCrew ? ` · ${secondCrew.name}` : ''}
               </div>
-              <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${secondCrew?.color ? secondCrew.color + '66' : T.cardBorder}` }}>
+              <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
                 <button
                   onClick={() => setShowCrewPicker('second')}
                   style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
@@ -232,7 +238,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               >
                 Remove second crew
               </button>
-            </>
+            </div>
           ) : form.crewId && (
             <button
               onClick={() => set('second', { ...EMPTY_SECOND })}

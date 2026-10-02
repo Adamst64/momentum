@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT, addDays } from '../../utils/dateUtils';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
@@ -29,6 +30,7 @@ function computeStats(commitment, today) {
 }
 
 export default function CommitmentCalendarModal({ commitment, onToggleFailed, onClose }) {
+  useBackHandler(true, onClose);
   const today           = todayStr();
   const minEditableDate = addDays(today, -6);
   const now             = new Date(today + 'T12:00:00');

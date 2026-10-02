@@ -12,6 +12,7 @@ import UndoToast from '../UndoToast';
 import CommitmentsTab from './CommitmentsTab';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
@@ -34,6 +35,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
   const calendarRoutine = routines.find(r => r.id === calendarRoutineId) ?? null;
   const [pendingDelete, setPendingDelete]     = useState(null);
   const [undoState, setUndoState]             = useState(null);
+  useBackHandler(showAllRoutines, () => setShowAllRoutines(false));
 
   const today = todayStr();
   const stats = todayStats();

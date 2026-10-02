@@ -1,8 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export default function DeleteRoutineSheet({ routine, onKeepHistory, onDeleteAll, onCancel }) {
+  useBackHandler(true, onCancel);
   return ReactDOM.createPortal(
     <div
       onClick={onCancel}

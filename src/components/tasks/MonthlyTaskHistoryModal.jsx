@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -20,6 +21,7 @@ function formatEntry(ym, dateStr) {
 }
 
 export default function MonthlyTaskHistoryModal({ task, onClose }) {
+  useBackHandler(true, onClose);
   const entries = Object.entries(task.completedOccurrences || {})
     .filter(([, v]) => !!v)
     .sort(([a], [b]) => b.localeCompare(a)); // newest first

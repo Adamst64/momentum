@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { TAG_COLORS } from '../../hooks/useShoppingLists';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
+  useBackHandler(true, onClose);
   const [selected, setSelected] = useState(new Set(selectedIds));
   const [editingTagId, setEditingTagId] = useState(null);
   const [editName, setEditName] = useState('');

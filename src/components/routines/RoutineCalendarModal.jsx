@@ -4,6 +4,7 @@ import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT, DAYS_FULL } from '../../utils/dateUtils';
 import { getScheduleForDate, getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const ORANGE = '#FF9F0A';
 
@@ -122,6 +123,7 @@ function computeInsights(routine, today) {
 }
 
 export default function RoutineCalendarModal({ routine, onClose }) {
+  useBackHandler(true, onClose);
   const today       = todayStr();
   const todayDate   = parseDate(today);
   const createdDate = routine.createdAt ? parseDate(routine.createdAt) : todayDate;
