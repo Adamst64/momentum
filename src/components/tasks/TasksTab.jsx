@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
-import DonutChart from '../DonutChart';
 import TaskItem from './TaskItem';
 import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
@@ -8,6 +7,8 @@ import MonthlyTaskHistoryModal from './MonthlyTaskHistoryModal';
 import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
+
+const BLUE = '#7FA9FF';
 
 function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -194,7 +195,7 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete, onShow
   );
 }
 
-function Section({ title, count, children, defaultOpen = true }) {
+function Section({ title, count, children, defaultOpen = true, color = T.muted }) {
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
   return (
@@ -202,7 +203,7 @@ function Section({ title, count, children, defaultOpen = true }) {
       <button type="button" onClick={() => setOpen(o => !o)} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         width: '100%', marginBottom: open ? 10 : 0,
-        color: T.muted, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.8,
+        color, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6,
       }}>
         <span>{title} <span style={{ color: T.subtle }}>({count})</span></span>
         <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s', fontSize: 14 }}>›</span>
@@ -222,6 +223,8 @@ export default function TasksTab({ hook, userId }) {
   const [showCreate, setShowCreate]     = useState(false);
   const [editing,    setEditing]        = useState(null);
   const [historyTask, setHistoryTask]   = useState(null);
+  const [quick, setQuick]               = useState('');
+  const [showDone, setShowDone]         = useState(false);
 
   const today    = todayStr();
   const todayYM  = today.slice(0, 7);
@@ -249,6 +252,20 @@ export default function TasksTab({ hook, userId }) {
   const scheduled = scheduledTasks();
   const monthly   = monthlyTasks();
 
+  const overdue = backlog.filter(b => b.missed);
+  const undated = backlog.filter(b => !b.missed);
+  const ym = today.slice(0, 7);
+  const isDoneToday = t => (t.type === 'recurring-monthly' ? !!t.completedOccurrences?.[ym] : t.completedAt === today);
+  const todayOpen = todays.filter(t => !isDoneToday(t));
+  const todayDone = todays.filter(isDoneToday);
+
+  const addQuick = () => {
+    const name = quick.trim();
+    if (!name) return;
+    setQuick('');
+    addTask({ name, type: 'one-time', date: today, notify: { enabled: false } });
+  };
+
   const handleSave = (data) => {
     addTask(data);
     if (data.notify?.enabled && userId) registerPushToken(userId);
@@ -263,69 +280,49 @@ export default function TasksTab({ hook, userId }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      <div style={{
-        background: T.card, border: `1px solid ${T.cardBorder}`,
-        borderRadius: 16, padding: '20px',
-        display: 'flex', alignItems: 'center', gap: 20,
-      }}>
-        <DonutChart done={stats.done} total={stats.total} />
-        <div>
-          <div style={{ fontSize: 12, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>
-            Today's Tasks
-          </div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: T.text }}>
-            {stats.done}/{stats.total}
-            <span style={{ fontSize: 14, color: T.muted, fontWeight: 400, marginLeft: 6 }}>done</span>
-          </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatLongDate(today)}</div>
+      {/* Today's progress */}
+      <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16, padding: '14px 16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>
+            {stats.total ? `${stats.done} of ${stats.total} done today` : 'Nothing scheduled today'}
+          </span>
+          <span style={{ fontSize: 12, color: T.muted }}>{formatLongDate(today)}</span>
         </div>
-      </div>
-
-      <button type="button" onClick={() => setShowCreate(true)} style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        padding: 14, borderRadius: 14,
-        border: `1.5px dashed ${T.cardBorder}`,
-        color: T.muted, fontSize: 15, background: 'transparent',
-      }}>
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Task
-      </button>
-
-      <div>
-        <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>Today</div>
-        {todays.length === 0 ? (
-          <div style={{
-            background: T.card, border: `1px solid ${T.cardBorder}`,
-            borderRadius: 14, padding: '20px 16px', textAlign: 'center', color: T.muted, fontSize: 14,
-          }}>Nothing due today</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {todays.map(t => (
-              <TodayItem
-                key={t.id} task={t} today={today}
-                onToggle={() => toggleTaskForDate(t.id, today)}
-                onEdit={setEditing}
-                onDelete={deleteTask}
-              />
-            ))}
+        {stats.total > 0 && (
+          <div style={{ height: 6, borderRadius: 3, background: T.cardBorder, marginTop: 10 }}>
+            <div style={{ height: 6, borderRadius: 3, background: BLUE, width: `${(stats.done / stats.total) * 100}%`, transition: 'width 0.3s' }} />
           </div>
         )}
       </div>
 
-      <TaskCalendar
-        today={today}
-        calYear={calYear}
-        calMonth={calMonth}
-        onPrevMonth={prevCalMonth}
-        onNextMonth={nextCalMonth}
-        tasksForDate={tasksForDate}
-        toggleTaskForDate={toggleTaskForDate}
-        deleteTask={deleteTask}
-        rescheduleTask={rescheduleTask}
-        onEdit={setEditing}
-      />
+      {/* Quick add for today; "More" opens the full form (dates, monthly, reminders) */}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={quick}
+          onChange={e => setQuick(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && addQuick()}
+          placeholder="Add a task for today…"
+          aria-label="New task for today"
+          style={{
+            flex: 1, minWidth: 0, padding: '0 14px', height: 46, borderRadius: 12,
+            background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 15, outline: 'none',
+          }}
+        />
+        <button
+          type="button"
+          onClick={quick.trim() ? addQuick : () => setShowCreate(true)}
+          aria-label={quick.trim() ? 'Add task' : 'New task with options'}
+          style={{ width: 46, height: 46, borderRadius: 12, background: quick.trim() ? '#2F5FB8' : T.subtle, color: '#fff', fontSize: 22, flexShrink: 0 }}
+        >+</button>
+        <button
+          type="button"
+          onClick={() => setShowCreate(true)}
+          style={{ height: 46, padding: '0 12px', borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13, flexShrink: 0 }}
+        >More</button>
+      </div>
 
-      <Section title="Backlog" count={backlog.length} defaultOpen={false}>
-        {backlog.map(({ task, missed }) => (
+      <Section title="Overdue" count={overdue.length} color={T.red}>
+        {overdue.map(({ task, missed }) => (
           <TaskItem
             key={task.id} task={task} section="backlog" missed={missed}
             onComplete={() => toggleTaskForDate(task.id, today)}
@@ -336,11 +333,69 @@ export default function TasksTab({ hook, userId }) {
         ))}
       </Section>
 
-      <Section title="Scheduled" count={scheduled.length} defaultOpen={true}>
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: BLUE, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
+          Today <span style={{ color: T.subtle }}>({todayOpen.length})</span>
+        </div>
+        {todayOpen.length === 0 ? (
+          <div style={{
+            background: T.card, border: `1px solid ${T.cardBorder}`,
+            borderRadius: 14, padding: '18px 16px', textAlign: 'center', color: T.muted, fontSize: 14,
+          }}>{todays.length ? 'All done for today' : 'Nothing due today'}</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {todayOpen.map(t => (
+              <TodayItem
+                key={t.id} task={t} today={today}
+                onToggle={() => toggleTaskForDate(t.id, today)}
+                onEdit={setEditing}
+                onDelete={deleteTask}
+              />
+            ))}
+          </div>
+        )}
+        {todayDone.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              onClick={() => setShowDone(v => !v)}
+              style={{ fontSize: 13, color: T.muted, padding: '6px 0' }}
+            >
+              ✓ {todayDone.length} done today {showDone ? '▾' : '›'}
+            </button>
+            {showDone && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 6 }}>
+                {todayDone.map(t => (
+                  <TodayItem
+                    key={t.id} task={t} today={today}
+                    onToggle={() => toggleTaskForDate(t.id, today)}
+                    onEdit={setEditing}
+                    onDelete={deleteTask}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <Section title="Upcoming" count={scheduled.length} defaultOpen={true}>
         {scheduled.map(t => (
           <TaskItem
             key={t.id} task={t} section="scheduled"
             onComplete={() => toggleTaskForDate(t.id, today)}
+            onDelete={deleteTask}
+            onReschedule={rescheduleTask}
+            onEdit={setEditing}
+          />
+        ))}
+      </Section>
+
+      <Section title="No date" count={undated.length} defaultOpen={false}>
+        {undated.map(({ task, missed }) => (
+          <TaskItem
+            key={task.id} task={task} section="backlog" missed={missed}
+            onComplete={() => toggleTaskForDate(task.id, today)}
             onDelete={deleteTask}
             onReschedule={rescheduleTask}
             onEdit={setEditing}
@@ -375,6 +430,19 @@ export default function TasksTab({ hook, userId }) {
           </div>
         </div>
       )}
+
+      <TaskCalendar
+        today={today}
+        calYear={calYear}
+        calMonth={calMonth}
+        onPrevMonth={prevCalMonth}
+        onNextMonth={nextCalMonth}
+        tasksForDate={tasksForDate}
+        toggleTaskForDate={toggleTaskForDate}
+        deleteTask={deleteTask}
+        rescheduleTask={rescheduleTask}
+        onEdit={setEditing}
+      />
 
       {showCreate && (
         <CreateTaskModal onSave={handleSave} onClose={() => setShowCreate(false)} />
