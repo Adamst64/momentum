@@ -1,16 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Modal from './Modal';
 import { T } from '../theme';
 import { todayStr, addDays, formatLongDate, formatShortDate } from '../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../hooks/useRoutines';
 import { daysUntil } from '../utils/birthdayUtils';
 import RoutineItem from './routines/RoutineItem';
+import { SlipSheet } from './routines/CommitmentSheets';
+import { commitmentStats, streakLabel } from '../utils/commitments';
 
 const TASK_BLUE = '#7FA9FF';
 
 // Evening check-in: today's routines and tasks (check them off right here),
-// overdue tasks, tomorrow's tasks and birthdays in the next week
-export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, onClose }) {
+// commitments, overdue tasks, tomorrow's tasks and birthdays in the next week
+export default function DailyReviewModal({ routinesHook, commitmentsHook, tasksHook, birthdays, onClose }) {
+  const [slipping, setSlipping] = useState(null); // { commitment, streak }
   const today    = todayStr();
   const tomorrow = addDays(today, 1);
 
@@ -25,6 +28,11 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
   const overdue = tasksHook.tasks
     .filter(t => t.type === 'one-time' && t.date < today && (!t.completedAt || t.completedAt === today))
     .sort((a, b) => !!a.completedAt - !!b.completedAt || a.date.localeCompare(b.date));
+
+  const commitments = [...commitmentsHook.commitments]
+    .filter(c => !c.createdAt || c.createdAt <= today)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(c => ({ c, s: commitmentStats(c, today) }));
 
   const tasksTomorrow    = tasksHook.tasksForDate(tomorrow).filter(t => t.task.type !== 'backlog');
   const birthdaysSoon    = birthdays
@@ -75,6 +83,28 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
           )}
         </Section>
 
+        {commitments.length > 0 && (
+          <Section title="Commitments">
+            <Card>
+              {commitments.map(({ c, s }, i) => (
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 10, minHeight: 50, padding: '6px 14px', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</div>
+                    <div style={{ fontSize: 12, marginTop: 2, color: s.failedToday ? T.red : T.muted }}>
+                      {s.failedToday ? 'Slipped today' : !s.scheduledToday ? `Rest day · ${streakLabel(s.current)}` : `Kept so far · ${streakLabel(s.current)}`}
+                    </div>
+                  </div>
+                  {s.failedToday ? (
+                    <button onClick={() => commitmentsHook.clearSlip(c.id, today)} style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, background: T.subtle, color: T.text }}>Undo</button>
+                  ) : s.scheduledToday && (
+                    <button onClick={() => setSlipping({ commitment: c, streak: s.current })} style={{ padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 600, border: `1px solid ${T.red}66`, color: T.red }}>I slipped</button>
+                  )}
+                </div>
+              ))}
+            </Card>
+          </Section>
+        )}
+
         {overdue.length > 0 && (
           <Section title={`Overdue tasks (${overdue.filter(t => !t.completedAt).length})`} color={T.red}>
             <Card>
@@ -111,6 +141,15 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
           ))}
         </Section>
       </div>
+      {slipping && (
+        <SlipSheet
+          name={slipping.commitment.name}
+          dateLabel="Today"
+          streak={slipping.streak}
+          onConfirm={note => commitmentsHook.markSlip(slipping.commitment.id, today, note)}
+          onClose={() => setSlipping(null)}
+        />
+      )}
     </Modal>
   );
 }

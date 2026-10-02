@@ -4,32 +4,12 @@ import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT, addDays } from '../../utils/dateUtils';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { commitmentStats, isScheduled, MILESTONES } from '../../utils/commitments';
+import { SlipSheet, ConfirmSheet } from './CommitmentSheets';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
-function computeStats(commitment, today) {
-  const created  = commitment.createdAt || today;
-  const seedDate = commitment.seedDate || null;
-  let clean = 0, total = 0;
-  let d = new Date(created + 'T12:00:00');
-  const end = new Date(today + 'T12:00:00');
-  while (d <= end) {
-    const ds     = d.toISOString().slice(0, 10);
-    const failed = !!commitment.failures?.[ds];
-    // Skip the seeded failure used only to establish the starting streak
-    if (ds === seedDate) { d.setDate(d.getDate() + 1); continue; }
-    if (ds === today) {
-      if (failed) total++;
-    } else {
-      total++;
-      if (!failed) clean++;
-    }
-    d.setDate(d.getDate() + 1);
-  }
-  return { clean, total, pct: total > 0 ? Math.round(clean / total * 100) : null };
-}
-
-export default function CommitmentCalendarModal({ commitment, onToggleFailed, onClose }) {
+export default function CommitmentCalendarModal({ commitment, onMarkSlip, onClearSlip, onClose }) {
   useBackHandler(true, onClose);
   const today           = todayStr();
   const minEditableDate = addDays(today, -6);
@@ -37,7 +17,8 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
 
   const [year,  setYear]  = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
-  const [confirmDay, setConfirmDay] = useState(null);
+  const [slipDay, setSlipDay]   = useState(null); // mark a clean day as a slip
+  const [cleanDay, setCleanDay] = useState(null); // turn a slip back into a clean day
 
   const gridRef = useRef(null);
 
@@ -53,7 +34,7 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
   };
   const swipeRef = useSwipe(nextMonth, prevMonth);
 
-  const stats    = computeStats(commitment, today);
+  const stats    = commitmentStats(commitment, today);
   const created  = commitment.createdAt || today;
   const dim      = getDaysInMonth(year, month);
   const firstDow = getFirstDOW(year, month);
@@ -77,26 +58,40 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
       {/* Swipeable calendar area */}
       <div ref={swipeRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
 
-        {/* Stats */}
-        {stats.pct !== null && (
-          <div style={{
-            background: T.card, border: `1px solid ${T.cardBorder}`,
-            borderRadius: 14, padding: '14px 18px', marginBottom: 20,
-            display: 'flex', alignItems: 'center', gap: 18,
-          }}>
-            <div style={{ fontSize: 36, fontWeight: 800, color: T.green, lineHeight: 1, flexShrink: 0 }}>
-              {stats.pct}%
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: T.text }}>
-                {stats.clean} of {stats.total} days clean
+        {/* Streaks */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+          <Stat value={stats.current} label={stats.failedToday ? 'current streak (slipped today)' : 'current streak'} color={stats.failedToday ? T.red : T.green} />
+          <Stat value={stats.best} label="best streak" color={T.khaki} />
+          <Stat value={stats.pct === null ? '–' : `${stats.pct}%`} label={`${stats.clean} of ${stats.total} days clean since ${formatShortDate(created)}`} color={T.green} />
+          <Stat value={`${stats.slipsThisMonth} · ${stats.slipsThisYear}`} label="slips this month · this year" color={stats.slipsThisMonth ? T.red : T.muted} />
+        </div>
+        <div style={{ fontSize: 11, color: T.muted, marginBottom: 20 }}>
+          Streaks count finished days; today counts once it's over.
+          {Array.isArray(commitment.days) && ` Applies on ${[1, 2, 3, 4, 5, 6, 0].filter(d => commitment.days.includes(d)).map(d => DAYS_SHORT[d]).join(' ')}.`}
+        </div>
+
+        {/* Badges: earned by the best streak so far */}
+        <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+          Badges <span style={{ color: T.subtle }}>({MILESTONES.filter(m => stats.best >= m.days).length}/{MILESTONES.length})</span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6, marginBottom: 8 }}>
+          {MILESTONES.map(m => {
+            const earned = stats.best >= m.days;
+            return (
+              <div key={m.days} style={{
+                padding: '8px 2px', borderRadius: 10, textAlign: 'center',
+                background: earned ? '#1E2A12' : T.card, border: `1px solid ${earned ? T.olive + '66' : T.cardBorder}`,
+                opacity: earned ? 1 : 0.45,
+              }}>
+                <div style={{ fontSize: 20, filter: earned ? 'none' : 'grayscale(1)' }}>{m.icon}</div>
+                <div style={{ fontSize: 9, color: earned ? T.khaki : T.muted, marginTop: 2 }}>{m.label}</div>
               </div>
-              <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
-                since {formatShortDate(created)}
-              </div>
-            </div>
-          </div>
-        )}
+            );
+          })}
+        </div>
+        <div style={{ fontSize: 12, color: T.muted, marginBottom: 20 }}>
+          {stats.next ? `${stats.toNext} more clean day${stats.toNext === 1 ? '' : 's'} for ${stats.next.icon} ${stats.next.label}` : 'Every badge earned. Legendary.'}
+        </div>
 
         {/* Month nav */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -121,19 +116,22 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
               const isBefore   = ds < created;
               const isFuture   = ds > today;
               const isToday    = ds === today;
-              const isEditable = !isBefore && !isFuture && ds >= minEditableDate;
+              const inRange    = !isBefore && !isFuture && ds >= minEditableDate;
               const failed     = !!commitment.failures?.[ds];
+              const rest       = !failed && !isScheduled(commitment, ds);
+              const isEditable = inRange && !rest;
 
               let bg = 'transparent', textColor = T.subtle;
-              if (!isBefore && !isFuture) {
-                if (failed) { bg = '#2A0D0D'; textColor = T.red; }
-                else        { bg = '#0D2A0D'; textColor = T.green; }
+              if (!isBefore && !isFuture && !rest) {
+                if (failed)        { bg = '#2A0D0D'; textColor = T.red; }
+                else if (!isToday) { bg = '#0D2A0D'; textColor = T.green; }
+                else               { textColor = T.green; }
               }
 
               return (
                 <div
                   key={day}
-                  onPointerUp={isEditable ? () => setConfirmDay({ ds, failed }) : undefined}
+                  onPointerUp={isEditable ? () => (failed ? setCleanDay(ds) : setSlipDay(ds)) : undefined}
                   style={{
                     aspectRatio: '1',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -155,7 +153,7 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
 
         {/* Legend */}
         <div style={{ display: 'flex', gap: 16, marginTop: 16 }}>
-          {[['#0D2A0D', T.green, 'Clean'], ['#2A0D0D', T.red, 'Failed']].map(([bg, c, label]) => (
+          {[['#0D2A0D', T.green, 'Clean'], ['#2A0D0D', T.red, 'Slip'], ['transparent', T.subtle, 'Rest day / not started']].map(([bg, c, label]) => (
             <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
               <div style={{ width: 12, height: 12, borderRadius: 3, background: bg, border: `1px solid ${c}88` }} />
               <span style={{ fontSize: 11, color: T.muted }}>{label}</span>
@@ -163,49 +161,56 @@ export default function CommitmentCalendarModal({ commitment, onToggleFailed, on
           ))}
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: T.muted, textAlign: 'center' }}>
-          Tap any highlighted day in the past week to edit
+          Tap a day in the past week to mark or clear a slip
         </div>
+
+        {/* Slips and their reasons */}
+        <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, margin: '24px 0 8px' }}>
+          Slip history <span style={{ color: T.subtle }}>({stats.slips.length})</span>
+        </div>
+        {stats.slips.length === 0 ? (
+          <div style={{ fontSize: 13, color: T.muted }}>No slips recorded. Keep it going.</div>
+        ) : (
+          <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14 }}>
+            {stats.slips.map((sl, i) => (
+              <div key={sl.date} style={{ display: 'flex', gap: 12, padding: '11px 14px', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+                <div style={{ fontSize: 13, color: T.red, fontWeight: 600, width: 56, flexShrink: 0 }}>{formatShortDate(sl.date)}</div>
+                <div style={{ fontSize: 13, color: sl.note ? T.text : T.muted, fontStyle: sl.note ? 'normal' : 'italic' }}>{sl.note || 'No reason given'}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
       </div>
 
-      {confirmDay && ReactDOM.createPortal(
-        <div
-          onClick={() => setConfirmDay(null)}
-          style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}
-        >
-          <div onClick={e => e.stopPropagation()} style={{
-            width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0',
-            padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          }}>
-            <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 6 }}>
-              {formatShortDate(confirmDay.ds)}
-            </div>
-            <div style={{ fontSize: 13, color: T.muted, marginBottom: 20 }}>
-              Currently marked as <strong style={{ color: confirmDay.failed ? T.red : T.green }}>
-                {confirmDay.failed ? 'Failed' : 'Clean'}
-              </strong>. Change to <strong style={{ color: confirmDay.failed ? T.green : T.red }}>
-                {confirmDay.failed ? 'Clean' : 'Failed'}
-              </strong>?
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <button
-                onClick={() => setConfirmDay(null)}
-                style={{ flex: 1, padding: 13, borderRadius: 12, background: T.subtle, color: T.muted, fontSize: 15, fontWeight: 600 }}
-              >Cancel</button>
-              <button
-                onClick={() => { onToggleFailed(commitment.id, confirmDay.ds); setConfirmDay(null); }}
-                style={{
-                  flex: 1, padding: 13, borderRadius: 12, fontSize: 15, fontWeight: 600,
-                  background: confirmDay.failed ? '#0D2A0D' : '#2A0D0D',
-                  color: confirmDay.failed ? T.green : T.red,
-                }}
-              >{confirmDay.failed ? 'Mark Clean' : 'Mark Failed'}</button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {slipDay && (
+        <SlipSheet
+          name={commitment.name}
+          dateLabel={formatShortDate(slipDay)}
+          streak={slipDay === today ? stats.current : 0}
+          onConfirm={note => onMarkSlip(commitment.id, slipDay, note)}
+          onClose={() => setSlipDay(null)}
+        />
+      )}
+      {cleanDay && (
+        <ConfirmSheet
+          title={`Mark ${formatShortDate(cleanDay)} as clean?`}
+          message={commitment.failureNotes?.[cleanDay] ? `This removes the slip and its reason: “${commitment.failureNotes[cleanDay]}”.` : 'This removes the slip for that day.'}
+          confirmLabel="Mark clean"
+          onConfirm={() => onClearSlip(commitment.id, cleanDay)}
+          onClose={() => setCleanDay(null)}
+        />
       )}
     </div>,
     document.body
+  );
+}
+
+function Stat({ value, label, color }) {
+  return (
+    <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '12px 14px' }}>
+      <div style={{ fontSize: 26, fontWeight: 800, color, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 11, color: T.muted, marginTop: 5, lineHeight: 1.3 }}>{label}</div>
+    </div>
   );
 }

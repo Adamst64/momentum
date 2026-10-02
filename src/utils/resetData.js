@@ -43,7 +43,7 @@ export async function resetData(userId, keys) {
 
   if (keys.includes('commitments')) {
     for (const d of await docsOf(userId, 'commitments')) {
-      ops.push(b => b.update(d.ref, { failures: {}, createdAt: today, seedDate: deleteField() }));
+      ops.push(b => b.update(d.ref, { failures: {}, failureNotes: {}, createdAt: today, seedDate: deleteField() }));
     }
   }
 

@@ -269,6 +269,7 @@ export default function App() {
         {showReview && (
           <DailyReviewModal
             routinesHook={routinesHook}
+            commitmentsHook={commitmentsHook}
             tasksHook={tasksHook}
             birthdays={birthdaysHook.birthdays}
             onClose={() => setShowReview(false)}
