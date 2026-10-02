@@ -58,31 +58,7 @@ async function sendToUsers(db, messaging, checkMonth, checkDay, title, body) {
       const notifTitle = typeof title === 'function' ? title(b.name) : title;
       const notifBody  = typeof body  === 'function' ? body(b.name)  : body;
 
-      const staleTokens = [];
-      await Promise.allSettled(tokens.map(async (token) => {
-        try {
-          await messaging.send({
-            token,
-            notification: { title: notifTitle, body: notifBody },
-            webpush: {
-              notification: {
-                icon:  'https://adamst64.github.io/momentum/icon-192.png',
-                badge: 'https://adamst64.github.io/momentum/icon-192.png',
-              },
-            },
-          });
-        } catch (err) {
-          if (err.code === 'messaging/registration-token-not-registered') {
-            staleTokens.push(token);
-          }
-        }
-      }));
-
-      if (staleTokens.length) {
-        await db.collection('users').doc(uid).update({
-          fcmTokens: FieldValue.arrayRemove(...staleTokens),
-        });
-      }
+      await sendPush(db, messaging, uid, tokens, notifTitle, notifBody, APP_URL + '?tab=birthdays');
     }
   }));
 }
@@ -140,7 +116,8 @@ function isDue(time, minutesNow) {
 
 const APP_URL = 'https://adamst64.github.io/momentum/';
 
-// link: where tapping the notification opens (defaults to the app's start page)
+// link: where tapping the notification opens: ?tab=<section> or ?action=review
+// (defaults to the app's start page)
 async function sendPush(db, messaging, uid, tokens, title, body, link = APP_URL) {
   const staleTokens = [];
   await Promise.allSettled(tokens.map(async (token) => {
@@ -198,7 +175,7 @@ exports.sendTaskNotifications = onSchedule(
 
       // Portfolio snapshots run even without notifications set up
       await investing.runInvestingJobs(db, userDoc,
-        tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body) : null);
+        tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body, APP_URL + '?tab=investing') : null);
 
       if (!tokens.length) return;
 
@@ -233,7 +210,7 @@ exports.sendTaskNotifications = onSchedule(
         // Update lastSentDate before sending to minimise duplicates
         await taskDoc.ref.update({ 'notify.lastSentDate': todayLocal });
 
-        await sendPush(db, messaging, uid, tokens, notifTitle, notifBody);
+        await sendPush(db, messaging, uid, tokens, notifTitle, notifBody, APP_URL + '?tab=tasks');
       }
     }));
   }

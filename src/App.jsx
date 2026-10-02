@@ -44,7 +44,11 @@ const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'revie
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
-  const [tab, setTab] = useState('home'); // 'home' = the main menu
+  // 'home' = the main menu; notification links can open a section with ?tab=<id>
+  const [tab, setTab] = useState(() => {
+    const t = new URLSearchParams(window.location.search).get('tab');
+    return ALL_TABS.includes(t) ? t : 'home';
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [quickAdd, setQuickAdd]         = useState(null); // null | { mode }
   const [newTask, setNewTask]           = useState(false);
@@ -126,6 +130,13 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [userId, urlAction]);
 
+  // Drop ?tab= from the address once it has opened its section
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('tab') && !urlAction) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, [urlAction]);
+
   // Tapping a notification while the app is already open: the service worker
   // sends us its link (our own message, or Firebase's notification-clicked one)
   useEffect(() => {
@@ -134,7 +145,10 @@ export default function App() {
       const d = e.data || {};
       const url = d.type === 'open-url' ? d.url
         : d.messageType === 'notification-clicked' ? (d.fcmOptions?.link || d.data?.url) : null;
-      if (url && url.includes('action=review')) setShowReview(true);
+      if (!url) return;
+      const p = new URL(url, window.location.href).searchParams;
+      if (p.get('action') === 'review') setShowReview(true);
+      if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     return () => navigator.serviceWorker.removeEventListener('message', onMessage);
