@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
-import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import { genId, } from '../utils/id';
 import { CREW_COLORS, getMondayId, dayEntries } from '../utils/workUtils';
+
+// Crews and members keep the order the user dragged them into ({ order: n });
+// older ones without it go last, by name
+const byOrder = (a, b) => (a.order ?? Infinity) - (b.order ?? Infinity) || (a.name || '').localeCompare(b.name || '');
+const nextOrder = list => list.reduce((m, x) => Math.max(m, x.order ?? -1), -1) + 1;
 
 export function useWork(userId) {
   const [days,    setDays]    = useState([]);
@@ -15,8 +20,8 @@ export function useWork(userId) {
     const unsubs = [
       onSnapshot(collection(db, 'users', userId, 'workDays'),    s => setDays(s.docs.map(d => ({ id: d.id, ...d.data() })))),
       onSnapshot(collection(db, 'users', userId, 'workWeeks'),   s => setWeeks(s.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(collection(db, 'users', userId, 'workCrews'),   s => setCrews(s.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(collection(db, 'users', userId, 'workMembers'), s => setMembers(s.docs.map(d => ({ id: d.id, ...d.data() })))),
+      onSnapshot(collection(db, 'users', userId, 'workCrews'),   s => setCrews(s.docs.map(d => ({ id: d.id, ...d.data() })).sort(byOrder))),
+      onSnapshot(collection(db, 'users', userId, 'workMembers'), s => setMembers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort(byOrder))),
     ];
     return () => unsubs.forEach(u => u());
   }, [userId]);
@@ -55,8 +60,8 @@ export function useWork(userId) {
   }, [userId]);
 
   const addCrew = useCallback(async (name, color) => {
-    await setDoc(doc(db, 'users', userId, 'workCrews', genId()), { name: name.trim(), color: color || CREW_COLORS[0] });
-  }, [userId]);
+    await setDoc(doc(db, 'users', userId, 'workCrews', genId()), { name: name.trim(), color: color || CREW_COLORS[0], order: nextOrder(crews) });
+  }, [userId, crews]);
 
   const updateCrewColor = useCallback(async (id, color) => {
     await updateDoc(doc(db, 'users', userId, 'workCrews', id), { color });
@@ -67,12 +72,21 @@ export function useWork(userId) {
   }, [userId]);
 
   const addMember = useCallback(async (name) => {
-    await setDoc(doc(db, 'users', userId, 'workMembers', genId()), { name: name.trim() });
+    await setDoc(doc(db, 'users', userId, 'workMembers', genId()), { name: name.trim(), order: nextOrder(members) });
+  }, [userId, members]);
+
+  // Save a new order (array of ids) for crews or members
+  const reorder = useCallback(async (coll, ids) => {
+    const batch = writeBatch(db);
+    ids.forEach((id, i) => batch.update(doc(db, 'users', userId, coll, id), { order: i }));
+    await batch.commit();
   }, [userId]);
+  const reorderCrews   = useCallback(ids => reorder('workCrews', ids), [reorder]);
+  const reorderMembers = useCallback(ids => reorder('workMembers', ids), [reorder]);
 
   const deleteMember = useCallback(async (id) => {
     await deleteDoc(doc(db, 'users', userId, 'workMembers', id));
   }, [userId]);
 
-  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember };
+  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
 }

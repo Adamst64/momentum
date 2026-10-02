@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import { CREW_COLORS } from '../../utils/workUtils';
+import SortableList, { DragHandle } from '../SortableList';
 
 function AddInput({ placeholder, onAdd, nextColor }) {
   const [val, setVal] = useState('');
@@ -23,7 +24,7 @@ function AddInput({ placeholder, onAdd, nextColor }) {
   );
 }
 
-function CrewList({ crews, onDelete, onUpdateColor }) {
+function CrewList({ crews, onDelete, onUpdateColor, onReorder }) {
   const [editingColorId, setEditingColorId] = useState(null);
 
   if (crews.length === 0) {
@@ -31,10 +32,11 @@ function CrewList({ crews, onDelete, onUpdateColor }) {
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-      {crews.map(crew => (
-        <div key={crew.id}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.subtle, borderRadius: 10, padding: '10px 14px' }}>
+    <div style={{ marginTop: 8 }}>
+      <SortableList items={crews} onReorder={onReorder} renderItem={(crew, handle) => (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.subtle, borderRadius: 10, padding: '6px 14px', minHeight: 32 }}>
+            <DragHandle color={T.muted} {...handle} />
             {/* Color swatch — tap to open picker */}
             <button
               onClick={() => setEditingColorId(editingColorId === crew.id ? null : crew.id)}
@@ -55,28 +57,29 @@ function CrewList({ crews, onDelete, onUpdateColor }) {
             </div>
           )}
         </div>
-      ))}
+      )} />
     </div>
   );
 }
 
-function MemberList({ members, onDelete }) {
+function MemberList({ members, onDelete, onReorder }) {
   if (members.length === 0) {
     return <div style={{ fontSize: 13, color: T.muted, padding: '8px 0 2px' }}>None added yet</div>;
   }
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-      {members.map(m => (
-        <div key={m.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle, borderRadius: 10, padding: '10px 14px' }}>
-          <span style={{ fontSize: 14, color: T.text }}>{m.name}</span>
+    <div style={{ marginTop: 8 }}>
+      <SortableList items={members} onReorder={onReorder} renderItem={(m, handle) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.subtle, borderRadius: 10, padding: '6px 14px', minHeight: 32 }}>
+          <DragHandle color={T.muted} {...handle} />
+          <span style={{ flex: 1, fontSize: 14, color: T.text }}>{m.name}</span>
           <button onClick={() => onDelete(m.id)} style={{ color: T.red, fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
-      ))}
+      )} />
     </div>
   );
 }
 
-export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onAddMember, onDeleteMember, onClose }) {
+export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onAddMember, onDeleteMember, onReorderCrews, onReorderMembers, onClose }) {
   const nextCrewColor = CREW_COLORS[crews.length % CREW_COLORS.length];
 
   return (
@@ -86,19 +89,22 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-          <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Crews & Members</span>
+          <span>
+            <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: T.text }}>Crews & Members</span>
+            <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>Hold ≡ and drag to reorder</span>
+          </span>
           <button onClick={onClose} style={{ color: T.muted, fontSize: 24, lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
 
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Crews</div>
-          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} />
+          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} onReorder={onReorderCrews} />
           <AddInput placeholder="Crew name…" onAdd={onAddCrew} nextColor={nextCrewColor} />
         </div>
 
         <div style={{ marginBottom: 32 }}>
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Members</div>
-          <MemberList members={members} onDelete={onDeleteMember} />
+          <MemberList members={members} onDelete={onDeleteMember} onReorder={onReorderMembers} />
           <AddInput placeholder="Member name…" onAdd={onAddMember} />
         </div>
       </div>

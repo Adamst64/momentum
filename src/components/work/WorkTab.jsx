@@ -13,7 +13,7 @@ function todayStr() {
 }
 
 export default function WorkTab({ hook }) {
-  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember } = hook;
+  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
   const [view, setView]                 = useState('today');
   const [selectedDay, setSelectedDay]   = useState(null);
   const [showDaySheet, setShowDaySheet] = useState(false);
@@ -119,6 +119,8 @@ export default function WorkTab({ hook }) {
           onUpdateCrewColor={updateCrewColor}
           onAddMember={addMember}
           onDeleteMember={deleteMember}
+          onReorderCrews={reorderCrews}
+          onReorderMembers={reorderMembers}
           onClose={() => setShowCrewMgr(false)}
         />
       )}

@@ -60,9 +60,48 @@ function Toggle({ label, value, onChange, activeColor }) {
   );
 }
 
+function MembersCard({ ids, members, onAdd, onRemove }) {
+  return (
+    <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: ids.length > 0 ? 10 : 0 }}>
+        <span style={{ fontSize: 15, color: T.text }}>Members on site</span>
+        <button onClick={onAdd} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>+ Add</button>
+      </div>
+      {ids.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {ids.map(id => {
+            const m = members.find(x => x.id === id);
+            if (!m) return null;
+            return (
+              <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.subtle, borderRadius: 8, padding: '5px 10px' }}>
+                <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
+                <button onClick={() => onRemove(id)} style={{ color: T.muted, fontSize: 16, lineHeight: 1, marginLeft: 2 }}>×</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommentCard({ value, onChange }) {
+  return (
+    <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Notes…"
+        rows={3}
+        style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+      />
+    </div>
+  );
+}
+
 const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false, second: null };
 // Rare split day: part of the day with a second crew, with its own counts
-const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false };
+const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false, memberIds: [], comment: '' };
 const norm = (base) => ({ ...EMPTY, ...base });
 
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
@@ -70,7 +109,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   const [lastSaved, setLastSaved]         = useState(() => initial ? norm(initial) : null);
   const [confirmClear, setConfirmClear]   = useState(false);
   const [showCrewPicker, setShowCrewPicker]     = useState(false); // false | 'first' | 'second'
-  const [showMemberPicker, setShowMemberPicker] = useState(false);
+  const [showMemberPicker, setShowMemberPicker] = useState(false); // false | 'first' | 'second'
 
   useEffect(() => {
     setForm(norm(initial));
@@ -99,7 +138,11 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   const selectedCrew = crews.find(c => c.id === form.crewId);
   const secondCrew   = crews.find(c => c.id === form.second?.crewId);
   const pickerValue  = showCrewPicker === 'second' ? form.second?.crewId : form.crewId;
-  const availableMembers = members.filter(m => !form.memberIds.includes(m.id));
+  const pickedMembers    = showMemberPicker === 'second' ? (form.second?.memberIds || []) : form.memberIds;
+  const availableMembers = members.filter(m => !pickedMembers.includes(m.id));
+  const addMember = id => (showMemberPicker === 'second'
+    ? setSecond('memberIds', [...(form.second?.memberIds || []), id])
+    : set('memberIds', [...form.memberIds, id]));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -151,10 +194,13 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
             </div>
           </div>
 
-          {/* Second crew (split day) */}
+          <MembersCard ids={form.memberIds} members={members} onAdd={() => setShowMemberPicker('first')} onRemove={id => set('memberIds', form.memberIds.filter(x => x !== id))} />
+          <CommentCard value={form.comment} onChange={v => set('comment', v)} />
+
+          {/* Second crew (rare split day), kept below everything for the first crew */}
           {form.second ? (
             <>
-              <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '4px 0 -4px 4px' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: secondCrew?.color || T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '10px 0 -4px 4px' }}>
                 Second crew{secondCrew ? ` · ${secondCrew.name}` : ''}
               </div>
               <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${secondCrew?.color ? secondCrew.color + '66' : T.cardBorder}` }}>
@@ -178,6 +224,8 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
                   <Toggle label="Crew Lead" value={form.second.isCrewLead} onChange={v => setSecond('isCrewLead', v)} />
                 </div>
               </div>
+              <MembersCard ids={form.second.memberIds || []} members={members} onAdd={() => setShowMemberPicker('second')} onRemove={id => setSecond('memberIds', (form.second.memberIds || []).filter(x => x !== id))} />
+              <CommentCard value={form.second.comment || ''} onChange={v => setSecond('comment', v)} />
               <button
                 onClick={() => set('second', null)}
                 style={{ alignSelf: 'flex-start', fontSize: 13, color: T.red, padding: '2px 4px' }}
@@ -193,39 +241,6 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               + Worked with a second crew today
             </button>
           )}
-
-          {/* Members */}
-          <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.memberIds.length > 0 ? 10 : 0 }}>
-              <span style={{ fontSize: 15, color: T.text }}>Members on site</span>
-              <button onClick={() => setShowMemberPicker(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>+ Add</button>
-            </div>
-            {form.memberIds.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {form.memberIds.map(id => {
-                  const m = members.find(x => x.id === id);
-                  if (!m) return null;
-                  return (
-                    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 4, background: T.subtle, borderRadius: 8, padding: '5px 10px' }}>
-                      <span style={{ fontSize: 13, color: T.text }}>{m.name}</span>
-                      <button onClick={() => set('memberIds', form.memberIds.filter(mid => mid !== id))} style={{ color: T.muted, fontSize: 16, lineHeight: 1, marginLeft: 2 }}>×</button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Comment */}
-          <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
-            <textarea
-              value={form.comment}
-              onChange={e => set('comment', e.target.value)}
-              placeholder="Notes…"
-              rows={3}
-              style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
-            />
-          </div>
         </>
       )}
 
@@ -307,7 +322,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               availableMembers.map(m => (
                 <button
                   key={m.id}
-                  onClick={() => set('memberIds', [...form.memberIds, m.id])}
+                  onClick={() => addMember(m.id)}
                   style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: T.text }}
                 >+ {m.name}</button>
               ))

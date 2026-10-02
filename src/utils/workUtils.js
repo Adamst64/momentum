@@ -56,12 +56,12 @@ export function formatDayFull(ds) {
   });
 }
 
-// A work day can hold a second crew (day.second = { crewId, windows, doors, isCrewLead })
+// A work day can hold a second crew (day.second = { crewId, windows, doors, isCrewLead, memberIds, comment })
 // for the rare day split between two crews. Returns one entry per crew worked that day,
 // each shaped like a day ({ id, crewId, windows, doors, isCrewLead, comment }).
 export function dayEntries(day) {
   if (!day || day.isOff) return [];
   const out = [day];
-  if (day.second?.crewId) out.push({ ...day.second, id: day.id, comment: '', isSecond: true });
+  if (day.second?.crewId) out.push({ comment: '', memberIds: [], ...day.second, id: day.id, isSecond: true });
   return out;
 }
