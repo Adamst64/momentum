@@ -126,6 +126,20 @@ export default function App() {
     window.history.replaceState(null, '', window.location.pathname);
   }, [userId, urlAction]);
 
+  // Tapping a notification while the app is already open: the service worker
+  // sends us its link (our own message, or Firebase's notification-clicked one)
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (e) => {
+      const d = e.data || {};
+      const url = d.type === 'open-url' ? d.url
+        : d.messageType === 'notification-clicked' ? (d.fcmOptions?.link || d.data?.url) : null;
+      if (url && url.includes('action=review')) setShowReview(true);
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, []);
+
   const saveDailyReview = async (prefs) => {
     await setDoc(doc(db, 'users', userId), { preferences: { dailyReview: prefs } }, { merge: true });
     setDailyReview(d => ({ ...d, ...prefs }));

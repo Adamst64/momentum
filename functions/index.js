@@ -138,18 +138,23 @@ function isDue(time, minutesNow) {
   return late >= 0 && late < 60;
 }
 
-async function sendPush(db, messaging, uid, tokens, title, body) {
+const APP_URL = 'https://adamst64.github.io/momentum/';
+
+// link: where tapping the notification opens (defaults to the app's start page)
+async function sendPush(db, messaging, uid, tokens, title, body, link = APP_URL) {
   const staleTokens = [];
   await Promise.allSettled(tokens.map(async (token) => {
     try {
       await messaging.send({
         token,
         notification: { title, body },
+        data: { url: link },
         webpush: {
           notification: {
-            icon:  'https://adamst64.github.io/momentum/icon-192.png',
-            badge: 'https://adamst64.github.io/momentum/icon-192.png',
+            icon:  APP_URL + 'icon-192.png',
+            badge: APP_URL + 'icon-192.png',
           },
+          fcmOptions: { link },
           headers: { TTL: '86400' },
         },
       });
@@ -173,7 +178,8 @@ async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
   // Mark first so an overlapping run can't double-send
   await userDoc.ref.update({ 'preferences.dailyReview.lastSentDate': now.today });
   await sendPush(db, messaging, userDoc.id, tokens,
-    '🌙 Daily review', 'Take a minute to look back on today and plan tomorrow.');
+    '🌙 Daily review', 'Take a minute to look back on today and plan tomorrow.',
+    APP_URL + '?action=review');
 }
 
 // ── Task push notifications (every 5 minutes) ─────────────────────────────────
