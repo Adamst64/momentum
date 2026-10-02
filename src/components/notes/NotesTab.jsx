@@ -1,9 +1,53 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
-import { parseDate, formatLongDate } from '../../utils/dateUtils';
+import { parseDate } from '../../utils/dateUtils';
 import NoteEditor, { MOODS } from './NoteEditor';
 
 const moodEmoji = (v) => MOODS.find(m => m.value === v)?.emoji;
+
+// Light tint per mood so the grid reads at a glance
+const MOOD_TINT = { 1: '#D0675F', 2: '#E5A44B', 3: null, 4: '#A9BB6C', 5: '#4FCB66' };
+
+function editedLabel(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const now = new Date();
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return `Edited today, ${time}`;
+  const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (d.toDateString() === y.toDateString()) return `Edited yesterday, ${time}`;
+  return `Edited ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })}, ${time}`;
+}
+
+function NoteCard({ note: n, onOpen }) {
+  const tint = MOOD_TINT[n.mood];
+  return (
+    <button
+      onClick={onOpen}
+      style={{
+        textAlign: 'left', padding: '12px 13px', borderRadius: 16,
+        background: tint ? tint + '14' : T.card, border: `1px solid ${tint ? tint + '40' : T.cardBorder}`,
+        display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 12, color: T.khaki, fontWeight: 700 }}>
+          {parseDate(n.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+        </span>
+        {n.mood && <span style={{ fontSize: 16 }}>{moodEmoji(n.mood)}</span>}
+      </div>
+      <div style={{
+        fontSize: 14, color: T.text, lineHeight: 1.4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
+        display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
+        {n.text}
+      </div>
+      {(n.updatedAt || n.createdAt) && (
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{editedLabel(n.updatedAt || n.createdAt)}</div>
+      )}
+    </button>
+  );
+}
 
 function monthLabel(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -81,28 +125,16 @@ export default function NotesTab({ hook }) {
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
             {g.label}
           </div>
-          {g.notes.map(n => (
-            <button
-              key={n.id}
-              onClick={() => setEditing(n)}
-              style={{
-                textAlign: 'left', padding: '12px 14px', borderRadius: 14,
-                background: T.card, border: `1px solid ${T.cardBorder}`,
-                display: 'flex', flexDirection: 'column', gap: 6,
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, color: T.khaki, fontWeight: 600 }}>{formatLongDate(n.date)}</span>
-                {n.mood && <span style={{ fontSize: 18 }}>{moodEmoji(n.mood)}</span>}
+          {/* Two columns, filled alternately so newest stay at the top of both */}
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            {[0, 1].map(col => (
+              <div key={col} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {g.notes.filter((_, i) => i % 2 === col).map(n => (
+                  <NoteCard key={n.id} note={n} onOpen={() => setEditing(n)} />
+                ))}
               </div>
-              <div style={{
-                fontSize: 14, color: T.text, lineHeight: 1.45, whiteSpace: 'pre-wrap',
-                display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}>
-                {n.text}
-              </div>
-            </button>
-          ))}
+            ))}
+          </div>
         </div>
       ))}
 
