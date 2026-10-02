@@ -27,7 +27,7 @@ function NoteCard({ note: n, onOpen }) {
       style={{
         textAlign: 'left', padding: '12px 13px', borderRadius: 16,
         background: tint ? tint + '14' : T.card, border: `1px solid ${tint ? tint + '40' : T.cardBorder}`,
-        display: 'flex', flexDirection: 'column', gap: 6, width: '100%',
+        display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minHeight: 104,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
@@ -37,13 +37,13 @@ function NoteCard({ note: n, onOpen }) {
         {n.mood && <span style={{ fontSize: 16 }}>{moodEmoji(n.mood)}</span>}
       </div>
       <div style={{
-        fontSize: 14, color: T.text, lineHeight: 1.4, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
-        display: '-webkit-box', WebkitLineClamp: 8, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        fontSize: 16, fontWeight: 700, color: n.title ? T.text : T.muted, lineHeight: 1.3, overflowWrap: 'anywhere',
+        display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
       }}>
-        {n.text}
+        {n.title || 'Untitled'}
       </div>
       {(n.updatedAt || n.createdAt) && (
-        <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{editedLabel(n.updatedAt || n.createdAt)}</div>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 'auto' }}>{editedLabel(n.updatedAt || n.createdAt)}</div>
       )}
     </button>
   );
@@ -59,7 +59,7 @@ export default function NotesTab({ hook }) {
   const [query, setQuery]     = useState('');
 
   const q = query.trim().toLowerCase();
-  const visible = q ? notes.filter(n => n.text.toLowerCase().includes(q)) : notes;
+  const visible = q ? notes.filter(n => (n.title || '').toLowerCase().includes(q) || (n.text || '').toLowerCase().includes(q)) : notes;
 
   // Group by month, preserving newest-first order
   const groups = [];
@@ -125,14 +125,9 @@ export default function NotesTab({ hook }) {
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>
             {g.label}
           </div>
-          {/* Two columns, filled alternately so newest stay at the top of both */}
-          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-            {[0, 1].map(col => (
-              <div key={col} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {g.notes.filter((_, i) => i % 2 === col).map(n => (
-                  <NoteCard key={n.id} note={n} onOpen={() => setEditing(n)} />
-                ))}
-              </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+            {g.notes.map(n => (
+              <NoteCard key={n.id} note={n} onOpen={() => setEditing(n)} />
             ))}
           </div>
         </div>

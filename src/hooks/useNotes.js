@@ -4,7 +4,7 @@ import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { todayStr } from '../utils/dateUtils';
 
-// Journal entries: { date: 'YYYY-MM-DD', mood: 1-5 | null, text, createdAt, updatedAt }
+// Journal entries: { date: 'YYYY-MM-DD', title, mood: 1-5 | null, text, createdAt, updatedAt }
 export function useNotes(userId) {
   const [notes, setNotes] = useState([]);
 
@@ -15,18 +15,18 @@ export function useNotes(userId) {
     });
   }, [userId]);
 
-  const addNote = useCallback(async ({ date, mood = null, text }) => {
-    if (!userId || !text.trim()) return;
+  const addNote = useCallback(async ({ date, title = '', mood = null, text = '' }) => {
+    if (!userId || (!text.trim() && !title.trim())) return;
     const now = new Date().toISOString();
     await setDoc(doc(db, 'users', userId, 'notes', genId()), {
-      date: date || todayStr(), mood, text: text.trim(), createdAt: now, updatedAt: now,
+      date: date || todayStr(), title: title.trim(), mood, text: text.trim(), createdAt: now, updatedAt: now,
     });
   }, [userId]);
 
-  const updateNote = useCallback(async (id, { date, mood = null, text }) => {
-    if (!userId || !text.trim()) return;
+  const updateNote = useCallback(async (id, { date, title = '', mood = null, text = '' }) => {
+    if (!userId || (!text.trim() && !title.trim())) return;
     await updateDoc(doc(db, 'users', userId, 'notes', id), {
-      date, mood, text: text.trim(), updatedAt: new Date().toISOString(),
+      date, title: title.trim(), mood, text: text.trim(), updatedAt: new Date().toISOString(),
     });
   }, [userId]);
 

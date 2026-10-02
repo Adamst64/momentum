@@ -14,17 +14,18 @@ export const MOODS = [
 export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
   const [date,   setDate]   = useState(initial?.date || todayStr());
   const [mood,   setMood]   = useState(initial?.mood ?? null);
+  const [title,  setTitle]  = useState(initial?.title || '');
   const [text,   setText]   = useState(initial?.text || '');
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleSave = async () => {
-    if (!text.trim() || saving) return;
+    if ((!text.trim() && !title.trim()) || saving) return;
     setSaving(true);
     setError(null);
     try {
-      await onSave({ date, mood, text });
+      await onSave({ date, title, mood, text });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -45,6 +46,18 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
   return (
     <Modal title={initial ? 'Edit Entry' : 'New Entry'} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <input
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Name, e.g. Window measurements"
+          aria-label="Note name"
+          autoFocus={!initial}
+          style={{
+            padding: '12px 14px', borderRadius: 10,
+            background: T.bg, border: `1px solid ${T.cardBorder}`,
+            color: T.text, fontSize: 17, fontWeight: 600, outline: 'none',
+          }}
+        />
         <input
           type="date"
           value={date}
@@ -87,7 +100,6 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
           onChange={e => setText(e.target.value)}
           placeholder="What's on your mind?"
           rows={7}
-          autoFocus={!initial}
           style={{
             width: '100%', boxSizing: 'border-box', resize: 'vertical',
             padding: '12px 14px', borderRadius: 10,
@@ -100,10 +112,10 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
 
         <button
           onClick={handleSave}
-          disabled={!text.trim() || saving}
+          disabled={(!text.trim() && !title.trim()) || saving}
           style={{
             padding: 13, borderRadius: 12,
-            background: text.trim() ? T.olive : T.subtle,
+            background: text.trim() || title.trim() ? T.olive : T.subtle,
             color: '#fff', fontSize: 15, fontWeight: 600,
           }}
         >
