@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
 import { genId, } from '../utils/id';
-import { CREW_COLORS, getMondayId } from '../utils/workUtils';
+import { CREW_COLORS, getMondayId, dayEntries } from '../utils/workUtils';
 
 export function useWork(userId) {
   const [days,    setDays]    = useState([]);
@@ -26,13 +26,14 @@ export function useWork(userId) {
   }, [userId]);
 
   const deleteDay = useCallback(async (ds) => {
-    const crewId = days.find(d => d.id === ds)?.crewId;
+    const crewIds = dayEntries(days.find(d => d.id === ds)).map(e => e.crewId).filter(Boolean);
     await deleteDoc(doc(db, 'users', userId, 'workDays', ds));
 
-    if (crewId) {
-      const mondayId = getMondayId(ds);
+    // Drop a crew's payment for the week if this was its last day there
+    const mondayId = getMondayId(ds);
+    for (const crewId of new Set(crewIds)) {
       const stillHasDays = days.some(d =>
-        d.id !== ds && !d.isOff && d.crewId === crewId && getMondayId(d.id) === mondayId
+        d.id !== ds && getMondayId(d.id) === mondayId && dayEntries(d).some(e => e.crewId === crewId)
       );
       if (!stillHasDays) {
         try {

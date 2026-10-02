@@ -60,14 +60,16 @@ function Toggle({ label, value, onChange, activeColor }) {
   );
 }
 
-const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false };
+const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false, second: null };
+// Rare split day: part of the day with a second crew, with its own counts
+const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false };
 const norm = (base) => ({ ...EMPTY, ...base });
 
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
   const [form, setForm]                   = useState(() => norm(initial));
   const [lastSaved, setLastSaved]         = useState(() => initial ? norm(initial) : null);
   const [confirmClear, setConfirmClear]   = useState(false);
-  const [showCrewPicker, setShowCrewPicker]     = useState(false);
+  const [showCrewPicker, setShowCrewPicker]     = useState(false); // false | 'first' | 'second'
   const [showMemberPicker, setShowMemberPicker] = useState(false);
 
   useEffect(() => {
@@ -79,14 +81,24 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   const showSaved = lastSaved !== null && !isDirty;
 
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
+  const setSecond = (key, val) => setForm(f => ({ ...f, second: { ...(f.second || EMPTY_SECOND), [key]: val } }));
+  const pickCrew = (id) => {
+    if (showCrewPicker === 'second') setSecond('crewId', id);
+    else set('crewId', id);
+    setShowCrewPicker(false);
+  };
 
   const handleSave = () => {
-    onSave(dateStr, form);
+    // A second crew without a crew picked isn't a split day
+    const data = form.second?.crewId ? form : { ...form, second: null };
+    onSave(dateStr, data);
     setLastSaved({ ...form });
   };
 
   const isEmpty = !form.isOff && form.windows === 0 && form.doors === 0 && !form.crewId && form.memberIds.length === 0 && !form.comment;
   const selectedCrew = crews.find(c => c.id === form.crewId);
+  const secondCrew   = crews.find(c => c.id === form.second?.crewId);
+  const pickerValue  = showCrewPicker === 'second' ? form.second?.crewId : form.crewId;
   const availableMembers = members.filter(m => !form.memberIds.includes(m.id));
 
   return (
@@ -104,6 +116,11 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
 
       {!form.isOff && (
         <>
+          {form.second && (
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '4px 0 -4px 4px' }}>
+              First crew{selectedCrew ? ` · ${selectedCrew.name}` : ''}
+            </div>
+          )}
           {/* Windows & Doors */}
           <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
             <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
@@ -114,7 +131,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
           {/* Crew & Lead */}
           <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
             <button
-              onClick={() => setShowCrewPicker(true)}
+              onClick={() => setShowCrewPicker('first')}
               style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
             >
               <span style={{ fontSize: 15, color: T.text }}>Crew</span>
@@ -133,6 +150,49 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               <Toggle label="Crew Lead" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
             </div>
           </div>
+
+          {/* Second crew (split day) */}
+          {form.second ? (
+            <>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '4px 0 -4px 4px' }}>
+                Second crew{secondCrew ? ` · ${secondCrew.name}` : ''}
+              </div>
+              <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${secondCrew?.color ? secondCrew.color + '66' : T.cardBorder}` }}>
+                <button
+                  onClick={() => setShowCrewPicker('second')}
+                  style={{ width: '100%', padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+                >
+                  <span style={{ fontSize: 15, color: T.text }}>Crew</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {secondCrew?.color && <div style={{ width: 10, height: 10, borderRadius: '50%', background: secondCrew.color }} />}
+                    <span style={{ fontSize: 15, color: secondCrew ? T.text : T.muted }}>{secondCrew ? secondCrew.name : 'Pick a crew'}</span>
+                    <span style={{ color: T.muted, fontSize: 13 }}>›</span>
+                  </div>
+                </button>
+                <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
+                <div style={{ padding: '0 16px' }}>
+                  <Counter label="Windows" value={form.second.windows} onChange={v => setSecond('windows', v)} />
+                  <div style={{ height: 1, background: T.cardBorder }} />
+                  <Counter label="Doors" value={form.second.doors} onChange={v => setSecond('doors', v)} />
+                  <div style={{ height: 1, background: T.cardBorder }} />
+                  <Toggle label="Crew Lead" value={form.second.isCrewLead} onChange={v => setSecond('isCrewLead', v)} />
+                </div>
+              </div>
+              <button
+                onClick={() => set('second', null)}
+                style={{ alignSelf: 'flex-start', fontSize: 13, color: T.red, padding: '2px 4px' }}
+              >
+                Remove second crew
+              </button>
+            </>
+          ) : form.crewId && (
+            <button
+              onClick={() => set('second', { ...EMPTY_SECOND })}
+              style={{ padding: 12, borderRadius: 14, border: `1.5px dashed ${T.cardBorder}`, color: T.muted, fontSize: 14 }}
+            >
+              + Worked with a second crew today
+            </button>
+          )}
 
           {/* Members */}
           <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
@@ -216,14 +276,14 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
           <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, padding: '20px 20px 10px' }}>Select Crew</div>
             <button
-              onClick={() => { set('crewId', null); setShowCrewPicker(false); }}
-              style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: !form.crewId ? T.khaki : T.text, fontWeight: !form.crewId ? 700 : 400 }}
+              onClick={() => pickCrew(null)}
+              style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: !pickerValue ? T.khaki : T.text, fontWeight: !pickerValue ? 700 : 400 }}
             >None</button>
-            {crews.map(c => (
+            {crews.filter(c => showCrewPicker === 'second' ? c.id !== form.crewId : c.id !== form.second?.crewId).map(c => (
               <button
                 key={c.id}
-                onClick={() => { set('crewId', c.id); setShowCrewPicker(false); }}
-                style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: form.crewId === c.id ? T.khaki : T.text, fontWeight: form.crewId === c.id ? 700 : 400 }}
+                onClick={() => pickCrew(c.id)}
+                style={{ width: '100%', padding: '14px 20px', textAlign: 'left', fontSize: 15, color: pickerValue === c.id ? T.khaki : T.text, fontWeight: pickerValue === c.id ? 700 : 400 }}
               >{c.name}</button>
             ))}
             {crews.length === 0 && (

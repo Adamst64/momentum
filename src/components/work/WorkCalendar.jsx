@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
-import { getMondayId, parsePayEntry } from '../../utils/workUtils';
+import { getMondayId, parsePayEntry, dayEntries } from '../../utils/workUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_LABELS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -71,8 +71,11 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
           const isToday   = ds === todayStr;
           const isSel     = ds === selected;
           const isOff     = entry?.isOff;
-          const isLead    = entry?.isCrewLead;
+          const isLead    = entry?.isCrewLead || entry?.second?.isCrewLead;
           const crewColor = entry?.crewId ? crewColorMap[entry.crewId] : null;
+          const color2    = entry?.second?.crewId ? crewColorMap[entry.second.crewId] : null;
+          const totalW    = (entry?.windows || 0) + (entry?.second?.windows || 0);
+          const totalD    = (entry?.doors || 0) + (entry?.second?.doors || 0);
           const hasEntry  = !!entry;
 
           const isWorkDay = hasEntry && !isOff && entry?.crewId;
@@ -80,13 +83,15 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
           if (isWorkDay) {
             const mondayId = getMondayId(ds);
             const weekDoc  = weeksMap[mondayId] || {};
-            const { paid } = parsePayEntry(weekDoc[entry.crewId]);
-            isPaid = paid;
+            // Split day: paid only once every crew that day is paid
+            isPaid = dayEntries(entry).every(e => !e.crewId || parsePayEntry(weekDoc[e.crewId]).paid);
           }
 
           const bg = isOff
             ? T.red + '22'
-            : crewColor
+            : crewColor && color2
+              ? `linear-gradient(135deg, ${crewColor}33 50%, ${color2}33 50%)`
+              : crewColor
               ? crewColor + '28'
               : hasEntry ? T.olive + '18' : 'transparent';
 
@@ -123,7 +128,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
               </div>
               {hasEntry && !isOff && (
                 <div style={{ fontSize: 8, color: crewColor || T.muted, marginTop: 3, lineHeight: 1.3, opacity: 0.9 }}>
-                  {[entry.windows > 0 && `${entry.windows}w`, entry.doors > 0 && `${entry.doors}dr`].filter(Boolean).join(' ')}
+                  {[totalW > 0 && `${totalW}w`, totalD > 0 && `${totalD}dr`].filter(Boolean).join(' ')}
                 </div>
               )}
               {isOff && (

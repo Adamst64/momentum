@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
-import { getMondayId, formatWeekRange, parsePayEntry } from '../../utils/workUtils';
+import { getMondayId, formatWeekRange, parsePayEntry, dayEntries } from '../../utils/workUtils';
 
 function fmt(n) {
   if (!n) return '—';
@@ -115,7 +115,8 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
 
   // Group work days (exclude off) by week → crew
   const grouped = {};
-  days.filter(d => !d.isOff).forEach(day => {
+  // (a day split between two crews counts for each crew)
+  days.flatMap(dayEntries).forEach(day => {
     const wk  = getMondayId(day.id);
     const cid = day.crewId || '__none__';
     if (!grouped[wk]) grouped[wk] = {};
@@ -154,9 +155,11 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
 
   // Days worked per crew for the selected year
   const yearDaysMap = {};
-  days.filter(d => !d.isOff && d.crewId && d.id.slice(0, 4) === effectiveSummaryYear)
-    .forEach(d => { yearDaysMap[d.crewId] = (yearDaysMap[d.crewId] || 0) + 1; });
-  const totalYearDays = Object.values(yearDaysMap).reduce((s, v) => s + v, 0);
+  days.filter(d => d.id.slice(0, 4) === effectiveSummaryYear).flatMap(dayEntries).filter(e => e.crewId)
+    .forEach(e => { yearDaysMap[e.crewId] = (yearDaysMap[e.crewId] || 0) + 1; });
+  // Calendar days worked (a split day is still one day)
+  const totalYearDays = days.filter(d => !d.isOff && d.crewId && d.id.slice(0, 4) === effectiveSummaryYear).length;
+  const uniqueDays = crewMap => new Set(Object.values(crewMap).flatMap(st => st.days.map(d => d.id))).size;
 
   // All crews that have days or earnings in selected year, sorted by days desc
   const allYearCrewIds = [...new Set([...Object.keys(yearDaysMap), ...Object.keys(yearData)])]
@@ -166,7 +169,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
   const yearCompletedWeeks = Object.entries(grouped)
     .filter(([wk]) => wk.slice(0, 4) === effectiveSummaryYear && wk !== currentMondayId);
   const avgDaysPerWeek = yearCompletedWeeks.length > 0
-    ? (yearCompletedWeeks.reduce((s, [, cm]) => s + Object.values(cm).reduce((a, st) => a + st.days.length, 0), 0) / yearCompletedWeeks.length)
+    ? (yearCompletedWeeks.reduce((s, [, cm]) => s + uniqueDays(cm), 0) / yearCompletedWeeks.length)
     : null;
 
   // Avg $/week — only weeks where every crew entry is paid (exclude current week)
@@ -320,7 +323,8 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
 
             let totalW = 0, totalD = 0, totalDays = 0, paidAmt = 0, paidCount = 0;
             const crewIds = Object.keys(crewEntries);
-            Object.values(crewEntries).forEach(st => { totalW += st.windows; totalD += st.doors; totalDays += st.days.length; });
+            Object.values(crewEntries).forEach(st => { totalW += st.windows; totalD += st.doors; });
+            totalDays = uniqueDays(crewEntries);
             crewIds.forEach(cid => {
               const { paid, amount } = parsePayEntry(weekDoc[cid]);
               if (paid) { paidCount++; paidAmt += amount; }
