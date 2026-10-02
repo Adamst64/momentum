@@ -8,6 +8,8 @@ import BirthdayForm from './BirthdayForm';
 import BirthdayCalendar from './BirthdayCalendar';
 import { daysUntil, turningAge } from '../../utils/birthdayUtils';
 
+const PINK = '#E88AA6';
+
 export default function BirthdaysTab({ hook, userId }) {
   const { birthdays, addBirthday, updateBirthday, deleteBirthday } = hook;
   const [showForm, setShowForm]       = useState(false);
@@ -84,6 +86,52 @@ export default function BirthdaysTab({ hook, userId }) {
           )}
         </div>
       )}
+
+      {sorted.length > 0 && (() => {
+        // Everyone sharing the soonest date (twins, or two people the same day)
+        const nextDays = daysUntil(sorted[0].month, sorted[0].day);
+        const next = sorted.filter(b => daysUntil(b.month, b.day) === nextDays);
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + nextDays);
+        const dateLabel = nextDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        return (
+          <div style={{
+            borderRadius: 20, padding: '18px 20px', background: '#2A1820', border: '1px solid #5A2E3E',
+            display: 'flex', flexDirection: 'column', gap: 10,
+          }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: PINK, textTransform: 'uppercase', letterSpacing: 0.6 }}>
+              {nextDays === 0 ? 'Birthday today' : 'Upcoming birthday'}
+            </div>
+            {next.map(b => {
+              const age = turningAge(b.year, b.month, b.day);
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => openEdit(b)}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, textAlign: 'left', background: 'transparent', padding: 0 }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: T.text, letterSpacing: -0.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>{b.name}</div>
+                    <div style={{ fontSize: 14, color: T.muted, marginTop: 2 }}>
+                      {age ? `Turns ${age} · ` : ''}{dateLabel}
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'center', flexShrink: 0 }}>
+                    {nextDays === 0 ? (
+                      <div style={{ fontSize: 24, fontWeight: 800, color: PINK }}>Today!</div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 40, fontWeight: 800, color: PINK, lineHeight: 1 }}>{nextDays}</div>
+                        <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{nextDays === 1 ? 'day' : 'days'}</div>
+                      </>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>
         {['list', 'calendar'].map(v => (
