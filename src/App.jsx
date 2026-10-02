@@ -156,20 +156,6 @@ export default function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            {tab !== 'home' && (
-              <button
-                onClick={() => setTab('home')}
-                aria-label="Main menu"
-                style={{ width: 36, height: 36, borderRadius: 10, background: T.card, border: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
-                  <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
-                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
-                  <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
-                </svg>
-              </button>
-            )}
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <span style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>Momentum</span>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive, marginBottom: 2 }} />
@@ -205,7 +191,8 @@ export default function App() {
 
       <main style={{
         paddingTop: 20,
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)',
+        // Room for the floating menu button on section pages
+        paddingBottom: tab === 'home' ? 'calc(env(safe-area-inset-bottom) + 12px)' : 'calc(env(safe-area-inset-bottom) + 96px)',
         overflowY: 'auto',
       }}>
         {tab === 'home'      && <HomeMenu tabs={visibleTabs} onOpen={setTab} />}
@@ -263,6 +250,29 @@ export default function App() {
         )}
 
       </main>
+
+      {/* Main menu button: bottom-right, within thumb reach */}
+      {tab !== 'home' && (
+        <button
+          onClick={() => setTab('home')}
+          aria-label="Main menu"
+          style={{
+            position: 'fixed', zIndex: 46,
+            right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + 24px)',
+            width: 58, height: 58, borderRadius: 29,
+            background: T.card, border: `1px solid ${T.subtle}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.5)', cursor: 'pointer',
+          }}
+        >
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+            <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+            <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+            <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+          </svg>
+        </button>
+      )}
 
     </div>
   );

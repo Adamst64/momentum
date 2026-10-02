@@ -183,7 +183,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       </div>
 
       {/* Space so the add button never covers the last row */}
-      <div style={{ height: 56 }} />
+      <div style={{ height: 60 }} />
 
       <button
         type="button"
@@ -191,7 +191,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
         aria-label="Add routine"
         style={{
           position: 'fixed', zIndex: 45,
-          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + 24px)',
+          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + 96px)', // above the main menu button
           width: 58, height: 58, borderRadius: 29, background: T.olive,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
