@@ -6,9 +6,10 @@ export function useAuth() {
   const [user, setUser] = useState(undefined); // undefined = loading
 
   useEffect(() => {
-    // If Firebase auth doesn't resolve within 6s (e.g. very weak connection),
-    // fall through to the login screen rather than hanging on the loading dot.
-    const timeout = setTimeout(() => setUser(u => u === undefined ? null : u), 6000);
+    // Last resort if Firebase auth never resolves: fall through to the login
+    // screen rather than hang on the loading dot. Startup auth requests are
+    // capped at 3s (see firebase.js), so this shouldn't fire on a weak signal.
+    const timeout = setTimeout(() => setUser(u => u === undefined ? null : u), 10000);
     const unsub = onAuthStateChanged(auth, u => { clearTimeout(timeout); setUser(u); });
     return () => { clearTimeout(timeout); unsub(); };
   }, []);
