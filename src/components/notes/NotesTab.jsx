@@ -21,12 +21,12 @@ function NoteCard({ note: n, onOpen }) {
       onClick={onOpen}
       style={{
         textAlign: 'left', padding: '12px 13px', borderRadius: 16,
-        background: T.card, border: `1px solid ${T.cardBorder}`,
+        background: n.color ? n.color + '1F' : T.card, border: `1px solid ${n.color ? n.color + '66' : T.cardBorder}`,
         display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minHeight: 104,
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6 }}>
-        <span style={{ fontSize: 12, color: T.khaki, fontWeight: 700 }}>
+        <span style={{ fontSize: 12, color: n.color || T.khaki, fontWeight: 700 }}>
           {parseDate(n.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
         </span>
       </div>

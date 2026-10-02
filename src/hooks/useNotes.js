@@ -15,18 +15,18 @@ export function useNotes(userId) {
     });
   }, [userId]);
 
-  const addNote = useCallback(async ({ date, title = '', mood = null, text = '' }) => {
+  const addNote = useCallback(async ({ date, title = '', mood = null, text = '', color = null }) => {
     if (!userId || (!text.trim() && !title.trim())) return;
     const now = new Date().toISOString();
     await setDoc(doc(db, 'users', userId, 'notes', genId()), {
-      date: date || todayStr(), title: title.trim(), mood, text: text.trim(), createdAt: now, updatedAt: now,
+      date: date || todayStr(), title: title.trim(), mood, text: text.trim(), color, createdAt: now, updatedAt: now,
     });
   }, [userId]);
 
-  const updateNote = useCallback(async (id, { date, title = '', mood = null, text = '' }) => {
+  const updateNote = useCallback(async (id, { date, title = '', mood = null, text = '', color = null }) => {
     if (!userId || (!text.trim() && !title.trim())) return;
     await updateDoc(doc(db, 'users', userId, 'notes', id), {
-      date, title: title.trim(), mood, text: text.trim(), updatedAt: new Date().toISOString(),
+      date, title: title.trim(), mood, text: text.trim(), color, updatedAt: new Date().toISOString(),
     });
   }, [userId]);
 

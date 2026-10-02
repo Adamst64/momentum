@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
+import TintPicker from '../TintPicker';
 import { todayStr } from '../../utils/dateUtils';
 
 
@@ -8,6 +9,7 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
   const [date,   setDate]   = useState(initial?.date || todayStr());
   const mood = initial?.mood ?? null; // no longer edited; kept so older entries don't lose it
   const [title,  setTitle]  = useState(initial?.title || '');
+  const [color,  setColor]  = useState(initial?.color ?? null);
   const [text,   setText]   = useState(initial?.text || '');
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
@@ -18,7 +20,7 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
     setSaving(true);
     setError(null);
     try {
-      await onSave({ date, title, mood, text });
+      await onSave({ date, title, mood, text, color });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -62,6 +64,8 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
             color: T.text, fontSize: 15, outline: 'none', colorScheme: 'dark',
           }}
         />
+
+        <TintPicker value={color} onChange={setColor} />
 
         <textarea
           value={text}

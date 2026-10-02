@@ -28,16 +28,21 @@ export function usePersonalLists(userId) {
     await updateDoc(ref(listId), { items: updater(list.items || []) });
   }, [userId, lists, ref]);
 
-  const createList = useCallback(async (name, kind) => {
+  const createList = useCallback(async (name, kind, color = null) => {
     if (!userId || !name.trim()) return null;
     const id = genId();
-    await setDoc(ref(id), { name: name.trim(), kind, createdAt: new Date().toISOString(), items: [] });
+    await setDoc(ref(id), { name: name.trim(), kind, color, createdAt: new Date().toISOString(), items: [] });
     return id;
   }, [userId, ref]);
 
   const renameList = useCallback(async (listId, name) => {
     if (!userId || !name.trim()) return;
     await updateDoc(ref(listId), { name: name.trim() });
+  }, [userId, ref]);
+
+  const setListColor = useCallback(async (listId, color) => {
+    if (!userId) return;
+    await updateDoc(ref(listId), { color });
   }, [userId, ref]);
 
   const deleteList = useCallback(async (listId) => {
@@ -61,5 +66,5 @@ export function usePersonalLists(userId) {
   const resetList = useCallback((listId) =>
     setItems(listId, items => items.map(i => ({ ...i, done: false, doneAt: null }))), [setItems]);
 
-  return { lists, createList, renameList, deleteList, addItem, toggleItem, deleteItem, resetList };
+  return { lists, createList, renameList, setListColor, deleteList, addItem, toggleItem, deleteItem, resetList };
 }

@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
+import TintPicker, { TINTS, fallbackTint } from '../TintPicker';
+
+const listColor = l => l.color || fallbackTint(l.id);
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 const KINDS = {
   try:       { label: 'To-try',    hint: 'Movies, books, restaurants, places — check off when done' },
   checklist: { label: 'Checklist', hint: 'Reusable list, like packing — reset it for next time' },
 };
-
-const LIST_COLORS = ['#B79CF0', '#5EC4A8', '#E5A44B', '#E88AA6', '#7FA9FF', '#A9BB6C'];
 
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
@@ -19,7 +20,7 @@ const inputStyle = {
 };
 
 export default function ListsTab({ hook }) {
-  const { lists, createList, renameList, deleteList, addItem, toggleItem, deleteItem, resetList } = hook;
+  const { lists, createList, renameList, setListColor, deleteList, addItem, toggleItem, deleteItem, resetList } = hook;
   const [activeId, setActiveId] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [showManage, setShowManage] = useState(false);
@@ -58,7 +59,7 @@ export default function ListsTab({ hook }) {
           {lists.map((l, i) => {
             const all = l.items || [];
             const doneCount = all.filter(x => x.done).length;
-            const color = LIST_COLORS[i % LIST_COLORS.length];
+            const color = listColor(l);
             const pct = all.length ? doneCount / all.length : 0;
             return (
               <button
@@ -66,7 +67,7 @@ export default function ListsTab({ hook }) {
                 onClick={() => setActiveId(l.id)}
                 style={{
                   width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', minHeight: 64,
-                  borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left',
+                  borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left', background: color + '12',
                 }}
               >
                 <span style={{
@@ -118,7 +119,10 @@ export default function ListsTab({ hook }) {
           </button>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{active.name}</div>
+              <div style={{ fontSize: 17, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ width: 12, height: 12, borderRadius: 4, background: listColor(active), flexShrink: 0 }} />
+                {active.name}
+              </div>
               <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
                 {active.kind === 'checklist'
                   ? `${done.length}/${items.length} checked`
@@ -193,8 +197,9 @@ export default function ListsTab({ hook }) {
       {showCreate && (
         <CreateListModal
           onClose={() => setShowCreate(false)}
-          onCreate={async (name, kind) => {
-            const id = await createList(name, kind);
+          defaultColor={TINTS[lists.length % TINTS.length]}
+          onCreate={async (name, kind, color) => {
+            const id = await createList(name, kind, color);
             if (id) setActiveId(id);
           }}
         />
@@ -205,6 +210,7 @@ export default function ListsTab({ hook }) {
           list={active}
           onClose={() => setShowManage(false)}
           onRename={name => renameList(active.id, name)}
+          onColor={color => setListColor(active.id, color)}
           onDelete={() => deleteList(active.id)}
         />
       )}
@@ -260,15 +266,16 @@ function ItemGroup({ items, showDate, onToggle, onDelete }) {
   );
 }
 
-function CreateListModal({ onCreate, onClose }) {
+function CreateListModal({ onCreate, onClose, defaultColor }) {
   const [name, setName] = useState('');
+  const [color, setColor] = useState(defaultColor);
   const [kind, setKind] = useState('try');
   const [error, setError] = useState(null);
 
   const handleCreate = async () => {
     if (!name.trim()) return;
     try {
-      await onCreate(name, kind);
+      await onCreate(name, kind, color);
       onClose();
     } catch (e) {
       setError(e.message || 'Could not create the list.');
@@ -303,6 +310,7 @@ function CreateListModal({ onCreate, onClose }) {
             </button>
           );
         })}
+        <TintPicker value={color} onChange={setColor} allowNone={false} />
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
         <button
           onClick={handleCreate}
@@ -316,7 +324,7 @@ function CreateListModal({ onCreate, onClose }) {
   );
 }
 
-function ManageListModal({ list, onRename, onDelete, onClose }) {
+function ManageListModal({ list, onRename, onColor, onDelete, onClose }) {
   const [name, setName] = useState(list.name);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState(null);
@@ -329,6 +337,7 @@ function ManageListModal({ list, onRename, onDelete, onClose }) {
     <Modal title="Edit List" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <input value={name} onChange={e => setName(e.target.value)} style={inputStyle} />
+        <TintPicker value={listColor(list)} onChange={c => onColor(c).catch(e => setError(e.message || 'Could not change the color.'))} allowNone={false} />
         <button
           onClick={() => act(() => onRename(name))}
           disabled={!name.trim() || name.trim() === list.name}
