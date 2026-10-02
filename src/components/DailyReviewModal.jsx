@@ -4,9 +4,13 @@ import { T } from '../theme';
 import { todayStr, addDays, formatLongDate } from '../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../hooks/useRoutines';
 import { daysUntil } from '../utils/birthdayUtils';
+import RoutineItem from './routines/RoutineItem';
 
-// Evening check-in: how today went, and what tomorrow holds
-export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, onIncrement, onWriteEntry, onClose }) {
+const TASK_BLUE = '#7FA9FF';
+
+// Evening check-in: today's routines and tasks (check them off right here),
+// tomorrow's tasks and birthdays in the next week
+export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, onWriteEntry, onClose }) {
   const today    = todayStr();
   const tomorrow = addDays(today, 1);
 
@@ -17,7 +21,6 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
   const doneT      = tasksToday.filter(t => t.done);
   const leftT      = tasksToday.filter(t => !t.done);
 
-  const routinesTomorrow = routinesHook.forDate(tomorrow);
   const tasksTomorrow    = tasksHook.tasksForDate(tomorrow).filter(t => t.task.type !== 'backlog');
   const birthdaysSoon    = birthdays
     .map(b => ({ ...b, days: daysUntil(b.month, b.day) }))
@@ -51,46 +54,44 @@ export default function DailyReviewModal({ routinesHook, tasksHook, birthdays, o
           )}
         </div>
 
-        {(leftR.length > 0 || leftT.length > 0) && (
-          <Section title="Still open today">
-            {leftR.map(r => {
-              const req = getRequiredForDate(r, today);
-              const cnt = getCompletionCount(r, today);
-              return (
-                <Line
+        {routines.length > 0 && (
+          <Section title={`Routines (${doneR.length}/${routines.length})`}>
+            <Card>
+              {[...leftR, ...doneR].map((r, i) => (
+                <RoutineItem
                   key={r.id}
-                  text={r.name}
-                  detail={req > 1 ? `${cnt}/${req}` : 'routine'}
-                  action="Done"
-                  onAction={() => onIncrement(r.id)}
+                  first={i === 0}
+                  routine={r}
+                  onIncrement={id => routinesHook.incrementDay(id, today)}
+                  onDecrement={id => routinesHook.decrementDay(id, today)}
                 />
-              );
-            })}
-            {leftT.map(({ task }) => <Line key={task.id} text={task.name} detail="task" />)}
+              ))}
+            </Card>
           </Section>
         )}
 
-        {(doneR.length > 0 || doneT.length > 0) && (
-          <Section title="Done today">
-            {doneR.map(r => <Line key={r.id} text={r.name} done />)}
-            {doneT.map(({ task }) => <Line key={task.id} text={task.name} done />)}
+        {tasksToday.length > 0 && (
+          <Section title={`Today's tasks (${doneT.length}/${tasksToday.length})`}>
+            <Card>
+              {[...leftT, ...doneT].map(({ task, done }, i) => (
+                <TaskRow key={task.id} first={i === 0} name={task.name} done={done} onToggle={() => tasksHook.toggleTaskForDate(task.id, today)} />
+              ))}
+            </Card>
           </Section>
         )}
 
-        <Section title="Tomorrow">
-          {routinesTomorrow.length === 0 && tasksTomorrow.length === 0 && (
+        <Section title="Tomorrow's tasks">
+          {tasksTomorrow.length === 0 ? (
             <div style={{ fontSize: 13, color: T.muted, padding: '4px 2px' }}>Nothing scheduled.</div>
-          )}
-          {tasksTomorrow.map(({ task }) => <Line key={task.id} text={task.name} detail="task" />)}
-          {routinesTomorrow.length > 0 && (
-            <div style={{ fontSize: 13, color: T.muted, padding: '4px 2px' }}>
-              {routinesTomorrow.length} routine{routinesTomorrow.length !== 1 ? 's' : ''}: {routinesTomorrow.map(r => r.name).join(', ')}
-            </div>
+          ) : (
+            <Card>
+              {tasksTomorrow.map(({ task }, i) => <TaskRow key={task.id} first={i === 0} name={task.name} />)}
+            </Card>
           )}
         </Section>
 
         {birthdaysSoon.length > 0 && (
-          <Section title="Birthdays this week">
+          <Section title="Birthdays in the next 7 days">
             {birthdaysSoon.map(b => (
               <Line key={b.id} text={b.name} detail={b.days === 0 ? 'today' : b.days === 1 ? 'tomorrow' : `in ${b.days} days`} />
             ))}
@@ -117,24 +118,48 @@ function Section({ title, children }) {
   );
 }
 
-function Line({ text, detail, done, action, onAction }) {
+function Line({ text, detail }) {
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
       background: T.bg, borderRadius: 10, border: `1px solid ${T.cardBorder}`,
     }}>
-      <span style={{ fontSize: 14, color: done ? T.oliveLight : T.text, flex: 1 }}>
-        {done ? '✓ ' : ''}{text}
-      </span>
+      <span style={{ fontSize: 14, color: T.text, flex: 1 }}>{text}</span>
       {detail && <span style={{ fontSize: 11, color: T.muted }}>{detail}</span>}
-      {action && (
+    </div>
+  );
+}
+
+function Card({ children }) {
+  return <div style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 14 }}>{children}</div>;
+}
+
+// A task row; with onToggle its circle checks it off (like the routine rows)
+function TaskRow({ name, done, onToggle, first }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 50, padding: '4px 14px', borderTop: first ? 'none' : `1px solid ${T.cardBorder}` }}>
+      {onToggle && (
         <button
-          onClick={onAction}
-          style={{ padding: '5px 10px', borderRadius: 8, background: '#2A3A1A', color: T.khaki, fontSize: 12, fontWeight: 600 }}
+          onClick={onToggle}
+          aria-label={done ? `${name}: done (tap to undo)` : `Mark ${name} done`}
+          style={{ width: 44, height: 44, marginLeft: -10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
         >
-          {action}
+          <span style={{
+            width: 24, height: 24, borderRadius: '50%', boxSizing: 'border-box',
+            border: done ? 'none' : `2px solid ${T.subtle}`, background: done ? TASK_BLUE : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+          }}>
+            {done && (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6.2l2.8 2.8L10 3.6" stroke={T.bg} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </span>
         </button>
       )}
+      <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: done ? T.muted : T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', padding: onToggle ? 0 : '8px 0' }}>
+        {name}
+      </span>
     </div>
   );
 }

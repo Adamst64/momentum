@@ -16,10 +16,11 @@ function scheduleLabel(days) {
 // One routine as a row inside the grouped Routines card.
 // Tap the circle to check off; routines done several times a day fill one dot
 // per tap, and the undo button (or tapping a finished circle) takes one back.
-// Tap the name for its calendar, long-press for Edit / Delete.
+// Tap the name for its calendar, long-press for Edit / Delete (both optional,
+// e.g. the Daily Review shows the rows without them).
 export default function RoutineItem({ routine, onIncrement, onDecrement, onEdit, onRequestDelete, onShowCalendar, first }) {
   const [expanded, setExpanded] = useState(false);
-  const longPressRef = useLongPress(() => setExpanded(true));
+  const longPressRef = useLongPress(() => onEdit && setExpanded(true));
   const today        = todayStr();
   const required     = getRequiredForDate(routine, today);
   const count        = getCompletionCount(routine, today);
@@ -66,7 +67,7 @@ export default function RoutineItem({ routine, onIncrement, onDecrement, onEdit,
           </span>
         </button>
 
-        <button onClick={() => onShowCalendar(routine)} style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '6px 0' }}>
+        <button onClick={() => onShowCalendar?.(routine)} style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '6px 0' }}>
           <div style={{
             fontSize: 15, color: done ? T.muted : T.text,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

@@ -236,7 +236,6 @@ export default function App() {
             routinesHook={routinesHook}
             tasksHook={tasksHook}
             birthdays={birthdaysHook.birthdays}
-            onIncrement={id => routinesHook.incrementDay(id)}
             onWriteEntry={() => { setShowReview(false); setNewNote(true); }}
             onClose={() => setShowReview(false)}
           />
