@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
 import BottomNav, { TAB_DEFS } from './components/BottomNav';
+import HomeMenu from './components/HomeMenu';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
@@ -36,7 +37,7 @@ const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'revie
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
-  const [tab, setTab] = useState('routines');
+  const [tab, setTab] = useState('home'); // 'home' = the main menu
   const [showSettings, setShowSettings] = useState(false);
   const [quickAdd, setQuickAdd]         = useState(null); // null | { mode }
   const [newTask, setNewTask]           = useState(false);
@@ -154,17 +155,35 @@ export default function App() {
         borderBottom: `1px solid ${T.cardBorder}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-            <span style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>Momentum</span>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive, marginBottom: 2 }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            {tab !== 'home' && (
+              <button
+                onClick={() => setTab('home')}
+                aria-label="Main menu"
+                style={{ width: 36, height: 36, borderRadius: 10, background: T.card, border: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                  <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+                  <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+                  <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+                  <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" stroke={T.khaki} strokeWidth="1.8" />
+                </svg>
+              </button>
+            )}
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>Momentum</span>
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive, marginBottom: 2 }} />
+            </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              fontSize: 12, fontWeight: 600, color: T.khaki,
-              background: '#2A3A1A', padding: '4px 10px', borderRadius: 20,
-            }}>
-              {TAB_DEFS[tab]?.label}
-            </div>
+            {TAB_DEFS[tab] && (
+              <div style={{
+                fontSize: 12, fontWeight: 600, color: T.khaki,
+                background: '#2A3A1A', padding: '4px 10px', borderRadius: 20,
+              }}>
+                {TAB_DEFS[tab].label}
+              </div>
+            )}
             <HeaderButton label="Daily review" onClick={() => setShowReview(true)}>
               <path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" stroke={T.olive} strokeWidth="1.8" strokeLinejoin="round" />
             </HeaderButton>
@@ -186,9 +205,10 @@ export default function App() {
 
       <main style={{
         paddingTop: 20,
-        paddingBottom: `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
+        paddingBottom: tab === 'home' ? 'calc(env(safe-area-inset-bottom) + 12px)' : `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
         overflowY: 'auto',
       }}>
+        {tab === 'home'      && <HomeMenu tabs={visibleTabs} onOpen={setTab} />}
         {tab === 'routines'  && <RoutinesTab hook={routinesHook} commitmentsHook={commitmentsHook} />}
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} userId={userId} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
@@ -244,7 +264,7 @@ export default function App() {
 
       </main>
 
-      <BottomNav active={tab} onChange={setTab} tabOrder={visibleTabs} />
+      {tab !== 'home' && <BottomNav active={tab} onChange={setTab} tabOrder={visibleTabs} />}
     </div>
   );
 }
