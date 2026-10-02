@@ -4,6 +4,8 @@ import { db } from '../firebase';
 import { todayStr } from '../utils/dateUtils';
 import { genId } from '../utils/id';
 
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+
 export function useCommitments(userId) {
   const [commitments, setCommitments] = useState([]);
 
@@ -28,10 +30,20 @@ export function useCommitments(userId) {
     });
   }, [userId]);
 
+  // Changing the days applies from today on; earlier days keep the old schedule
   const updateCommitment = useCallback(async (id, name, days = null) => {
     if (!userId) return;
-    await updateDoc(doc(db, 'users', userId, 'commitments', id), { name, days: days || deleteField() });
-  }, [userId]);
+    const c = commitments.find(x => x.id === id);
+    if (!c) return;
+    const update = { name, days: days || deleteField() };
+    const asList = d => (Array.isArray(d) ? [...d].sort() : EVERY_DAY);
+    if (asList(c.days).join() !== asList(days).join()) {
+      const today = todayStr();
+      const existing = c.scheduleHistory || [{ days: asList(c.days), from: c.createdAt || today }];
+      update.scheduleHistory = [...existing.filter(h => h.from !== today), { days: asList(days), from: today }];
+    }
+    await updateDoc(doc(db, 'users', userId, 'commitments', id), update);
+  }, [userId, commitments]);
 
   const deleteCommitment = useCallback(async (id) => {
     if (!userId) return;

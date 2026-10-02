@@ -31,8 +31,19 @@ export const MILESTONES = [
 
 export const SLIP_REASONS = ['Stress', 'Social', 'Boredom', 'Tired', 'Craving', 'Celebrating', 'Bad mood'];
 
-// No `days` means every day
-export const isScheduled = (c, ds) => !Array.isArray(c.days) || c.days.includes(getDOW(ds));
+const EVERY_DAY = [0, 1, 2, 3, 4, 5, 6];
+
+// Weekdays a commitment applied to on a date. Edits add a { days, from } entry to
+// scheduleHistory so earlier weeks keep their old days. No `days` means every day.
+export function daysForDate(c, ds) {
+  const entry = [...(c.scheduleHistory || [])]
+    .sort((a, b) => b.from.localeCompare(a.from))
+    .find(h => h.from <= ds);
+  const days = entry ? entry.days : c.days;
+  return Array.isArray(days) ? days : EVERY_DAY;
+}
+
+export const isScheduled = (c, ds) => daysForDate(c, ds).includes(getDOW(ds));
 export const isFailed    = (c, ds) => !!c.failures?.[ds];
 
 // Streaks count finished days only (through yesterday); today is "in progress"
