@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
-import BottomNav, { TAB_DEFS } from './components/BottomNav';
+import { TAB_DEFS } from './components/BottomNav';
 import HomeMenu from './components/HomeMenu';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
@@ -205,7 +205,7 @@ export default function App() {
 
       <main style={{
         paddingTop: 20,
-        paddingBottom: tab === 'home' ? 'calc(env(safe-area-inset-bottom) + 12px)' : `calc(${T.navH}px + env(safe-area-inset-bottom) + 12px)`,
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)',
         overflowY: 'auto',
       }}>
         {tab === 'home'      && <HomeMenu tabs={visibleTabs} onOpen={setTab} />}
@@ -264,7 +264,6 @@ export default function App() {
 
       </main>
 
-      {tab !== 'home' && <BottomNav active={tab} onChange={setTab} tabOrder={visibleTabs} />}
     </div>
   );
 }
