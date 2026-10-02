@@ -14,9 +14,10 @@ function scheduleLabel(days) {
 }
 
 // One routine as a row inside the grouped Routines card.
-// Tap the circle (or + for multi-count routines) to check off, tap the name for its
-// calendar, long-press for Edit / Delete.
-export default function RoutineItem({ routine, onIncrement, onEdit, onRequestDelete, onShowCalendar, first }) {
+// Tap the circle to check off; routines done several times a day fill one dot
+// per tap, and the undo button (or tapping a finished circle) takes one back.
+// Tap the name for its calendar, long-press for Edit / Delete.
+export default function RoutineItem({ routine, onIncrement, onDecrement, onEdit, onRequestDelete, onShowCalendar, first }) {
   const [expanded, setExpanded] = useState(false);
   const longPressRef = useLongPress(() => setExpanded(true));
   const today        = todayStr();
@@ -25,41 +26,45 @@ export default function RoutineItem({ routine, onIncrement, onEdit, onRequestDel
   const done         = count >= required;
   const scheduledToday = routine.days.includes(getDOW(today));
   const multi        = required > 1;
-
-  const check = (
-    <button
-      onClick={() => scheduledToday && onIncrement(routine.id)}
-      aria-label={done ? `${routine.name}: done (tap to undo)` : `Mark ${routine.name} done`}
-      style={{
-        width: 44, height: 44, marginLeft: -10, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        opacity: scheduledToday ? 1 : 0.3,
-      }}
-    >
-      <span style={{
-        width: 24, height: 24, borderRadius: 12, boxSizing: 'border-box',
-        border: done ? 'none' : `2px solid ${T.subtle}`,
-        background: done ? ACCENT : 'transparent',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
-      }}>
-        {done && (
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M2 6.2l2.8 2.8L10 3.6" stroke={T.bg} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </span>
-    </button>
-  );
+  const dot          = required <= 3 ? 6 : required <= 5 ? 5 : 4;
 
   return (
     <div ref={longPressRef} style={{ borderTop: first ? 'none' : `1px solid ${T.cardBorder}`, padding: '4px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 50 }}>
-        {!multi && check}
-        {multi && (
-          <div style={{ width: 34, flexShrink: 0, marginRight: 4, fontSize: 13, fontWeight: 700, color: done ? ACCENT : T.text, textAlign: 'center' }}>
-            {count}/{required}
-          </div>
-        )}
+        <button
+          onClick={() => scheduledToday && onIncrement(routine.id)}
+          aria-label={done ? `${routine.name}: done (tap to undo one)` : multi ? `Check ${routine.name} (${count} of ${required})` : `Mark ${routine.name} done`}
+          style={{
+            width: 44, height: 44, marginLeft: -10, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            opacity: scheduledToday ? 1 : 0.3,
+          }}
+        >
+          <span style={{
+            width: multi ? 30 : 24, height: multi ? 30 : 24, borderRadius: '50%', boxSizing: 'border-box',
+            border: done ? 'none' : `2px solid ${count > 0 ? ACCENT : T.subtle}`,
+            background: done ? ACCENT : 'transparent',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s',
+          }}>
+            {done ? (
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                <path d="M2 6.2l2.8 2.8L10 3.6" stroke={T.bg} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : multi && (required <= 6 ? (
+              <span style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2, maxWidth: required <= 3 ? 'none' : required === 4 ? dot * 2 + 2 : dot * 3 + 4 }}>
+                {Array.from({ length: required }, (_, i) => (
+                  <span key={i} style={{
+                    width: dot, height: dot, borderRadius: '50%', boxSizing: 'border-box',
+                    background: i < count ? ACCENT : 'transparent',
+                    border: `1.5px solid ${i < count ? ACCENT : T.muted}`,
+                  }} />
+                ))}
+              </span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 700, color: count > 0 ? ACCENT : T.muted }}>{count}</span>
+            ))}
+          </span>
+        </button>
 
         <button onClick={() => onShowCalendar(routine)} style={{ flex: 1, minWidth: 0, textAlign: 'left', padding: '6px 0' }}>
           <div style={{
@@ -73,19 +78,20 @@ export default function RoutineItem({ routine, onIncrement, onEdit, onRequestDel
           </div>
         </button>
 
-        {multi && (
+        {multi && count > 0 && scheduledToday && (
           <button
-            onClick={() => scheduledToday && onIncrement(routine.id)}
-            aria-label={done ? `${routine.name}: done (tap to reset)` : `Add one to ${routine.name}`}
+            onClick={() => onDecrement(routine.id)}
+            aria-label={`Undo one check of ${routine.name}`}
             style={{
-              width: 38, height: 38, borderRadius: 19, flexShrink: 0,
-              background: done ? ACCENT : '#26261F', color: done ? T.bg : ACCENT,
-              fontSize: done ? 14 : 22, fontWeight: 700,
+              width: 34, height: 34, borderRadius: 17, flexShrink: 0,
+              background: '#26261F', color: T.muted,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              opacity: scheduledToday ? 1 : 0.3,
             }}
           >
-            {done ? '✓' : '+'}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M9 14L4 9l5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M4 9h10.5a5.5 5.5 0 010 11H11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </button>
         )}
       </div>

@@ -18,7 +18,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
-    incrementDay, todayStats, dayRatio, forDate,
+    incrementDay, decrementDay, todayStats, dayRatio, forDate,
   } = hook;
 
   const calendarDayRatio = (dateStr) => {
@@ -147,6 +147,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
                   first={i === 0}
                   routine={r}
                   onIncrement={id => incrementDay(id, today)}
+                  onDecrement={id => decrementDay(id, today)}
                   onEdit={setEditing}
                   onRequestDelete={handleRequestDelete}
                   onShowCalendar={r => setCalendarRoutineId(r.id)}

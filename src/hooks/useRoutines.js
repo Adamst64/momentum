@@ -170,8 +170,22 @@ export function useRoutines(userId) {
     const required    = getRequiredForDate(routine, dateStr);
     const current     = getCompletionCount(routine, dateStr);
     const completions = { ...routine.completions };
-    if (current >= required) delete completions[dateStr]; // wrap to 0
-    else completions[dateStr] = current + 1;
+    // Tapping a finished routine takes back the last check instead of wiping the day
+    const next = current >= required ? required - 1 : current + 1;
+    if (next > 0) completions[dateStr] = next;
+    else delete completions[dateStr];
+    await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
+  }, [userId, routines]);
+
+  const decrementDay = useCallback(async (id, dateStr = todayStr()) => {
+    if (!userId) return;
+    const routine = routines.find(r => r.id === id);
+    if (!routine) return;
+    const current = getCompletionCount(routine, dateStr);
+    if (current <= 0) return;
+    const completions = { ...routine.completions };
+    if (current > 1) completions[dateStr] = current - 1;
+    else delete completions[dateStr];
     await updateDoc(doc(db, 'users', userId, 'routines', id), { completions });
   }, [userId, routines]);
 
@@ -222,6 +236,6 @@ export function useRoutines(userId) {
     routines, addRoutine, updateRoutine,
     deleteRoutine, archiveRoutine, unarchiveRoutine, restoreDeletedRoutine,
     pauseRoutine, unpauseRoutine, addPausedRange,
-    incrementDay, forDate, todayRoutines, todayStats, dayRatio,
+    incrementDay, decrementDay, forDate, todayRoutines, todayStats, dayRatio,
   };
 }
