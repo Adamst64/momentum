@@ -8,6 +8,8 @@ const KINDS = {
   checklist: { label: 'Checklist', hint: 'Reusable list, like packing — reset it for next time' },
 };
 
+const LIST_COLORS = ['#B79CF0', '#5EC4A8', '#E5A44B', '#E88AA6', '#7FA9FF', '#A9BB6C'];
+
 const inputStyle = {
   width: '100%', boxSizing: 'border-box',
   padding: '11px 14px', borderRadius: 10,
@@ -23,9 +25,9 @@ export default function ListsTab({ hook }) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState(null);
 
-  // Keep a valid list selected as lists load or get deleted
+  // Back to the overview if the open list gets deleted
   useEffect(() => {
-    if (!lists.find(l => l.id === activeId)) setActiveId(lists[0]?.id ?? null);
+    if (activeId && lists.length && !lists.find(l => l.id === activeId)) setActiveId(null);
   }, [lists, activeId]);
 
   const active = lists.find(l => l.id === activeId);
@@ -48,35 +50,55 @@ export default function ListsTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* List chips */}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 2 }}>
-        {lists.map(l => {
-          const on = l.id === activeId;
-          return (
-            <button
-              key={l.id}
-              onClick={() => setActiveId(l.id)}
-              style={{
-                flexShrink: 0, padding: '8px 14px', borderRadius: 20,
-                background: on ? '#2A3A1A' : T.card,
-                border: `1px solid ${on ? T.olive : T.cardBorder}`,
-                color: on ? T.khaki : T.muted, fontSize: 14, fontWeight: on ? 600 : 400,
-              }}
-            >
-              {l.name}
-            </button>
-          );
-        })}
+      {/* Overview: every list with its progress */}
+      {!active && lists.length > 0 && (
+        <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 16, overflow: 'hidden' }}>
+          {lists.map((l, i) => {
+            const all = l.items || [];
+            const doneCount = all.filter(x => x.done).length;
+            const color = LIST_COLORS[i % LIST_COLORS.length];
+            const pct = all.length ? doneCount / all.length : 0;
+            return (
+              <button
+                key={l.id}
+                onClick={() => setActiveId(l.id)}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '12px 14px', minHeight: 64,
+                  borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left',
+                }}
+              >
+                <span style={{
+                  width: 42, height: 42, borderRadius: 12, flexShrink: 0, background: color + '26', color,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 800,
+                }}>
+                  {(l.name.trim()[0] || '?').toUpperCase()}
+                </span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 16, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.name}</span>
+                  <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>
+                    {all.length === 0 ? 'Empty' : `${doneCount} of ${all.length} ${l.kind === 'checklist' ? 'checked' : 'done'}`}
+                  </span>
+                  {all.length > 0 && (
+                    <span style={{ display: 'block', height: 4, borderRadius: 2, background: T.cardBorder, marginTop: 6, maxWidth: 140 }}>
+                      <span style={{ display: 'block', height: 4, borderRadius: 2, background: color, width: `${pct * 100}%` }} />
+                    </span>
+                  )}
+                </span>
+                <span style={{ fontSize: 20, color: T.subtle, flexShrink: 0 }}>›</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!active && (
         <button
           onClick={() => setShowCreate(true)}
-          style={{
-            flexShrink: 0, padding: '8px 14px', borderRadius: 20,
-            border: `1px dashed ${T.subtle}`, color: T.muted, fontSize: 14,
-          }}
+          style={{ padding: 14, borderRadius: 14, border: `1.5px dashed ${T.cardBorder}`, color: T.muted, fontSize: 15, textAlign: 'center' }}
         >
           + New list
         </button>
-      </div>
+      )}
 
       {lists.length === 0 && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '40px 20px', lineHeight: 1.5 }}>
@@ -86,6 +108,12 @@ export default function ListsTab({ hook }) {
 
       {active && (
         <>
+          <button
+            onClick={() => setActiveId(null)}
+            style={{ alignSelf: 'flex-start', fontSize: 14, color: T.khaki, padding: '4px 0', marginBottom: -6 }}
+          >
+            ‹ All lists
+          </button>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{active.name}</div>
