@@ -1,12 +1,8 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import { parseDate } from '../../utils/dateUtils';
-import NoteEditor, { MOODS } from './NoteEditor';
+import NoteEditor from './NoteEditor';
 
-const moodEmoji = (v) => MOODS.find(m => m.value === v)?.emoji;
-
-// Light tint per mood so the grid reads at a glance
-const MOOD_TINT = { 1: '#D0675F', 2: '#E5A44B', 3: null, 4: '#A9BB6C', 5: '#4FCB66' };
 
 function editedLabel(iso) {
   if (!iso) return null;
@@ -20,13 +16,12 @@ function editedLabel(iso) {
 }
 
 function NoteCard({ note: n, onOpen }) {
-  const tint = MOOD_TINT[n.mood];
   return (
     <button
       onClick={onOpen}
       style={{
         textAlign: 'left', padding: '12px 13px', borderRadius: 16,
-        background: tint ? tint + '14' : T.card, border: `1px solid ${tint ? tint + '40' : T.cardBorder}`,
+        background: T.card, border: `1px solid ${T.cardBorder}`,
         display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minHeight: 104,
       }}
     >
@@ -34,7 +29,6 @@ function NoteCard({ note: n, onOpen }) {
         <span style={{ fontSize: 12, color: T.khaki, fontWeight: 700 }}>
           {parseDate(n.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
         </span>
-        {n.mood && <span style={{ fontSize: 16 }}>{moodEmoji(n.mood)}</span>}
       </div>
       <div style={{
         fontSize: 16, fontWeight: 700, color: n.title ? T.text : T.muted, lineHeight: 1.3, overflowWrap: 'anywhere',
@@ -69,10 +63,6 @@ export default function NotesTab({ hook }) {
     groups[groups.length - 1].notes.push(n);
   }
 
-  // Average mood over the last 30 entries that have one
-  const moods = notes.filter(n => n.mood).slice(0, 30).map(n => n.mood);
-  const avgMood = moods.length ? Math.round(moods.reduce((a, b) => a + b, 0) / moods.length) : null;
-
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <button
@@ -97,14 +87,6 @@ export default function NotesTab({ hook }) {
               color: T.text, fontSize: 15, outline: 'none',
             }}
           />
-          {avgMood && (
-            <div title="Average mood, last 30 entries" style={{
-              padding: '8px 12px', borderRadius: 10, background: T.card,
-              border: `1px solid ${T.cardBorder}`, fontSize: 13, color: T.muted,
-            }}>
-              avg {moodEmoji(avgMood)}
-            </div>
-          )}
         </div>
       )}
 

@@ -3,17 +3,10 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
 
-export const MOODS = [
-  { value: 1, emoji: '😞', label: 'Rough' },
-  { value: 2, emoji: '😕', label: 'Meh' },
-  { value: 3, emoji: '😐', label: 'Okay' },
-  { value: 4, emoji: '🙂', label: 'Good' },
-  { value: 5, emoji: '😄', label: 'Great' },
-];
 
 export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
   const [date,   setDate]   = useState(initial?.date || todayStr());
-  const [mood,   setMood]   = useState(initial?.mood ?? null);
+  const mood = initial?.mood ?? null; // no longer edited; kept so older entries don't lose it
   const [title,  setTitle]  = useState(initial?.title || '');
   const [text,   setText]   = useState(initial?.text || '');
   const [saving, setSaving] = useState(false);
@@ -69,31 +62,6 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
             color: T.text, fontSize: 15, outline: 'none', colorScheme: 'dark',
           }}
         />
-
-        <div>
-          <div style={{ fontSize: 12, color: T.muted, marginBottom: 8 }}>How was the day?</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {MOODS.map(m => {
-              const on = mood === m.value;
-              return (
-                <button
-                  key={m.value}
-                  type="button"
-                  onClick={() => setMood(on ? null : m.value)}
-                  style={{
-                    flex: 1, padding: '8px 0', borderRadius: 10,
-                    background: on ? '#2A3A1A' : T.bg,
-                    border: `1px solid ${on ? T.oliveLight : T.cardBorder}`,
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                  }}
-                >
-                  <span style={{ fontSize: 22 }}>{m.emoji}</span>
-                  <span style={{ fontSize: 10, color: on ? T.khaki : T.muted }}>{m.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
 
         <textarea
           value={text}
