@@ -70,7 +70,7 @@ export function TxList({ txs, hide, onDelete, onUpdate }) {
 }
 
 export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
+  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
@@ -82,6 +82,22 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
   const [alertDir, setAlertDir]   = useState('above');
   const [alertPrice, setAlertPrice] = useState('');
   const [msg, setMsg]             = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting]   = useState(false);
+
+  const handleDeleteHolding = async () => {
+    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setDeleting(true);
+    setMsg(null);
+    try {
+      await deleteHolding(symbol);
+      onClose();
+    } catch (e) {
+      setMsg({ ok: false, text: e.message || 'Could not delete. Try again.' });
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
 
   const run = async (fn, ok) => {
     setMsg(null);
@@ -204,7 +220,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             >Add</button>
           </div>
           <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
-            Checked every 15 minutes, 4 AM–8 PM ET on weekdays (including pre-market and after hours){asset.source !== 'finnhub' ? ' — needs Auto (live) price' : ''}.
+            Checked every 15 minutes, 4 AM–8 PM ET on market days (including pre-market and after hours){asset.source !== 'finnhub' ? ' — needs Auto (live) price' : ''}.
           </div>
         </div>
 
@@ -214,6 +230,28 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
           <SectionTitle>Transactions</SectionTitle>
           <TxList txs={myTx} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} />
         </div>
+
+        {myTx.length > 0 && (
+          <div>
+            <button
+              onClick={handleDeleteHolding}
+              disabled={deleting}
+              style={{
+                width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600,
+                background: confirmDelete ? T.red : 'transparent', border: `1px solid ${T.red}`,
+                color: confirmDelete ? '#fff' : T.red,
+              }}
+            >
+              {deleting ? 'Deleting…' : confirmDelete ? `Tap again to delete ${symbol}` : `Delete ${symbol}`}
+            </button>
+            {confirmDelete && !deleting && (
+              <div style={{ fontSize: 12, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
+                Removes all {myTx.length} {symbol} transaction{myTx.length !== 1 ? 's' : ''}{myAlerts.length ? ' and its price alerts' : ''}, as if you never added it.
+                {' '}<button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, color: T.khaki, padding: 0 }}>Cancel</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Modal>
   );

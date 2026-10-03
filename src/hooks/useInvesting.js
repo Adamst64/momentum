@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 import { db } from '../firebase';
@@ -103,9 +103,19 @@ export function useInvesting(userId) {
 
   const deleteAlert = useCallback(id => deleteDoc(ref('invAlerts', id)), [ref]);
 
+  // Removes a holding entirely: all its transactions and alerts, and its asset
+  // doc unless it's on the watchlist. One batch, so it never half-deletes.
+  const deleteHolding = useCallback(async (symbol) => {
+    const batch = writeBatch(db);
+    txs.filter(t => t.symbol === symbol).forEach(t => batch.delete(ref('invTransactions', t.id)));
+    alerts.filter(a => a.symbol === symbol).forEach(a => batch.delete(ref('invAlerts', a.id)));
+    if (!assets[symbol]?.watch) batch.delete(ref('invAssets', symbol));
+    await batch.commit();
+  }, [txs, alerts, assets, ref]);
+
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
     addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo,
-    addAlert, toggleAlert, deleteAlert,
+    addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }
