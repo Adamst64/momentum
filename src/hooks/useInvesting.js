@@ -46,6 +46,8 @@ export function useInvesting(userId) {
 
   const deleteTx = useCallback(id => deleteDoc(ref('invTransactions', id)), [ref]);
 
+  const updateTx = useCallback((id, fields) => updateDoc(ref('invTransactions', id), fields), [ref]);
+
   const setAsset = useCallback((symbol, fields) =>
     setDoc(ref('invAssets', symbol), symbol === CASH_ID ? fields : { symbol, ...fields }, { merge: true }), [ref]);
 
@@ -103,7 +105,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
-    addTx, deleteTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo,
+    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo,
     addAlert, toggleAlert, deleteAlert,
   };
 }

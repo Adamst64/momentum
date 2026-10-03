@@ -30,6 +30,9 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const [fee, setFee]         = useState('');
   const [amount, setAmount]   = useState('');
   const [note, setNote]       = useState('');
+  // Buys: pay from free cash, or shares already owned (cash untouched). With no
+  // cash recorded yet, it's most likely an existing holding being added.
+  const [fromCash, setFromCash] = useState(portfolio.cash > 0.005);
   const [allowShort, setAllowShort] = useState(false);
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState(null);
@@ -39,7 +42,9 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const q = num(qty), p = num(price), f = num(fee) || 0, a = num(amount);
 
   let tx = null;
-  if (isTrade && sym && q > 0 && p > 0) tx = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}) };
+  if (isTrade && sym && q > 0 && p > 0) {
+    tx = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...(type === 'buy' && !fromCash ? { fromCash: false } : {}) };
+  }
   if ((type === 'deposit' || type === 'withdraw') && a > 0) tx = { type, date, amount: a, ...(note.trim() ? { note: note.trim() } : {}) };
   if (type === 'dividend' && sym && a > 0) tx = { type, date, symbol: sym, amount: a };
   if (type === 'interest' && a > 0) tx = { type, date, amount: a };
@@ -97,6 +102,16 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
             <Field label="Fee (optional)">
               <input value={fee} onChange={e => setFee(e.target.value)} inputMode="decimal" placeholder="$0.00" style={inputStyle} />
             </Field>
+            {type === 'buy' && (
+              <Field label="Paid with">
+                <Chips
+                  small
+                  options={[{ value: 'cash', label: 'Free cash' }, { value: 'owned', label: 'Already owned' }]}
+                  value={fromCash ? 'cash' : 'owned'}
+                  onChange={v => { setFromCash(v === 'cash'); setAllowShort(false); }}
+                />
+              </Field>
+            )}
             {type === 'sell' && held && (
               <button type="button" onClick={() => setQty(String(held.qty))} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.khaki }}>
                 You hold {qtyFmt(held.qty)} — sell all
@@ -124,7 +139,14 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
           </Field>
         )}
 
-        {tx && isTrade && (
+        {tx && type === 'buy' && !fromCash && (
+          <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
+            Free cash stays at {money(portfolio.cash)}. The <b style={{ color: T.text }}>{money(q * p + f)}</b> cost counts as money you brought in
+            (like a deposit), so it isn't counted as a gain.
+          </div>
+        )}
+
+        {tx && isTrade && (type === 'sell' || fromCash) && (
           <div style={{ fontSize: 13, color: T.muted }}>
             {type === 'buy' ? 'Takes' : 'Adds'} <b style={{ color: T.text }}>{money(q * p + (type === 'buy' ? f : -f))}</b> {type === 'buy' ? 'from' : 'to'} free cash
             {' '}({money(portfolio.cash)} now).
@@ -136,7 +158,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         {check?.cashShort && check.errors.length === 0 && (
           <div style={{ background: '#3A1C1C', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 13, color: T.text }}>
-              Not enough free cash for this at that date. Add the deposit that paid for it first, or record it anyway.
+              Not enough free cash for this at that date. {type === 'buy' ? 'If you owned these shares before, pick “Already owned” above. Otherwise add' : 'Add'} the deposit that paid for it first, or record it anyway.
             </div>
             <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: T.muted }}>
               <input type="checkbox" checked={allowShort} onChange={e => setAllowShort(e.target.checked)} />

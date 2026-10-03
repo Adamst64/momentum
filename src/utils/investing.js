@@ -2,11 +2,14 @@ import { toDateStr, addDays } from './dateUtils';
 
 // Transactions (users/{uid}/invTransactions):
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
-//   buy / sell:         { type, date, symbol, quantity, price, fee? }
+//   buy / sell:         { type, date, symbol, quantity, price, fee?, fromCash? }
+//                       fromCash: false on a buy = shares already owned before using the app
+//                       (or moved in from elsewhere): cash isn't touched and the cost counts
+//                       as money brought in, like a deposit of shares
 //   dividend:           { type, date, symbol, amount }       — paid into cash
 //   interest:           { type, date, amount }               — earned on cash itself (e.g. Vanguard's
 //                                                              VMFXX settlement fund, which stays at $1/share)
-// Deposits/withdrawals are external money, so they never count as return.
+// Deposits/withdrawals (and already-owned buys) are external money, so they never count as return.
 // Buys/sells/dividends/interest move money between cash and holdings and do count.
 
 export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
@@ -51,7 +54,8 @@ export function replay(txs) {
     if (t.type === 'buy') {
       const x = hold(t.symbol);
       const total = t.quantity * t.price + (t.fee || 0);
-      cash -= total;
+      if (t.fromCash === false) netDeposits += total;
+      else cash -= total;
       x.qty += t.quantity;
       x.cost += total;
       x.firstDate = x.firstDate || t.date;
@@ -169,7 +173,7 @@ export function periodReturn(txs, snapshots, currentValue, periodKey, today = to
   let flows = 0, weighted = 0;
   for (const t of sorted) {
     if (t.date <= start || t.date > today) continue;
-    const f = t.type === 'deposit' ? t.amount : t.type === 'withdraw' ? -t.amount : 0;
+    const f = externalFlow(t);
     if (!f) continue;
     flows += f;
     weighted += f * (daysBetween(t.date, today) / span);
@@ -179,14 +183,21 @@ export function periodReturn(txs, snapshots, currentValue, periodKey, today = to
   return { gain, pct: basis > 0 ? gain / basis : null, start, startValue };
 }
 
+// Money coming in from outside (+) or leaving (−); zero for everything else
+export function externalFlow(t) {
+  if (t.type === 'deposit')  return t.amount;
+  if (t.type === 'withdraw') return -t.amount;
+  if (t.type === 'buy' && t.fromCash === false) return t.quantity * t.price + (t.fee || 0);
+  return 0;
+}
+
 // Per month: money deposited (net of withdrawals), net invested in assets, dividends
 export function monthlyFlows(txs) {
   const m = {};
   for (const t of txs) {
     const k = t.date.slice(0, 7);
     const x = (m[k] = m[k] || { month: k, deposited: 0, invested: 0, dividends: 0 });
-    if (t.type === 'deposit')  x.deposited += t.amount;
-    if (t.type === 'withdraw') x.deposited -= t.amount;
+    x.deposited += externalFlow(t);
     if (t.type === 'buy')      x.invested  += t.quantity * t.price + (t.fee || 0);
     if (t.type === 'sell')     x.invested  -= t.quantity * t.price - (t.fee || 0);
     if (t.type === 'dividend' || t.type === 'interest') x.dividends += t.amount;

@@ -76,7 +76,13 @@ function summarize(txs, prices) {
   for (const t of sortTx(txs)) {
     if (t.type === 'deposit')  { cash += t.amount; netDeposits += t.amount; }
     if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
-    if (t.type === 'buy')      { cash -= t.quantity * t.price + (t.fee || 0); qty[t.symbol] = (qty[t.symbol] || 0) + t.quantity; }
+    if (t.type === 'buy') {
+      const total = t.quantity * t.price + (t.fee || 0);
+      // fromCash: false = shares already owned before using the app; cash untouched
+      if (t.fromCash === false) netDeposits += total;
+      else cash -= total;
+      qty[t.symbol] = (qty[t.symbol] || 0) + t.quantity;
+    }
     if (t.type === 'sell')     { cash += t.quantity * t.price - (t.fee || 0); qty[t.symbol] = (qty[t.symbol] || 0) - t.quantity; }
     if (t.type === 'dividend' || t.type === 'interest') { cash += t.amount; }
   }

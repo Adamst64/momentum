@@ -16,10 +16,11 @@ const timeAgo = iso => {
   return formatShortDate(iso.slice(0, 10));
 };
 
-export function TxList({ txs, hide, onDelete }) {
+export function TxList({ txs, hide, onDelete, onUpdate }) {
   const [confirm, setConfirm] = useState(null);
   if (!txs.length) return <div style={{ fontSize: 13, color: T.muted }}>No transactions yet.</div>;
   const describe = t => {
+    if (t.type === 'buy' && t.fromCash === false) return `Added ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'buy' || t.type === 'sell') return `${t.type === 'buy' ? 'Bought' : 'Sold'} ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'dividend') return `${t.symbol} dividend`;
     if (t.type === 'interest') return 'Interest on cash';
@@ -36,10 +37,24 @@ export function TxList({ txs, hide, onDelete }) {
         <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, color: T.text }}>{describe(t)}</div>
-            <div style={{ fontSize: 11, color: T.muted }}>{formatShortDate(t.date)} · {t.date.slice(0, 4)}{t.fee ? ` · fee ${money(t.fee, hide)}` : ''}</div>
+            <div style={{ fontSize: 11, color: T.muted }}>
+              {formatShortDate(t.date)} · {t.date.slice(0, 4)}{t.fee ? ` · fee ${money(t.fee, hide)}` : ''}
+              {t.type === 'buy' && (onUpdate ? (
+                <>
+                  {' · '}
+                  <button
+                    onClick={() => onUpdate(t.id, { fromCash: t.fromCash === false })}
+                    style={{ fontSize: 11, color: T.khaki, padding: 0 }}
+                    aria-label={t.fromCash === false ? 'Switch to paid from free cash' : 'Switch to already owned'}
+                  >
+                    {t.fromCash === false ? 'already owned' : 'from cash'} ⇄
+                  </button>
+                </>
+              ) : ` · ${t.fromCash === false ? 'already owned' : 'from cash'}`)}
+            </div>
           </div>
-          <span style={{ fontSize: 13, color: amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
-            {signedMoney(amount(t), hide)}
+          <span style={{ fontSize: 13, color: t.fromCash === false ? T.muted : amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
+            {t.fromCash === false ? money(-amount(t), hide) : signedMoney(amount(t), hide)}
           </span>
           <button
             onClick={() => confirm === t.id ? (onDelete(t.id), setConfirm(null)) : setConfirm(t.id)}
@@ -55,7 +70,7 @@ export function TxList({ txs, hide, onDelete }) {
 }
 
 export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, alerts, setAsset, deleteTx, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
+  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
@@ -197,7 +212,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
 
         <div>
           <SectionTitle>Transactions</SectionTitle>
-          <TxList txs={myTx} hide={hide} onDelete={id => run(() => deleteTx(id))} />
+          <TxList txs={myTx} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} />
         </div>
       </div>
     </Modal>

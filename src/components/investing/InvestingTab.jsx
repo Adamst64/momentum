@@ -22,7 +22,7 @@ const VIEWS = [
 ];
 
 export default function InvestingTab({ hook, userId }) {
-  const { txs, portfolio, assets, snapshots, cashTarget, refreshPrices, deleteTx, setAsset } = hook;
+  const { txs, portfolio, assets, snapshots, cashTarget, refreshPrices, deleteTx, updateTx, setAsset } = hook;
   const [view, setView]       = useState('portfolio');
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -149,7 +149,8 @@ export default function InvestingTab({ hook, userId }) {
 
       {txs.length === 0 && view !== 'watchlist' && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
-          Start with <b style={{ color: T.text }}>+ Cash</b> to add money (like a paycheck), then <b style={{ color: T.text }}>Buy</b> to record a purchase. Past trades are fine — just pick their real date.
+          Already own some stocks? Tap <b style={{ color: T.text }}>Buy</b> and pick <b style={{ color: T.text }}>Already owned</b> — free cash isn't touched.
+          For new money (like a paycheck) use <b style={{ color: T.text }}>+ Cash</b>, then <b style={{ color: T.text }}>Buy</b> from free cash. Past trades are fine — just pick their real date.
         </div>
       )}
 
@@ -266,7 +267,7 @@ export default function InvestingTab({ hook, userId }) {
           }>
             All transactions
           </SectionTitle>
-          <TxList txs={txs} hide={hide} onDelete={deleteTx} />
+          <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} />
           {portfolio.closed.length > 0 && (
             <div style={{ marginTop: 14, fontSize: 12, color: T.muted }}>
               Fully sold: {portfolio.closed.map(c => `${c.symbol} (${signedMoney(c.realized + c.dividends, hide)})`).join(', ')}
