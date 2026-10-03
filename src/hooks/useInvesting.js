@@ -4,7 +4,7 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
-import { toDateStr } from '../utils/dateUtils';
+import { priceDate, easternDate } from '../utils/marketCalendar';
 import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
@@ -51,12 +51,15 @@ export function useInvesting(userId) {
 
   const removeAsset = useCallback(symbol => deleteDoc(ref('invAssets', symbol)), [ref]);
 
-  // Saves today's portfolio value so the chart and period returns have data
+  // Saves today's portfolio value so the chart and period returns have data.
+  // Only once the market has opened on a market day: weekends, holidays and
+  // mornings would just repeat the last close as a flat point on the chart.
   const saveSnapshot = useCallback(async (prices = {}) => {
+    const date = priceDate();
+    if (date !== easternDate().date) return;
     const merged = { ...assets };
     for (const [sym, q] of Object.entries(prices)) merged[sym] = { ...merged[sym], ...q };
     const p = computePortfolio(txs, merged);
-    const date = toDateStr(new Date());
     await setDoc(ref('invSnapshots', date), {
       date, value: p.value, cash: p.cash, netDeposits: p.netDeposits,
       spy: merged[BENCHMARK]?.price ?? null,

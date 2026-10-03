@@ -1,4 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https');
+const { isMarketDay } = require('./marketCalendar');
 
 // Finnhub API key lives in Firestore at config/finnhub { key }. Clients can't
 // read it (no rule matches config/), only these functions via the Admin SDK.
@@ -237,16 +238,17 @@ async function stockInfo(db, request) {
 function easternNow(date = new Date()) {
   const now = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const ym = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const today = `${ym}-${String(now.getDate()).padStart(2, '0')}`;
   return {
-    today: `${ym}-${String(now.getDate()).padStart(2, '0')}`,
+    today,
     minutes: now.getHours() * 60 + now.getMinutes(),
-    weekday: now.getDay() >= 1 && now.getDay() <= 5,
+    weekday: isMarketDay(today), // false on weekends and market holidays
   };
 }
 
-// Weekday 9:30–16:00 ET (market holidays aren't tracked)
+// Market day 9:30–16:00 ET
 const isRegularSession = et => et.weekday && et.minutes >= 9 * 60 + 30 && et.minutes < 16 * 60;
-// Weekday 4:00–20:00 ET: regular session plus pre-market and after hours
+// Market day 4:00–20:00 ET: regular session plus pre-market and after hours
 const isTradingDay = et => et.weekday && et.minutes >= 4 * 60 && et.minutes <= 20 * 60;
 
 // Pre-market and after hours: refresh extended prices of auto-priced assets every 15 minutes
@@ -260,8 +262,10 @@ async function maybeRefreshExtended(userDoc, et) {
   }
 }
 
-// Daily snapshot after US market close (16:30–17:30 ET), for the value chart
+// Daily snapshot after US market close (16:30–17:30 ET), for the value chart.
+// Skipped on weekends and holidays so the chart has no flat closed-market days.
 async function maybeSnapshot(db, userDoc, key, et) {
+  if (!et.weekday) return;
   if (et.minutes < 16 * 60 + 30 || et.minutes >= 17 * 60 + 30) return;
   if (userDoc.data().investing?.lastSnapshotDate === et.today) return;
 
@@ -312,7 +316,7 @@ async function maybeSnapshot(db, userDoc, key, et) {
   });
 }
 
-// Price alerts: every 15 minutes, 4:00–20:00 ET on weekdays. The regular session
+// Price alerts: every 15 minutes, 4:00–20:00 ET on market days. The regular session
 // uses Finnhub; pre-market and after hours use the extended price.
 async function maybeCheckAlerts(db, userDoc, key, et, notify) {
   if (!isTradingDay(et)) return;

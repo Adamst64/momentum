@@ -12,7 +12,7 @@ export function ValueChart({ points, hide }) {
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
-        The chart fills in as days pass. A value is saved each weekday after market close, and whenever you tap Update.
+        The chart fills in as days pass. A value is saved after each market close, and when you tap Update while the market is open.
       </div>
     );
   }
@@ -76,7 +76,9 @@ export function ValueChart({ points, hide }) {
 export function allocationSlices(portfolio, assets, cashTarget) {
   const byFirst = [...portfolio.holdings].sort((a, b) => (a.firstDate || '').localeCompare(b.firstDate || ''));
   const colorOf = Object.fromEntries(byFirst.map((h, i) => [h.symbol, SERIES[i] || OTHER_COLOR]));
-  const total = portfolio.value > 0 ? portfolio.value : 1;
+  // Share of what's actually there: holdings plus cash on hand. Using total value
+  // breaks when cash is negative (buys recorded without a matching deposit).
+  const total = portfolio.holdings.reduce((a, h) => a + Math.max(0, h.value || 0), 0) + Math.max(0, portfolio.cash) || 1;
 
   const slices = portfolio.holdings.map(h => ({
     key: h.symbol, label: h.symbol, value: h.value || 0, color: colorOf[h.symbol],
@@ -124,7 +126,7 @@ export function AllocationDonut({ slices }) {
         {hs ? hs.label : `${slices.length}`}
       </text>
       <text x={C} y={hs ? C + 10 : C + 14} textAnchor="middle" dominantBaseline="central" fill={T.muted} fontSize="10">
-        {hs ? `${(hs.pct * 100).toFixed(1)}%` : 'assets'}
+        {hs ? `${(hs.pct * 100).toFixed(1)}%` : slices.length === 1 ? 'asset' : 'assets'}
       </text>
     </svg>
   );

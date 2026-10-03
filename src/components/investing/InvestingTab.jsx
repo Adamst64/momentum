@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
+import { isMarketDay, priceDate } from '../../utils/marketCalendar';
 import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
@@ -36,12 +37,17 @@ export default function InvestingTab({ hook, userId }) {
   const today = toDateStr(new Date());
   const ret = useMemo(() => periodReturn(txs, snapshots, portfolio.value, period, today), [txs, snapshots, portfolio.value, period, today]);
 
-  // Chart: saved daily values in the selected period, plus "now"
+  // Chart: saved daily values in the selected period, plus "now". Only market
+  // days, so weekends and holidays don't show up as flat stretches. "Now" stands
+  // in for the session current prices belong to (the last one when closed).
   const chartPoints = useMemo(() => {
     const p = PERIODS.find(x => x.key === period);
     const start = p.start ? p.start(today) : '0000';
-    const pts = snapshots.filter(s => s.date > start && s.date < today).sort((a, b) => a.date.localeCompare(b.date));
-    return txs.length ? [...pts, { date: today, value: portfolio.value, label: 'Now' }] : [];
+    const nowDate = priceDate();
+    const pts = snapshots
+      .filter(s => s.date > start && s.date < nowDate && isMarketDay(s.date))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return txs.length ? [...pts, { date: nowDate, value: portfolio.value, label: 'Now' }] : [];
   }, [snapshots, period, today, portfolio.value, txs.length]);
 
   const handleUpdate = async () => {
@@ -69,10 +75,12 @@ export default function InvestingTab({ hook, userId }) {
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const slices = allocationSlices(portfolio, assets, cashTarget);
   const sliceColor = Object.fromEntries(slices.map(x => [x.key, x.color]));
+  const slicePct = Object.fromEntries(slices.map(x => [x.key, x.pct]));
+  const allocTotal = slices.reduce((t, x) => t + x.value, 0);
   // Most underweight holding (by target %), at least 2 pts and $1 short
   const nextBuy = slices
     .filter(x => x.key !== 'cash' && x.key !== 'other' && x.target !== null && x.target !== undefined)
-    .map(x => ({ symbol: x.key, target: x.target, under: x.target - x.pct * 100, amount: (x.target / 100) * portfolio.value - x.value }))
+    .map(x => ({ symbol: x.key, target: x.target, under: x.target - x.pct * 100, amount: (x.target / 100) * allocTotal - x.value }))
     .filter(x => x.under >= 2 && x.amount >= 1)
     .sort((a, b) => b.under - a.under)[0] || null;
   const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
@@ -208,7 +216,7 @@ export default function InvestingTab({ hook, userId }) {
                   </div>
                   <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
-                    {portfolio.value > 0 && h.value ? ` · ${((h.value / portfolio.value) * 100).toFixed(0)}%` : ''}
+                    {slices.length > 1 && slicePct[h.symbol] ? ` · ${(slicePct[h.symbol] * 100).toFixed(0)}%` : ''}
                   </div>
                 </div>
                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
