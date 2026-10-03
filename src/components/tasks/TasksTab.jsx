@@ -8,7 +8,7 @@ import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
 
-const BLUE = '#7FA9FF';
+const BLUE = '#8FA89B'; // slate-sage, the Tasks colour
 
 function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -284,7 +284,7 @@ export default function TasksTab({ hook, userId }) {
         onClick={() => setShowCreate(true)}
         style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          height: 48, borderRadius: 14, background: '#2F5FB8', color: '#fff', fontSize: 15, fontWeight: 600,
+          height: 48, borderRadius: 14, background: '#4E6A5C', color: '#fff', fontSize: 15, fontWeight: 600,
         }}
       >
         <span style={{ fontSize: 22, lineHeight: 1, marginTop: -2 }}>+</span> New task
@@ -343,7 +343,7 @@ export default function TasksTab({ hook, userId }) {
               style={{ flex: 1, minWidth: 0, height: '100%', background: 'transparent', border: 'none', color: T.text, fontSize: 15, outline: 'none' }}
             />
             {quick.trim() && (
-              <button type="button" onClick={addQuick} style={{ padding: '6px 12px', borderRadius: 8, background: '#2F5FB8', color: '#fff', fontSize: 13, fontWeight: 600 }}>Add</button>
+              <button type="button" onClick={addQuick} style={{ padding: '6px 12px', borderRadius: 8, background: '#4E6A5C', color: '#fff', fontSize: 13, fontWeight: 600 }}>Add</button>
             )}
           </div>
         </div>

@@ -15,7 +15,7 @@ const SECTIONS = {
     ),
   },
   tasks: {
-    color: '#7FA9FF',
+    color: '#8FA89B',
     blurb: 'To-dos & reminders',
     icon: c => (
       <>
@@ -48,7 +48,7 @@ const SECTIONS = {
     ),
   },
   birthdays: {
-    color: '#E88AA6',
+    color: '#D9805F',
     blurb: 'Birthdays & gifts',
     icon: c => (
       <>

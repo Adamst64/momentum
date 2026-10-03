@@ -8,7 +8,7 @@ import BirthdayForm from './BirthdayForm';
 import BirthdayCalendar from './BirthdayCalendar';
 import { daysUntil, turningAge } from '../../utils/birthdayUtils';
 
-const PINK = '#E88AA6';
+const PINK = '#D9805F'; // terracotta, the Birthdays colour
 
 export default function BirthdaysTab({ hook, userId }) {
   const { birthdays, addBirthday, updateBirthday, deleteBirthday } = hook;
@@ -96,7 +96,7 @@ export default function BirthdaysTab({ hook, userId }) {
         const dateLabel = nextDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
         return (
           <div style={{
-            borderRadius: 20, padding: '18px 20px', background: '#2A1820', border: '1px solid #5A2E3E',
+            borderRadius: 20, padding: '18px 20px', background: '#2A1C16', border: '1px solid #5A3426',
             display: 'flex', flexDirection: 'column', gap: 10,
           }}>
             <div style={{ fontSize: 12, fontWeight: 700, color: PINK, textTransform: 'uppercase', letterSpacing: 0.6 }}>

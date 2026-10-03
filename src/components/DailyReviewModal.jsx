@@ -8,7 +8,7 @@ import RoutineItem from './routines/RoutineItem';
 import { SlipSheet } from './routines/CommitmentSheets';
 import { commitmentStats, streakLabel } from '../utils/commitments';
 
-const TASK_BLUE = '#7FA9FF';
+const TASK_BLUE = '#8FA89B';
 
 // Evening check-in: today's routines and tasks (check them off right here),
 // commitments, overdue tasks, tomorrow's tasks and birthdays in the next week
