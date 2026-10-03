@@ -232,10 +232,11 @@ function ItemGroup({ items, showDate, onToggle, onDelete }) {
         >
           <button
             onClick={() => onToggle(item.id)}
-            style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}
+            aria-label={item.done ? `Uncheck ${item.text}` : `Check ${item.text}`}
+            style={{ padding: 4, margin: -4, flexShrink: 0, display: 'flex' }}
           >
             <span style={{
-              width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+              width: 22, height: 22, borderRadius: 6,
               border: `1.5px solid ${item.done ? T.oliveLight : T.subtle}`,
               background: item.done ? '#2A3A1A' : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -243,13 +244,13 @@ function ItemGroup({ items, showDate, onToggle, onDelete }) {
             }}>
               {item.done ? '✓' : ''}
             </span>
-            <span style={{
-              fontSize: 15, color: item.done ? T.muted : T.text,
-              textDecoration: item.done ? 'line-through' : 'none',
-            }}>
-              {item.text}
-            </span>
           </button>
+          <span style={{
+            flex: 1, fontSize: 15, color: item.done ? T.muted : T.text,
+            textDecoration: item.done ? 'line-through' : 'none',
+          }}>
+            {item.text}
+          </span>
           {showDate && item.doneAt && (
             <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>{formatShortDate(item.doneAt)}</span>
           )}
