@@ -35,6 +35,9 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   // cash recorded yet, it's most likely an existing holding being added.
   const [fromCash, setFromCash] = useState(portfolio.cash > 0.005);
   const [allowShort, setAllowShort] = useState(false);
+  // Is the symbol a real ticker? Unchecked ones (offline) need an explicit OK.
+  const [symStatus, setSymStatus] = useState(null);
+  const [allowUnchecked, setAllowUnchecked] = useState(false);
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState(null);
 
@@ -51,7 +54,10 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   if (type === 'interest' && a > 0) tx = { type, date, amount: a };
 
   const check = tx ? validateTx(txs, tx) : null;
-  const blocked = !tx || check.errors.length > 0 || (check.cashShort && !allowShort);
+  const needsSym = isTrade || type === 'dividend';
+  const symUnchecked = symStatus === 'offline' || symStatus === 'error';
+  const symOk = !needsSym || symStatus === 'ok' || (symUnchecked && allowUnchecked);
+  const blocked = !tx || !symOk || check.errors.length > 0 || (check.cashShort && !allowShort);
   const held = portfolio.holdings.find(h => h.symbol === sym);
 
   const handleSave = async () => {
@@ -79,8 +85,36 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
 
         {(isTrade || type === 'dividend') && (
           <Field label="Symbol">
-            <SymbolInput hook={hook} value={symbol} onChange={setSymbol} placeholder="Ticker or company, e.g. VOO" />
+            <SymbolInput
+              hook={hook}
+              value={symbol}
+              onChange={v => { setSymbol(v); setAllowUnchecked(false); }}
+              onStatus={setSymStatus}
+              placeholder="Ticker or company, e.g. VOO"
+            />
           </Field>
+        )}
+
+        {needsSym && sym && symStatus === 'checking' && (
+          <div style={{ fontSize: 13, color: T.muted }}>Checking {sym}…</div>
+        )}
+        {needsSym && sym && symStatus === 'invalid' && (
+          <div style={{ fontSize: 13, color: T.red }}>
+            {sym} isn't a ticker. Type the ticker, or pick the company from the list.
+          </div>
+        )}
+        {needsSym && sym && symUnchecked && (
+          <div style={{ background: '#3A2E1C', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 13, color: T.text }}>
+              {symStatus === 'offline'
+                ? `You're offline, so ${sym} can't be checked. It'll be checked automatically when you're back online.`
+                : `Couldn't check ${sym} right now.`}
+            </div>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: T.muted }}>
+              <input type="checkbox" checked={allowUnchecked} onChange={e => setAllowUnchecked(e.target.checked)} />
+              {sym} is the right ticker, save anyway
+            </label>
+          </div>
         )}
 
         {isTrade && (

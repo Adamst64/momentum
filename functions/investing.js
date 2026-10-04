@@ -397,22 +397,28 @@ async function runInvestingJobs(db, userDoc, notify) {
 }
 
 // Ticker suggestions while typing. US-listed stocks, ETFs and ADRs only.
+// `exact` says whether what was typed is itself a real ticker, so the app can
+// refuse made-up ones (e.g. a company name typed in the symbol box).
 const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End Fund']);
 async function searchSymbols(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const q = String(request.data?.query || '').trim().slice(0, 30);
-  if (!q) return { results: [] };
+  if (!q) return { results: [], exact: false };
   const key = await getFinnhubKey(db);
   if (!key) throw new HttpsError('failed-precondition', 'Price service is not set up yet (missing Finnhub key).');
   const res = await finnhub(`search?q=${encodeURIComponent(q)}&exchange=US`, key);
   const upper = q.toUpperCase();
-  const results = (res?.result || [])
-    .filter(r => r.symbol && !r.symbol.includes('.') && (!r.type || SEARCH_TYPES.has(r.type)))
+  const all = res?.result || [];
+  let exact = all.some(r => r.symbol === upper);
+  // Search is fuzzy and can miss a real ticker; a live price settles it
+  if (!exact && /^[A-Z][A-Z.-]{0,6}$/.test(upper)) exact = !!(await quote(upper, key));
+  const results = all
+    .filter(r => r.symbol && (!r.type || SEARCH_TYPES.has(r.type)))
     .map(r => ({ symbol: r.symbol, name: r.description || '' }))
     // Exact ticker first, then tickers starting with what was typed
     .sort((a, b) => (b.symbol === upper) - (a.symbol === upper) || b.symbol.startsWith(upper) - a.symbol.startsWith(upper))
     .slice(0, 8);
-  return { results };
+  return { results, exact };
 }
 
 module.exports = { refreshPrices, stockInfo, searchSymbols, runInvestingJobs, BENCHMARK };

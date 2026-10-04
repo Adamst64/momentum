@@ -2,53 +2,77 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { inputStyle } from './ui';
 
-// Results per query, kept for the session so retyping doesn't refetch
+// Lookups per query ({ results, exact }), kept for the session so retyping
+// doesn't refetch. Failed lookups aren't cached, so they retry.
 const cache = new Map();
 
 // Ticker field with suggestions as you type: your own symbols show instantly,
 // then matches from the price service (by ticker or company name).
-export default function SymbolInput({ hook, value, onChange, onPick, onKeyDown, placeholder, autoFocus }) {
-  const { assets, searchSymbols } = hook;
+// onStatus reports whether the typed value is a real ticker:
+//   'ok' | 'checking' | 'invalid' | 'offline' | 'error' | null (empty)
+export default function SymbolInput({ hook, value, onChange, onPick, onStatus, onKeyDown, placeholder, autoFocus }) {
+  const { assets, txs, searchSymbols } = hook;
   const [focused, setFocused] = useState(false);
   const [picked, setPicked]   = useState(null);
-  const [remote, setRemote]   = useState({ q: '', results: [] });
-  const [loading, setLoading] = useState(false);
+  const [remote, setRemote]   = useState({ q: '' });
+  const [retry, setRetry]     = useState(0);
   const blurTimer = useRef(null);
 
   const q = value.trim().toUpperCase();
   const open = focused && q.length > 0 && picked !== q;
 
-  // Debounced lookup
+  // Symbols you already have are real; checking them works offline too
+  const known = useMemo(
+    () => new Set([...Object.keys(assets), ...txs.map(t => t.symbol).filter(Boolean)]),
+    [assets, txs]);
+
+  // Debounced lookup: suggestions while the list is open, and the ticker check
   useEffect(() => {
-    if (!open) return;
-    if (cache.has(q)) { setRemote({ q, results: cache.get(q) }); setLoading(false); return; }
+    if (!q) return;
+    if (cache.has(q)) { setRemote({ q, ...cache.get(q) }); return; }
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) { setRemote({ q, failed: 'offline' }); return; }
     let live = true;
-    setLoading(true);
     const t = setTimeout(async () => {
       try {
         const res = await searchSymbols(q);
         cache.set(q, res);
-        if (live) setRemote({ q, results: res });
-      } catch {
-        if (live) setRemote({ q, results: [] }); // offline or rate-limited: local matches still show
-      } finally {
-        if (live) setLoading(false);
+        if (live) setRemote({ q, ...res });
+      } catch (e) {
+        const offline = e?.code === 'functions/unavailable' || navigator.onLine === false;
+        if (live) setRemote({ q, failed: offline ? 'offline' : 'error' });
       }
     }, 250);
     return () => { live = false; clearTimeout(t); };
-  }, [q, open, searchSymbols]);
+  }, [q, searchSymbols, retry]);
+
+  // Come back online → recheck
+  useEffect(() => {
+    const onOnline = () => setRetry(n => n + 1);
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, []);
 
   useEffect(() => () => clearTimeout(blurTimer.current), []);
+
+  const current = remote.q === q ? remote : null; // never a previous query's answer
+  const loading = !!q && !current;
+
+  const status = !q ? null
+    : known.has(q) ? 'ok'
+    : !current ? 'checking'
+    : current.failed ? current.failed
+    : current.exact ? 'ok' : 'invalid';
+
+  useEffect(() => { onStatus?.(status); }, [status, onStatus]);
 
   const suggestions = useMemo(() => {
     const local = Object.entries(assets)
       .filter(([sym, a]) => sym.startsWith(q) || a.name?.toUpperCase().includes(q))
       .map(([sym, a]) => ({ symbol: sym, name: a.name || '', mine: true }));
     const seen = new Set(local.map(s => s.symbol));
-    // Only results for exactly what's typed, never a previous query's
-    const fresh = (remote.q === q ? remote.results : []).filter(r => !seen.has(r.symbol));
+    const fresh = (current?.results || []).filter(r => !seen.has(r.symbol));
     return [...local, ...fresh].slice(0, 8);
-  }, [assets, q, remote]);
+  }, [assets, q, current]);
 
   const pick = s => {
     setPicked(s.symbol);

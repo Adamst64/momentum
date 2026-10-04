@@ -95,10 +95,11 @@ export function useInvesting(userId) {
     return (await fn({ symbol })).data;
   }, []);
 
-  // Ticker suggestions: [{ symbol, name }]
+  // Ticker suggestions: { results: [{ symbol, name }], exact: is `query` itself a real ticker }
   const searchSymbols = useCallback(async (query) => {
     const fn = httpsCallable(getFunctions(getApp()), 'searchSymbols');
-    return (await fn({ query })).data.results || [];
+    const { results = [], exact = false } = (await fn({ query })).data || {};
+    return { results, exact };
   }, []);
 
   const addAlert = useCallback((symbol, direction, target) =>
