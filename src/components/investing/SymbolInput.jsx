@@ -1,10 +1,20 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { inputStyle } from './ui';
 
 // Lookups per query ({ results, exact }), kept for the session so retyping
 // doesn't refetch. Failed lookups aren't cached, so they retry.
 const cache = new Map();
+
+const LIST_MAX = 260;
+
+function scrollParent(el) {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === 'auto' || o === 'scroll') && p.scrollHeight > p.clientHeight) return p;
+  }
+  return null;
+}
 
 // Ticker field with suggestions as you type: your own symbols show instantly,
 // then matches from the price service (by ticker or company name).
@@ -17,6 +27,9 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
   const [remote, setRemote]   = useState({ q: '' });
   const [retry, setRetry]     = useState(0);
   const blurTimer = useRef(null);
+  const inputRef  = useRef(null);
+  const listRef   = useRef(null);
+  const [listMax, setListMax] = useState(LIST_MAX);
 
   const q = value.trim().toUpperCase();
   const open = focused && q.length > 0 && picked !== q;
@@ -74,6 +87,39 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
     return [...local, ...fresh].slice(0, 8);
   }, [assets, q, current]);
 
+  // Keep the whole list on screen above the keyboard: scroll the input up
+  // (never past the top of the visible area), then cap the list to what's left.
+  const fit = useCallback(() => {
+    const input = inputRef.current, list = listRef.current;
+    if (!input || !list) return;
+    const vv = window.visualViewport;
+    const vTop = vv ? vv.offsetTop : 0;
+    const vBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const parent = scrollParent(input);
+    const pr = parent ? parent.getBoundingClientRect() : { top: vTop, bottom: vBottom };
+    const top = Math.max(pr.top, vTop) + 8, bottom = Math.min(pr.bottom, vBottom) - 8;
+    const need = Math.min(list.scrollHeight, LIST_MAX);
+    const r = input.getBoundingClientRect();
+    const delta = Math.min(r.bottom + 6 + need - bottom, r.top - top);
+    if (delta > 0) {
+      if (parent) parent.scrollTop += delta;
+      else window.scrollBy(0, delta);
+    }
+    const after = input.getBoundingClientRect();
+    setListMax(Math.max(120, Math.min(LIST_MAX, bottom - after.bottom - 6)));
+  }, []);
+
+  const listShown = open && (suggestions.length > 0 || loading);
+  useLayoutEffect(() => { if (listShown) fit(); }, [listShown, suggestions.length, fit]);
+
+  // Keyboard opening/closing changes the visible area
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!listShown || !vv) return;
+    vv.addEventListener('resize', fit);
+    return () => vv.removeEventListener('resize', fit);
+  }, [listShown, fit]);
+
   const pick = s => {
     setPicked(s.symbol);
     onChange(s.symbol);
@@ -83,6 +129,7 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
   return (
     <div>
       <input
+        ref={inputRef}
         value={value}
         onChange={e => { setPicked(null); onChange(e.target.value.toUpperCase()); }}
         onFocus={() => { clearTimeout(blurTimer.current); setFocused(true); }}
@@ -97,10 +144,10 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
         spellCheck={false}
         style={inputStyle}
       />
-      {open && (suggestions.length > 0 || loading) && (
-        <div style={{
+      {listShown && (
+        <div ref={listRef} style={{
           marginTop: 6, background: T.bg, border: `1px solid ${T.cardBorder}`,
-          borderRadius: 10, overflow: 'hidden', maxHeight: 260, overflowY: 'auto',
+          borderRadius: 10, overflow: 'hidden', maxHeight: listMax, overflowY: 'auto',
         }}>
           {suggestions.map((s, i) => (
             <button

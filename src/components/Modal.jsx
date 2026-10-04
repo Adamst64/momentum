@@ -47,7 +47,8 @@ export default function Modal({ title, onClose, children }) {
           background: T.card,
           borderRadius: '20px 20px 0 0',
           padding: `20px 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`,
-          maxHeight: '85vh',
+          // Never taller than the space above the keyboard, or its top goes off-screen
+          maxHeight: 'min(85vh, calc(100% - 24px))',
           overflowY: 'auto',
         }}
       >
