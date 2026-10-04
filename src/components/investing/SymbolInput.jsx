@@ -20,11 +20,12 @@ function scrollParent(el) {
 // then matches from the price service (by ticker or company name).
 // onStatus reports whether the typed value is a real ticker:
 //   'ok' | 'checking' | 'invalid' | 'offline' | 'error' | null (empty)
-export default function SymbolInput({ hook, value, onChange, onPick, onStatus, onKeyDown, placeholder, autoFocus }) {
+export default function SymbolInput({ hook, value, onChange, onPick, onStatus, onOpenChange, onKeyDown, placeholder, autoFocus }) {
   const { assets, txs, searchSymbols } = hook;
   const [focused, setFocused] = useState(false);
   const [picked, setPicked]   = useState(null);
   const [remote, setRemote]   = useState({ q: '' });
+  const lastResults = useRef([]); // shown while the next query loads, so the list doesn't flicker
   const [retry, setRetry]     = useState(0);
   const blurTimer = useRef(null);
   const inputRef  = useRef(null);
@@ -83,7 +84,10 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
       .filter(([sym, a]) => sym.startsWith(q) || a.name?.toUpperCase().includes(q))
       .map(([sym, a]) => ({ symbol: sym, name: a.name || '', mine: true }));
     const seen = new Set(local.map(s => s.symbol));
-    const fresh = (current?.results || []).filter(r => !seen.has(r.symbol));
+    if (current?.results) lastResults.current = current.results;
+    const remoteList = current ? (current.results || [])
+      : lastResults.current.filter(r => r.symbol.startsWith(q) || r.name.toUpperCase().includes(q));
+    const fresh = remoteList.filter(r => !seen.has(r.symbol));
     return [...local, ...fresh].slice(0, 8);
   }, [assets, q, current]);
 
@@ -98,9 +102,8 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
     const parent = scrollParent(input);
     const pr = parent ? parent.getBoundingClientRect() : { top: vTop, bottom: vBottom };
     const top = Math.max(pr.top, vTop) + 8, bottom = Math.min(pr.bottom, vBottom) - 8;
-    const need = Math.min(list.scrollHeight, LIST_MAX);
     const r = input.getBoundingClientRect();
-    const delta = Math.min(r.bottom + 6 + need - bottom, r.top - top);
+    const delta = Math.min(r.bottom + 6 + LIST_MAX - bottom, r.top - top);
     if (delta > 0) {
       if (parent) parent.scrollTop += delta;
       else window.scrollBy(0, delta);
@@ -109,8 +112,11 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
     setListMax(Math.max(120, Math.min(LIST_MAX, bottom - after.bottom - 6)));
   }, []);
 
-  const listShown = open && (suggestions.length > 0 || loading);
-  useLayoutEffect(() => { if (listShown) fit(); }, [listShown, suggestions.length, fit]);
+  // The list stays open with a fixed height while typing, so new results never
+  // change the page layout; it's positioned once when it opens.
+  const listShown = open;
+  useLayoutEffect(() => { if (listShown) fit(); }, [listShown, fit]);
+  useEffect(() => { onOpenChange?.(listShown); }, [listShown, onOpenChange]);
 
   // Keyboard opening/closing changes the visible area
   useEffect(() => {
@@ -147,7 +153,7 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
       {listShown && (
         <div ref={listRef} style={{
           marginTop: 6, background: T.bg, border: `1px solid ${T.cardBorder}`,
-          borderRadius: 10, overflow: 'hidden', maxHeight: listMax, overflowY: 'auto',
+          borderRadius: 10, overflow: 'hidden', height: listMax, overflowY: 'auto',
         }}>
           {suggestions.map((s, i) => (
             <button
@@ -168,8 +174,8 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
               {s.mine && <span style={{ fontSize: 11, color: T.khaki, flexShrink: 0 }}>yours</span>}
             </button>
           ))}
-          {loading && suggestions.length === 0 && (
-            <div style={{ padding: '10px 12px', fontSize: 13, color: T.muted }}>Searching…</div>
+          {suggestions.length === 0 && (
+            <div style={{ padding: '10px 12px', fontSize: 13, color: T.muted }}>{loading ? 'Searching…' : 'No matches'}</div>
           )}
         </div>
       )}

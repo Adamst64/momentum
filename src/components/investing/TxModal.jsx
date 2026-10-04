@@ -38,6 +38,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   // Is the symbol a real ticker? Unchecked ones (offline) need an explicit OK.
   const [symStatus, setSymStatus] = useState(null);
   const [allowUnchecked, setAllowUnchecked] = useState(false);
+  const [symListOpen, setSymListOpen] = useState(false);
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState(null);
 
@@ -90,20 +91,21 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
               value={symbol}
               onChange={v => { setSymbol(v); setAllowUnchecked(false); }}
               onStatus={setSymStatus}
+              onOpenChange={setSymListOpen}
               placeholder="Ticker or company, e.g. VOO"
             />
           </Field>
         )}
 
-        {needsSym && sym && symStatus === 'checking' && (
+        {needsSym && sym && !symListOpen && symStatus === 'checking' && (
           <div style={{ fontSize: 13, color: T.muted }}>Checking {sym}…</div>
         )}
-        {needsSym && sym && symStatus === 'invalid' && (
+        {needsSym && sym && !symListOpen && symStatus === 'invalid' && (
           <div style={{ fontSize: 13, color: T.red }}>
             {sym} isn't a ticker. Type the ticker, or pick the company from the list.
           </div>
         )}
-        {needsSym && sym && symUnchecked && (
+        {needsSym && sym && !symListOpen && symUnchecked && (
           <div style={{ background: '#3A2E1C', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: 13, color: T.text }}>
               {symStatus === 'offline'
