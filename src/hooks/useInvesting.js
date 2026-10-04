@@ -95,6 +95,12 @@ export function useInvesting(userId) {
     return (await fn({ symbol })).data;
   }, []);
 
+  // Ticker suggestions: [{ symbol, name }]
+  const searchSymbols = useCallback(async (query) => {
+    const fn = httpsCallable(getFunctions(getApp()), 'searchSymbols');
+    return (await fn({ query })).data.results || [];
+  }, []);
+
   const addAlert = useCallback((symbol, direction, target) =>
     setDoc(ref('invAlerts', genId()), { symbol, direction, target, enabled: true, createdAt: new Date().toISOString() }), [ref]);
 
@@ -115,7 +121,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
-    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo,
+    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

@@ -8,6 +8,7 @@ import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
+import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 
 const HIDE_KEY = 'momentum_hide_amounts';
@@ -435,9 +436,11 @@ function Watchlist({ hook, items, hide, onOpen }) {
   return (
     <Card>
       <SectionTitle>Watchlist</SectionTitle>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-        <input value={sym} onChange={e => setSym(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Ticker, e.g. NVDA" autoCapitalize="characters" autoCorrect="off" style={inputStyle} />
-        <button onClick={add} disabled={busy} style={{ padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>{busy ? '…' : 'Add'}</button>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SymbolInput hook={hook} value={sym} onChange={setSym} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Ticker or company, e.g. NVDA" />
+        </div>
+        <button onClick={add} disabled={busy} style={{ height: 44, padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>{busy ? '…' : 'Add'}</button>
       </div>
       {msg && <div style={{ fontSize: 13, color: T.red, marginBottom: 8 }}>{msg}</div>}
       {items.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Track stocks you don't own yet. Prices refresh with “Update prices”.</div>}

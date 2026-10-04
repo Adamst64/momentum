@@ -4,6 +4,7 @@ import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
 import { validateTx, money, qtyFmt } from '../../utils/investing';
 import { Field, Chips, PrimaryButton, inputStyle } from './ui';
+import SymbolInput from './SymbolInput';
 
 const TYPES = [
   { value: 'buy',      label: 'Buy' },
@@ -78,14 +79,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
 
         {(isTrade || type === 'dividend') && (
           <Field label="Symbol">
-            <input
-              value={symbol}
-              onChange={e => setSymbol(e.target.value.toUpperCase())}
-              placeholder="e.g. VOO"
-              autoCapitalize="characters"
-              autoCorrect="off"
-              style={inputStyle}
-            />
+            <SymbolInput hook={hook} value={symbol} onChange={setSymbol} placeholder="Ticker or company, e.g. VOO" />
           </Field>
         )}
 
