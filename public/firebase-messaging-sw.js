@@ -15,31 +15,38 @@ const messaging = firebase.messaging();
 const iconBase = self.location.hostname === 'localhost' ? '' : '/momentum';
 
 messaging.onBackgroundMessage((payload) => {
-  // Firebase already shows messages that carry a notification (and opens their
-  // link when tapped); showing it here too would make a duplicate
+  // Older pushes carried a notification that Firebase shows itself; don't double it
   if (payload.notification) return;
-  const title = payload.notification?.title || 'Momentum';
-  const body  = payload.notification?.body  || '';
-  self.registration.showNotification(title, {
-    body,
+  const d = payload.data || {};
+  return self.registration.showNotification(d.title || 'Momentum', {
+    body:  d.body || '',
     icon:  iconBase + '/icon-192.png',
     badge: iconBase + '/icon-192.png',
-    data:  { url: payload.fcmOptions?.link || payload.data?.url },
+    tag:   d.tag || undefined, // the same push arriving twice replaces itself
+    data:  { url: d.url || payload.fcmOptions?.link },
   });
 });
 
-// Open the notification's link (e.g. ?action=review opens the Daily Review).
-// If the app is already open, tell it instead of reloading it.
+// Where a tapped notification should take the app. Saved in Cache Storage as well
+// as posted, so the app still finds it if iOS resumes it without the message.
+const PENDING = 'momentum-pending';
+async function savePending(url) {
+  const cache = await caches.open(PENDING);
+  await cache.put('pending-url', new Response(JSON.stringify({ url, at: Date.now() })));
+}
+
 self.addEventListener('notificationclick', (event) => {
+  // Notifications Firebase displayed itself are handled by Firebase
+  if (event.notification.data?.FCM_MSG) return;
   event.notification.close();
   const url = event.notification.data?.url || self.location.origin + iconBase + '/';
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-      if (wins.length > 0) {
-        wins[0].postMessage({ type: 'open-url', url });
-        return wins[0].focus();
-      }
-      return clients.openWindow(url);
-    })
-  );
+  event.waitUntil((async () => {
+    await savePending(url);
+    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    if (wins.length > 0) {
+      wins[0].postMessage({ type: 'open-url', url });
+      return wins[0].focus();
+    }
+    return clients.openWindow(url);
+  })());
 });

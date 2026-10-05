@@ -138,20 +138,46 @@ export default function App() {
   }, [urlAction]);
 
   // Tapping a notification while the app is already open: the service worker
-  // sends us its link (our own message, or Firebase's notification-clicked one)
+  // sends us its link (our own message, or Firebase's notification-clicked one).
+  // It also leaves the link in Cache Storage, because iOS sometimes resumes the
+  // app without delivering the message; we pick that up when the app becomes visible.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
+    const openLink = (url) => {
+      const p = new URL(url, window.location.href).searchParams;
+      if (p.get('action') === 'review') setShowReview(true);
+      if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
+    };
+    const takePending = async () => {
+      try {
+        const cache = await caches.open('momentum-pending');
+        const res = await cache.match('pending-url');
+        if (!res) return null;
+        await cache.delete('pending-url');
+        const { url, at } = await res.json();
+        return Date.now() - at < 10 * 60 * 1000 ? url : null; // ignore stale taps
+      } catch { return null; }
+    };
     const onMessage = (e) => {
       const d = e.data || {};
       const url = d.type === 'open-url' ? d.url
         : d.messageType === 'notification-clicked' ? (d.fcmOptions?.link || d.data?.url) : null;
       if (!url) return;
-      const p = new URL(url, window.location.href).searchParams;
-      if (p.get('action') === 'review') setShowReview(true);
-      if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
+      takePending(); // handled here; don't open it again on the next visibility change
+      openLink(url);
+    };
+    const onVisible = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const url = await takePending();
+      if (url) openLink(url);
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
-    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+    document.addEventListener('visibilitychange', onVisible);
+    onVisible();
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onMessage);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, []);
 
   const saveDailyReview = async (prefs) => {

@@ -120,21 +120,17 @@ const APP_URL = 'https://adamst64.github.io/momentum/';
 // link: where tapping the notification opens: ?tab=<section> or ?action=review
 // (defaults to the app's start page)
 async function sendPush(db, messaging, uid, tokens, title, body, link = APP_URL) {
+  const tag = `${title}|${new Date().toISOString().slice(0, 13)}`; // same push on two registrations shows once
   const staleTokens = [];
   await Promise.allSettled(tokens.map(async (token) => {
     try {
+      // Data-only: our service worker shows it (one per device, thanks to the tag)
+      // and handles the tap, so it opens the right screen even when the app is
+      // already running in the background
       await messaging.send({
         token,
-        notification: { title, body },
-        data: { url: link },
-        webpush: {
-          notification: {
-            icon:  APP_URL + 'icon-192.png',
-            badge: APP_URL + 'icon-192.png',
-          },
-          fcmOptions: { link },
-          headers: { TTL: '86400' },
-        },
+        data: { title, body, url: link, tag },
+        webpush: { headers: { TTL: '86400', Urgency: 'high' } },
       });
     } catch (err) {
       if (err.code === 'messaging/registration-token-not-registered') staleTokens.push(token);
