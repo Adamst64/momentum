@@ -174,7 +174,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
             <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
           </div>
 
-          {/* Crew & Lead */}
+          {/* Crew & Leader */}
           <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
             <button
               onClick={() => setShowCrewPicker('first')}
@@ -193,7 +193,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
             </button>
             <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
             <div style={{ padding: '0 16px' }}>
-              <Toggle label="Crew Lead" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
+              <Toggle label="Crew Leader" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
             </div>
           </div>
 
@@ -227,7 +227,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
                   <div style={{ height: 1, background: T.cardBorder }} />
                   <Counter label="Doors" value={form.second.doors} onChange={v => setSecond('doors', v)} />
                   <div style={{ height: 1, background: T.cardBorder }} />
-                  <Toggle label="Crew Lead" value={form.second.isCrewLead} onChange={v => setSecond('isCrewLead', v)} />
+                  <Toggle label="Crew Leader" value={form.second.isCrewLead} onChange={v => setSecond('isCrewLead', v)} />
                 </div>
               </div>
               <MembersCard ids={form.second.memberIds || []} members={members} onAdd={() => setShowMemberPicker('second')} onRemove={id => setSecond('memberIds', (form.second.memberIds || []).filter(x => x !== id))} />

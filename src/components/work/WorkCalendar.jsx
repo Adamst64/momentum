@@ -119,7 +119,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
               onClick={() => handleSelect(day)}
               style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px solid ${borderColor}`, boxShadow: selRing }}
             >
-              {/* Crew lead indicator */}
+              {/* Crew leader indicator */}
               {isLead && (
                 <div style={{ position: 'absolute', top: 3, right: 4, width: 5, height: 5, borderRadius: '50%', background: T.green }} />
               )}
@@ -144,7 +144,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', paddingTop: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: T.green }} />
-          <span style={{ fontSize: 11, color: T.muted }}>Crew lead</span>
+          <span style={{ fontSize: 11, color: T.muted }}>Crew leader</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: 2, background: 'transparent', border: `2px solid ${T.green}` }} />

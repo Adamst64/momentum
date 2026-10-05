@@ -2,11 +2,20 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { getMondayId, formatWeekRange, parsePayEntry, dayEntries } from '../../utils/workUtils';
 
-const NO_LEAD = '#E8875A'; // orange tag for days worked without being crew lead
+const NO_LEAD = '#E8875A'; // orange tag for days worked without being crew leader
 
 function fmt(n) {
   if (!n) return '—';
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function StatBox({ value, label, color, strong }) {
+  return (
+    <div style={{ background: T.bg, border: `1px solid ${strong ? T.khaki + '66' : T.cardBorder}`, borderRadius: 8, padding: '6px 2px', textAlign: 'center' }}>
+      <div style={{ fontSize: strong ? 18 : 15, fontWeight: strong ? 800 : 700, color, lineHeight: 1.1 }}>{value}</div>
+      <div style={{ fontSize: 10, color: T.muted, marginTop: 2 }}>{label}</div>
+    </div>
+  );
 }
 
 function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, isCurrentWeek }) {
@@ -25,35 +34,15 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
   const dc = stats.days.length;
   const leadDays = stats.days.filter(d => d.isCrewLead).length;
 
+  const sortedDays = [...stats.days].sort((a, b) => a.id.localeCompare(b.id));
+
   return (
     <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            {crew?.color && <div style={{ width: 8, height: 8, borderRadius: '50%', background: crew.color, flexShrink: 0 }} />}
-            <span style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{crew?.name || 'No crew'}</span>
-          </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
-            {dc} day{dc !== 1 ? 's' : ''}
-            {' · '}<span style={{ color: T.green }}>{leadDays} lead</span>
-            {' · '}<span style={{ color: NO_LEAD }}>{dc - leadDays} no lead</span>
-            {' · '}{stats.windows} win · {stats.doors} doors
-          </div>
-          {[...stats.days].sort((a, b) => a.id.localeCompare(b.id)).map(d => (
-            <div key={d.id} style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
-              <span style={{ color: T.text }}>{new Date(d.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</span>
-              {(() => {
-                const c = d.isCrewLead ? T.green : NO_LEAD;
-                return (
-                  <span style={{ fontSize: 10, fontWeight: 700, color: c, background: c + '22', border: `1px solid ${c}44`, borderRadius: 6, padding: '0 5px', marginLeft: 5 }}>
-                    {d.isCrewLead ? 'LEAD' : 'NO LEAD'}
-                  </span>
-                );
-              })()}
-              {' · '}{d.windows || 0}w · {d.doors || 0}dr
-              {d.comment ? <span> · {d.comment}</span> : null}
-            </div>
-          ))}
+      {/* Crew + paid */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          {crew?.color && <div style={{ width: 8, height: 8, borderRadius: '50%', background: crew.color, flexShrink: 0 }} />}
+          <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{crew?.name || 'No crew'}</span>
         </div>
         <button
           onClick={() => { if (!paid || editing) save(!paid); }}
@@ -66,6 +55,38 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
             opacity: paid && !editing ? 0.85 : 1,
           }}
         >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
+      </div>
+
+      {/* Totals for the week */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 4, marginBottom: 10 }}>
+        <StatBox value={dc} label={dc === 1 ? 'day' : 'days'} color={T.text} strong />
+        <StatBox value={leadDays} label="leader" color={T.green} />
+        <StatBox value={dc - leadDays} label="no leader" color={NO_LEAD} />
+        <StatBox value={stats.windows} label="windows" color={T.text} />
+        <StatBox value={stats.doors} label={stats.doors === 1 ? 'door' : 'doors'} color={T.text} />
+      </div>
+
+      {/* One row per day */}
+      <div style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, marginBottom: 10 }}>
+        {sortedDays.map((d, i) => {
+          const c = d.isCrewLead ? T.green : NO_LEAD;
+          return (
+            <div key={d.id} style={{ padding: '8px 10px', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 13, color: T.text, fontWeight: 600, width: 74, flexShrink: 0, whiteSpace: 'nowrap' }}>
+                  {new Date(d.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}
+                </span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: c, background: c + '22', border: `1px solid ${c}44`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
+                  {d.isCrewLead ? 'LEADER' : 'NO LEADER'}
+                </span>
+                <span style={{ flex: 1, textAlign: 'right', fontSize: 12, color: T.muted, whiteSpace: 'nowrap' }}>
+                  {d.windows || 0} win · {d.doors || 0} door{d.doors === 1 ? '' : 's'}
+                </span>
+              </div>
+              {d.comment && <div style={{ fontSize: 12, color: T.muted, marginTop: 3, paddingLeft: 82 }}>{d.comment}</div>}
+            </div>
+          );
+        })}
       </div>
 
       {showInput ? (
@@ -359,7 +380,9 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                       {formatWeekRange(mondayId)}
                       {mondayId === currentMondayId && <span style={{ fontSize: 11, color: T.khaki, fontWeight: 500, marginLeft: 6 }}>this week</span>}
                     </div>
-                    <div style={{ fontSize: 12, color: T.muted, marginTop: 1 }}>{totalDays}d · {totalW}w · {totalD}dr</div>
+                    <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+                      <b style={{ color: T.text, fontSize: 13 }}>{totalDays} day{totalDays !== 1 ? 's' : ''}</b> · {totalW} win · {totalD} door{totalD === 1 ? '' : 's'}
+                    </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: paidAmt > 0 ? T.khaki : T.muted }}>{fmt(paidAmt)}</div>
