@@ -43,7 +43,9 @@ export function sortTx(txs) {
 export function replay(txs) {
   let cash = 0, netDeposits = 0, minCash = 0, interest = 0;
   const h = {};
-  const hold = sym => (h[sym] = h[sym] || { symbol: sym, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null });
+  const hold = sym => (h[sym] = h[sym] || { symbol: sym, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
+  // lot: the current position since it last opened from zero (cost basis in, sells out).
+  // lastExit: that lot's summary once it's fully sold — for the "Sold" list.
   const problems = [];
 
   for (const t of sortTx(txs)) {
@@ -56,6 +58,8 @@ export function replay(txs) {
       const total = t.quantity * t.price + (t.fee || 0);
       if (t.fromCash === false) netDeposits += total;
       else cash -= total;
+      if (x.qty < 1e-9) x.lot = { start: t.date, cost: 0, sold: 0, proceeds: 0, realized: 0 };
+      x.lot.cost += total;
       x.qty += t.quantity;
       x.cost += total;
       x.firstDate = x.firstDate || t.date;
@@ -67,9 +71,28 @@ export function replay(txs) {
       const sold = Math.min(t.quantity, x.qty);
       cash += t.quantity * t.price - (t.fee || 0);
       x.realized += sold * (t.price - avg) - (t.fee || 0);
+      if (x.lot) {
+        x.lot.sold += sold;
+        x.lot.proceeds += sold * t.price - (t.fee || 0);
+        x.lot.realized += sold * (t.price - avg) - (t.fee || 0);
+      }
       x.cost -= avg * sold;
       x.qty -= sold;
-      if (x.qty < 1e-9) { x.qty = 0; x.cost = 0; }
+      if (x.qty < 1e-9) {
+        x.qty = 0; x.cost = 0;
+        if (x.lot && x.lot.sold > 0) {
+          x.lastExit = {
+            date: t.date,          // when the last shares went
+            bought: x.lot.start,
+            qty: x.lot.sold,
+            avgSell: x.lot.proceeds / x.lot.sold, // net of fees, per share
+            proceeds: x.lot.proceeds,
+            cost: x.lot.cost,
+            realized: x.lot.realized,
+          };
+        }
+        x.lot = null;
+      }
     }
     minCash = Math.min(minCash, cash);
   }
@@ -118,6 +141,27 @@ export function computePortfolio(txs, assets) {
     holdings: open,
     closed: rows.filter(r => r.qty === 0),
   };
+}
+
+// Fully sold positions with how the price moved since. "If held" is what the
+// sold shares would be worth now versus what you got for them: positive means
+// the price kept rising after you sold, negative means selling saved you that.
+export function soldPositions(closed, assets) {
+  return closed
+    .filter(c => c.lastExit)
+    .map(c => {
+      const e = c.lastExit;
+      const price = assets[c.symbol]?.price ?? null;
+      const sinceSell = price !== null && e.avgSell > 0 ? price / e.avgSell - 1 : null;
+      return {
+        symbol: c.symbol, name: c.name, ...e, price,
+        realizedPct: e.cost > 0 ? e.realized / e.cost : null,
+        sinceSell,
+        ifHeld: price !== null ? e.qty * price - e.proceeds : null,
+        dividends: c.dividends,
+      };
+    })
+    .sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // Checks a new/edited transaction against the rest before saving

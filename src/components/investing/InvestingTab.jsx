@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { toDateStr } from '../../utils/dateUtils';
+import { toDateStr, formatShortDate } from '../../utils/dateUtils';
 import { isMarketDay, priceDate } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
@@ -20,6 +20,7 @@ const VIEWS = [
   { value: 'activity',  label: 'Activity' },
   { value: 'insights',  label: 'Insights' },
   { value: 'watchlist', label: 'Watchlist' },
+  { value: 'sold',      label: 'Sold' },
 ];
 
 export default function InvestingTab({ hook, userId }) {
@@ -86,6 +87,13 @@ export default function InvestingTab({ hook, userId }) {
     .sort((a, b) => b.under - a.under)[0] || null;
   const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
 
+  // Owned stocks don't belong on the watchlist (catches ones bought before this rule)
+  const ownedWatched = portfolio.holdings.filter(h => assets[h.symbol]?.watch).map(h => h.symbol).join(',');
+  useEffect(() => {
+    if (!ownedWatched) return;
+    ownedWatched.split(',').forEach(s => setAsset(s, { watch: false }).catch(e => console.error('Unwatch failed:', e)));
+  }, [ownedWatched, setAsset]);
+
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Summary */}
@@ -148,7 +156,7 @@ export default function InvestingTab({ hook, userId }) {
 
       <Chips options={VIEWS} value={view} onChange={setView} />
 
-      {txs.length === 0 && view !== 'watchlist' && (
+      {txs.length === 0 && view !== 'watchlist' && view !== 'sold' && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
           Already own some stocks? Tap <b style={{ color: T.text }}>Buy</b> and pick <b style={{ color: T.text }}>Already owned</b> — free cash isn't touched.
           For new money (like a paycheck) use <b style={{ color: T.text }}>+ Cash</b>, then <b style={{ color: T.text }}>Buy</b> from free cash. Past trades are fine — just pick their real date.
@@ -349,6 +357,10 @@ export default function InvestingTab({ hook, userId }) {
         <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
       )}
 
+      {view === 'sold' && (
+        <SoldList items={soldPositions(portfolio.closed, assets)} hide={hide} onOpen={setOpen} />
+      )}
+
       {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
       {open && (
         <HoldingModal
@@ -410,8 +422,54 @@ function TargetModal({ label, initial, onSave, onClose }) {
   );
 }
 
+// Fully sold positions: what you made on them, and how the price moved after
+function SoldList({ items, hide, onOpen }) {
+  return (
+    <Card>
+      <SectionTitle>Sold</SectionTitle>
+      {items.length === 0 && (
+        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
+          Stocks you sell completely show up here, with your gain or loss and how the price moved after you sold.
+        </div>
+      )}
+      {items.map((s, i) => (
+        <button
+          key={s.symbol}
+          onClick={() => onOpen(s.symbol)}
+          style={{ width: '100%', display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left' }}
+        >
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{s.symbol}</div>
+            <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {qtyFmt(s.qty)} sold @ {money(s.avgSell, hide)} · {formatShortDate(s.date)}
+            </div>
+            <div style={{ fontSize: 12, color: gainColor(s.realized), marginTop: 2 }}>
+              {s.realized >= 0 ? 'Gain' : 'Loss'} {signedMoney(s.realized, hide)} ({pct(s.realizedPct)})
+              {s.dividends > 0 && <span style={{ color: T.muted }}> · +{money(s.dividends, hide)} dividends</span>}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+            <div style={{ fontSize: 14, color: T.text }}>{money(s.price, hide)}</div>
+            <div style={{ fontSize: 12, color: gainColor(s.sinceSell) }}>{pct(s.sinceSell)} since sold</div>
+            {s.ifHeld !== null && Math.abs(s.ifHeld) >= 0.01 && (
+              <div style={{ fontSize: 11, color: T.muted }}>
+                {s.ifHeld > 0 ? 'Missed' : 'Saved'} {money(Math.abs(s.ifHeld), hide)}
+              </div>
+            )}
+          </div>
+        </button>
+      ))}
+      {items.length > 0 && (
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
+          Gain/loss is what you sold for minus what you paid (fees included). “Since sold” compares today's price with your sell price; prices refresh with “Update prices”.
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function Watchlist({ hook, items, hide, onOpen }) {
-  const { setAsset, removeAsset, refreshPrices } = hook;
+  const { portfolio, setAsset, removeAsset, refreshPrices } = hook;
   const [sym, setSym] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -419,6 +477,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
   const add = async () => {
     const s = sym.trim().toUpperCase();
     if (!s || busy) return;
+    if (portfolio.holdings.some(h => h.symbol === s)) { setMsg(`You already own ${s} — it's in your portfolio.`); return; }
     setBusy(true);
     setMsg(null);
     try {

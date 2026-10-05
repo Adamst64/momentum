@@ -22,7 +22,7 @@ const num = v => {
 
 // Add any transaction. Past trades are fine: pick their real date.
 export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', onClose }) {
-  const { txs, portfolio, addTx, ensureAsset } = hook;
+  const { txs, portfolio, assets, addTx, ensureAsset, setAsset } = hook;
   const [type, setType]       = useState(initialType);
   const [date, setDate]       = useState(toDateStr(new Date()));
   const [symbol, setSymbol]   = useState(initialSymbol);
@@ -68,6 +68,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     try {
       if (type === 'buy') await ensureAsset(sym, p);
       await addTx(tx);
+      // Owned now, so it no longer belongs on the watchlist
+      if (type === 'buy' && assets[sym]?.watch) await setAsset(sym, { watch: false });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
