@@ -20,6 +20,9 @@ export default function DailyReviewModal({ routinesHook, commitmentsHook, tasksH
   const routines   = routinesHook.forDate(today);
   const doneR      = routines.filter(r => getCompletionCount(r, today) >= getRequiredForDate(r, today));
   const leftR      = routines.filter(r => !doneR.includes(r));
+  // Same as the Routines tab: a routine done 2× a day counts as two
+  const routinesTotal = routines.reduce((n, r) => n + getRequiredForDate(r, today), 0);
+  const routinesDone  = routines.reduce((n, r) => n + Math.min(getCompletionCount(r, today), getRequiredForDate(r, today)), 0);
   const tasksToday = tasksHook.tasksForDate(today).filter(t => t.task.type !== 'backlog');
   const doneT      = tasksToday.filter(t => t.done);
   const leftT      = tasksToday.filter(t => !t.done);
@@ -40,8 +43,8 @@ export default function DailyReviewModal({ routinesHook, commitmentsHook, tasksH
     .filter(b => b.days <= 7)
     .sort((a, b) => a.days - b.days);
 
-  const total = routines.length + tasksToday.length;
-  const done  = doneR.length + doneT.length;
+  const total = routinesTotal + tasksToday.length;
+  const done  = routinesDone + doneT.length;
   const pct   = total ? Math.round(done / total * 100) : null;
 
   const headline =
@@ -62,12 +65,12 @@ export default function DailyReviewModal({ routinesHook, commitmentsHook, tasksH
           </div>
           {total > 0 && (
             <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-              {doneR.length}/{routines.length} routines · {doneT.length}/{tasksToday.length} tasks
+              {routinesDone}/{routinesTotal} routines · {doneT.length}/{tasksToday.length} tasks
             </div>
           )}
         </div>
 
-        <Section title={routines.length ? `Routines (${doneR.length}/${routines.length})` : 'Routines'}>
+        <Section title={routines.length ? `Routines (${routinesDone}/${routinesTotal})` : 'Routines'}>
           {routines.length === 0 ? <Empty>No routines today.</Empty> : (
             <Card>
               {[...leftR, ...doneR].map((r, i) => (
