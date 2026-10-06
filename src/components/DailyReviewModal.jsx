@@ -47,21 +47,15 @@ export default function DailyReviewModal({ routinesHook, commitmentsHook, tasksH
   const done  = routinesDone + doneT.length;
   const pct   = total ? Math.round(done / total * 100) : null;
 
-  const headline =
-    pct === null ? 'Nothing was scheduled today.'
-    : pct === 100 ? 'Everything done. Nice work.'
-    : pct >= 70   ? 'Solid day.'
-    : pct > 0     ? 'Some progress today.'
-    :               'A quiet day. Tomorrow is a fresh start.';
-
   return (
     <Modal title="Daily Review" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
         <div style={{ background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '14px 16px' }}>
           <div style={{ fontSize: 12, color: T.muted }}>{formatLongDate(today)}</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 6 }}>
-            {pct !== null && <span style={{ fontSize: 32, fontWeight: 800, color: T.oliveLight }}>{pct}%</span>}
-            <span style={{ fontSize: 14, color: T.text }}>{headline}</span>
+            {pct !== null
+              ? <span style={{ fontSize: 32, fontWeight: 800, color: T.oliveLight }}>{pct}%</span>
+              : <span style={{ fontSize: 14, color: T.text }}>Nothing was scheduled today.</span>}
           </div>
           {total > 0 && (
             <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
