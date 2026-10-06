@@ -138,9 +138,11 @@ export default function App() {
   }, [urlAction]);
 
   // Tapping a notification while the app is already open: the service worker
-  // sends us its link (our own message, or Firebase's notification-clicked one).
-  // It also leaves the link in Cache Storage, because iOS sometimes resumes the
-  // app without delivering the message; we pick that up when the app becomes visible.
+  // sends us its link (BroadcastChannel, its own message, or Firebase's
+  // notification-clicked one). It also leaves the link in Cache Storage, because
+  // iOS can bring the app forward before the worker has even started, and may not
+  // deliver the message at all; so after becoming visible we keep checking for a
+  // few seconds.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
     const openLink = (url) => {
@@ -158,25 +160,37 @@ export default function App() {
         return Date.now() - at < 10 * 60 * 1000 ? url : null; // ignore stale taps
       } catch { return null; }
     };
-    const onMessage = (e) => {
-      const d = e.data || {};
+    const fromWorker = (d = {}) => {
       const url = d.type === 'open-url' ? d.url
         : d.messageType === 'notification-clicked' ? (d.fcmOptions?.link || d.data?.url) : null;
       if (!url) return;
-      takePending(); // handled here; don't open it again on the next visibility change
+      takePending(); // handled here; don't open it again on the next check
       openLink(url);
     };
-    const onVisible = async () => {
+    const onMessage = (e) => fromWorker(e.data);
+    let channel = null;
+    try { channel = new BroadcastChannel('momentum-pending'); channel.onmessage = onMessage; } catch { /* unsupported */ }
+
+    let timers = [];
+    const onVisible = () => {
+      timers.forEach(clearTimeout);
+      timers = [];
       if (document.visibilityState !== 'visible') return;
-      const url = await takePending();
-      if (url) openLink(url);
+      [0, 300, 800, 1500, 2500, 4000, 6000].forEach(ms => timers.push(setTimeout(async () => {
+        const url = await takePending();
+        if (url) openLink(url);
+      }, ms)));
     };
     navigator.serviceWorker.addEventListener('message', onMessage);
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onVisible);
     onVisible();
     return () => {
+      timers.forEach(clearTimeout);
+      channel?.close();
       navigator.serviceWorker.removeEventListener('message', onMessage);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onVisible);
     };
   }, []);
 

@@ -41,11 +41,14 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || self.location.origin + iconBase + '/';
   event.waitUntil((async () => {
-    await savePending(url);
+    await savePending(url).catch(() => {});
+    // This worker doesn't control the app's page, and iOS doesn't always deliver
+    // client.postMessage to a page it doesn't control; a BroadcastChannel reaches it
+    try { new BroadcastChannel(PENDING).postMessage({ type: 'open-url', url }); } catch { /* unsupported */ }
     const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     if (wins.length > 0) {
-      wins[0].postMessage({ type: 'open-url', url });
-      return wins[0].focus();
+      wins.forEach(w => w.postMessage({ type: 'open-url', url }));
+      return wins[0].focus().catch(() => {});
     }
     return clients.openWindow(url);
   })());
