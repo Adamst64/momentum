@@ -7,6 +7,21 @@ import TagPickerSheet from './TagPickerSheet';
 import ShareSheet from './ShareSheet';
 import InventoryTab from './InventoryTab';
 
+// Inventory items where every typed word is the start of some word in the
+// item's name ("bacon" → "Crumbled bacon"). Full-name prefix matches first.
+function matchInventory(inventory, input) {
+  const q = input.trim().toLowerCase();
+  if (!q) return [];
+  const qWords = q.split(/\s+/);
+  const matches = inventory.filter(i => {
+    const words = i.name.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+    return qWords.every(qw => words.some(w => w.startsWith(qw)));
+  });
+  const starts = matches.filter(i => i.name.toLowerCase().startsWith(q));
+  const rest   = matches.filter(i => !i.name.toLowerCase().startsWith(q));
+  return [...starts, ...rest].slice(0, 8);
+}
+
 export default function ShoppingTab({ hook, userId }) {
   const {
     lists, activeList, activeListId, setActiveListId,
@@ -32,6 +47,18 @@ export default function ShoppingTab({ hook, userId }) {
   const [menuConfirmDelete, setMenuConfirmDelete] = useState(false);
   const longPressTimer = useRef(null);
   const inputRef = useRef(null);
+  const addRowRef = useRef(null);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Hide inventory suggestions when tapping anywhere outside the add row
+  useEffect(() => {
+    if (!showSuggestions) return;
+    const onDown = (e) => {
+      if (addRowRef.current && !addRowRef.current.contains(e.target)) setShowSuggestions(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [showSuggestions]);
 
   const closeNewList = () => { setShowNewList(false); setNewListName(''); setNewListInventory(false); };
   const closeMenu = () => { setMenuList(null); setMenuRenaming(false); setMenuNewName(''); setMenuConfirmDelete(false); };
@@ -75,10 +102,7 @@ export default function ShoppingTab({ hook, userId }) {
   const unchecked     = filteredItems.filter(i => !i.checked);
   const checked       = filteredItems.filter(i => i.checked);
   const pendingTags   = pendingTagIds.map(id => tags.find(t => t.id === id)).filter(Boolean);
-  const query         = input.trim().toLowerCase();
-  const suggestions   = query
-    ? inventory.filter(i => i.name.toLowerCase().startsWith(query)).slice(0, 8)
-    : [];
+  const suggestions   = showSuggestions ? matchInventory(inventory, input) : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -183,7 +207,7 @@ export default function ShoppingTab({ hook, userId }) {
         )}
 
         {/* Add item row */}
-        <div>
+        <div ref={addRowRef}>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => setTagPickerItem('new')} style={{
               padding: '12px 10px', borderRadius: 12, flexShrink: 0,
@@ -203,8 +227,13 @@ export default function ShoppingTab({ hook, userId }) {
             <input
               ref={inputRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+              onChange={e => { setInput(e.target.value); setShowSuggestions(true); }}
+              onFocus={() => setShowSuggestions(true)}
+              onClick={() => setShowSuggestions(true)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAdd();
+                else if (e.key === 'Escape') setShowSuggestions(false);
+              }}
               placeholder="Add item…"
               style={{
                 flex: 1, padding: '12px 14px', borderRadius: 12,
@@ -231,16 +260,22 @@ export default function ShoppingTab({ hook, userId }) {
                     onMouseDown={e => e.preventDefault()}
                     onClick={() => handlePickSuggestion(inv)}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      width: '100%', display: 'flex', flexDirection: 'column', gap: 5,
                       padding: '11px 14px', background: 'none', textAlign: 'left',
                       borderTop: idx > 0 ? `1px solid ${T.cardBorder}` : 'none',
                       color: T.text, fontSize: 15,
                     }}>
-                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {inv.name}
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}>
+                      <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {inv.name}
+                      </span>
+                      {onList && <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>On list</span>}
                     </span>
-                    {invTags.slice(0, 2).map(t => <TagBadge key={t.id} tag={t} />)}
-                    {onList && <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>On list</span>}
+                    {invTags.length > 0 && (
+                      <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {invTags.map(t => <TagBadge key={t.id} tag={t} />)}
+                      </span>
+                    )}
                   </button>
                 );
               })}
