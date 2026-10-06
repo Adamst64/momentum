@@ -55,6 +55,13 @@ export default function ShoppingTab({ hook, userId }) {
     inputRef.current?.focus();
   };
 
+  const handlePickSuggestion = (invItem) => {
+    addItem(invItem.name, [...new Set([...pendingTagIds, ...(invItem.tagIds || [])])]);
+    setInput('');
+    setPendingTagIds([]);
+    inputRef.current?.focus();
+  };
+
   const handleTagPickerConfirm = async (selectedIds) => {
     if (tagPickerItem === 'new') {
       setPendingTagIds(selectedIds);
@@ -68,6 +75,10 @@ export default function ShoppingTab({ hook, userId }) {
   const unchecked     = filteredItems.filter(i => !i.checked);
   const checked       = filteredItems.filter(i => i.checked);
   const pendingTags   = pendingTagIds.map(id => tags.find(t => t.id === id)).filter(Boolean);
+  const query         = input.trim().toLowerCase();
+  const suggestions   = query
+    ? inventory.filter(i => i.name.toLowerCase().startsWith(query)).slice(0, 8)
+    : [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -207,6 +218,34 @@ export default function ShoppingTab({ hook, userId }) {
               color: T.text, fontSize: 15, fontWeight: 600, transition: 'background 0.15s',
             }}>Add</button>
           </div>
+          {suggestions.length > 0 && (
+            <div style={{
+              marginTop: 6, background: T.card, border: `1px solid ${T.cardBorder}`,
+              borderRadius: 12, overflow: 'hidden',
+            }}>
+              {suggestions.map((inv, idx) => {
+                const onList = items.some(i => !i.checked && i.name.toLowerCase() === inv.name.toLowerCase());
+                const invTags = (inv.tagIds || []).map(id => tags.find(t => t.id === id)).filter(Boolean);
+                return (
+                  <button key={inv.id}
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => handlePickSuggestion(inv)}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                      padding: '11px 14px', background: 'none', textAlign: 'left',
+                      borderTop: idx > 0 ? `1px solid ${T.cardBorder}` : 'none',
+                      color: T.text, fontSize: 15,
+                    }}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {inv.name}
+                    </span>
+                    {invTags.slice(0, 2).map(t => <TagBadge key={t.id} tag={t} />)}
+                    {onList && <span style={{ fontSize: 11, color: T.muted, flexShrink: 0 }}>On list</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {pendingTags.length > 0 && (
             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 6, paddingLeft: 2 }}>
               {pendingTags.map(t => <TagBadge key={t.id} tag={t} />)}
