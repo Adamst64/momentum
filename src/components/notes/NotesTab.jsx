@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { parseDate } from '../../utils/dateUtils';
 import NoteEditor from './NoteEditor';
+import NoteViewer from './NoteViewer';
 
 
 function editedLabel(iso) {
@@ -50,6 +51,8 @@ function monthLabel(dateStr) {
 export default function NotesTab({ hook }) {
   const { notes, addNote, updateNote, deleteNote } = hook;
   const [editing, setEditing] = useState(null); // null | 'new' | note
+  const [viewingId, setViewingId] = useState(null);
+  const viewing = viewingId ? notes.find(n => n.id === viewingId) : null; // live copy, so edits show right away
   const [query, setQuery]     = useState('');
 
   const q = query.trim().toLowerCase();
@@ -109,17 +112,21 @@ export default function NotesTab({ hook }) {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
             {g.notes.map(n => (
-              <NoteCard key={n.id} note={n} onOpen={() => setEditing(n)} />
+              <NoteCard key={n.id} note={n} onOpen={() => setViewingId(n.id)} />
             ))}
           </div>
         </div>
       ))}
 
+      {viewing && (
+        <NoteViewer note={viewing} onEdit={() => setEditing(viewing)} onClose={() => setViewingId(null)} />
+      )}
+
       {editing && (
         <NoteEditor
           initial={editing === 'new' ? null : editing}
           onSave={data => editing === 'new' ? addNote(data) : updateNote(editing.id, data)}
-          onDelete={editing === 'new' ? null : () => deleteNote(editing.id)}
+          onDelete={editing === 'new' ? null : async () => { await deleteNote(editing.id); setViewingId(null); }}
           onClose={() => setEditing(null)}
         />
       )}
