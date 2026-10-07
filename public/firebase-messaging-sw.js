@@ -14,26 +14,32 @@ const messaging = firebase.messaging();
 
 const iconBase = self.location.hostname === 'localhost' ? '' : '/momentum';
 
+// Where a notification should take the app, kept in Cache Storage for the app to
+// read. Saved when the push arrives, not just when it's tapped: when the app is
+// closed, iOS opens it from a tap without reliably running our click handler first.
+const PENDING = 'momentum-pending';
+async function savePending(entry) {
+  const cache = await caches.open(PENDING);
+  await cache.put('pending-url', new Response(JSON.stringify({ ...entry, at: Date.now() })));
+}
+
 messaging.onBackgroundMessage((payload) => {
   // Older pushes carried a notification that Firebase shows itself; don't double it
   if (payload.notification) return;
   const d = payload.data || {};
-  return self.registration.showNotification(d.title || 'Momentum', {
-    body:  d.body || '',
-    icon:  iconBase + '/icon-192.png',
-    badge: iconBase + '/icon-192.png',
-    tag:   d.tag || undefined, // the same push arriving twice replaces itself
-    data:  { url: d.url || payload.fcmOptions?.link },
-  });
+  const url = d.url || payload.fcmOptions?.link;
+  return Promise.all([
+    self.registration.showNotification(d.title || 'Momentum', {
+      body:  d.body || '',
+      icon:  iconBase + '/icon-192.png',
+      badge: iconBase + '/icon-192.png',
+      tag:   d.tag || undefined, // the same push arriving twice replaces itself
+      data:  { url },
+    }),
+    // The app opens this once the notification is gone from Notification Center (tapped)
+    url && d.tag ? savePending({ url, tag: d.tag, fromPush: true }).catch(() => {}) : null,
+  ]);
 });
-
-// Where a tapped notification should take the app. Saved in Cache Storage as well
-// as posted, so the app still finds it if iOS resumes it without the message.
-const PENDING = 'momentum-pending';
-async function savePending(url) {
-  const cache = await caches.open(PENDING);
-  await cache.put('pending-url', new Response(JSON.stringify({ url, at: Date.now() })));
-}
 
 self.addEventListener('notificationclick', (event) => {
   // Notifications Firebase displayed itself are handled by Firebase
@@ -41,7 +47,7 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = event.notification.data?.url || self.location.origin + iconBase + '/';
   event.waitUntil((async () => {
-    await savePending(url).catch(() => {});
+    await savePending({ url }).catch(() => {});
     // This worker doesn't control the app's page, and iOS doesn't always deliver
     // client.postMessage to a page it doesn't control; a BroadcastChannel reaches it
     try { new BroadcastChannel(PENDING).postMessage({ type: 'open-url', url }); } catch { /* unsupported */ }

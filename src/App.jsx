@@ -150,14 +150,27 @@ export default function App() {
       if (p.get('action') === 'review') setShowReview(true);
       if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
     };
+    // A push's notification still in Notification Center hasn't been tapped yet
+    const stillShowing = async (tag) => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration(`${import.meta.env.BASE_URL}firebase-cloud-messaging-push-scope`);
+        const shown = reg ? await reg.getNotifications() : [];
+        return shown.some(n => n.tag === tag);
+      } catch { return false; }
+    };
+    // The worker saves a push's link when it arrives (an app opened from a tap on
+    // iOS may never hear about the tap) and again when tapped
     const takePending = async () => {
       try {
         const cache = await caches.open('momentum-pending');
         const res = await cache.match('pending-url');
         if (!res) return null;
+        const { url, at, tag, fromPush } = await res.json();
+        const maxAge = fromPush ? 3 * 60 * 60 * 1000 : 10 * 60 * 1000;
+        if (Date.now() - at > maxAge) { await cache.delete('pending-url'); return null; }
+        if (fromPush && await stillShowing(tag)) return null; // app opened some other way
         await cache.delete('pending-url');
-        const { url, at } = await res.json();
-        return Date.now() - at < 10 * 60 * 1000 ? url : null; // ignore stale taps
+        return url;
       } catch { return null; }
     };
     const fromWorker = (d = {}) => {
