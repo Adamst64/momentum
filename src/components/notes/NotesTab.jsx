@@ -2,19 +2,8 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { parseDate } from '../../utils/dateUtils';
 import NoteEditor from './NoteEditor';
-import NoteViewer from './NoteViewer';
+import NoteViewer, { editedLabel } from './NoteViewer';
 
-
-function editedLabel(iso) {
-  if (!iso) return null;
-  const d = new Date(iso);
-  const now = new Date();
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  if (d.toDateString() === now.toDateString()) return `Edited today, ${time}`;
-  const y = new Date(now); y.setDate(now.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return `Edited yesterday, ${time}`;
-  return `Edited ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) })}, ${time}`;
-}
 
 function NoteCard({ note: n, onOpen }) {
   return (
@@ -49,7 +38,7 @@ function monthLabel(dateStr) {
 }
 
 export default function NotesTab({ hook }) {
-  const { notes, addNote, updateNote, deleteNote } = hook;
+  const { notes, addNote, updateNote, updateNoteText, deleteNote } = hook;
   const [editing, setEditing] = useState(null); // null | 'new' | note
   const [viewingId, setViewingId] = useState(null);
   const viewing = viewingId ? notes.find(n => n.id === viewingId) : null; // live copy, so edits show right away
@@ -119,7 +108,13 @@ export default function NotesTab({ hook }) {
       ))}
 
       {viewing && (
-        <NoteViewer note={viewing} onEdit={() => setEditing(viewing)} onClose={() => setViewingId(null)} />
+        <NoteViewer
+          key={viewing.id}
+          note={viewing}
+          onSaveText={text => updateNoteText(viewing.id, text)}
+          onEdit={text => setEditing({ ...viewing, text })}
+          onClose={() => setViewingId(null)}
+        />
       )}
 
       {editing && (

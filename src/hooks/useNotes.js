@@ -30,6 +30,12 @@ export function useNotes(userId) {
     });
   }, [userId]);
 
+  // Text-only save, used by the full-screen note view as you type
+  const updateNoteText = useCallback(async (id, text) => {
+    if (!userId) return;
+    await updateDoc(doc(db, 'users', userId, 'notes', id), { text: text.trim(), updatedAt: new Date().toISOString() });
+  }, [userId]);
+
   const deleteNote = useCallback(async (id) => {
     if (!userId) return;
     await deleteDoc(doc(db, 'users', userId, 'notes', id));
@@ -39,5 +45,5 @@ export function useNotes(userId) {
   const sorted = [...notes].sort((a, b) =>
     b.date.localeCompare(a.date) || (b.createdAt || '').localeCompare(a.createdAt || ''));
 
-  return { notes: sorted, addNote, updateNote, deleteNote };
+  return { notes: sorted, addNote, updateNote, updateNoteText, deleteNote };
 }

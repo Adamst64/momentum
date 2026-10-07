@@ -67,7 +67,8 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
 
         <TintPicker value={color} onChange={setColor} />
 
-        <textarea
+        {/* Existing notes' text is edited on their full-screen view */}
+        {!initial && <textarea
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder="What's on your mind?"
@@ -78,7 +79,7 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
             background: T.bg, border: `1px solid ${T.cardBorder}`,
             color: T.text, fontSize: 16, lineHeight: 1.45, outline: 'none', fontFamily: 'inherit',
           }}
-        />
+        />}
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
 
