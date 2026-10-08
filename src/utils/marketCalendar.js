@@ -2,7 +2,7 @@
 // Holidays follow NYSE rules: a Saturday holiday closes the Friday before, a
 // Sunday holiday closes the Monday after — except New Year's Day on a Saturday,
 // which isn't made up. Early-close days (e.g. day after Thanksgiving) count as open.
-// Keep in sync with functions/marketCalendar.js.
+// Keep the shared part (down to priceDate) in sync with functions/marketCalendar.js.
 
 // One-off closures outside the regular schedule (national days of mourning)
 const SPECIAL_CLOSURES = ['2018-12-05', '2025-01-09'];
@@ -90,4 +90,63 @@ export function priceDate(now = new Date()) {
   const [y, m, d] = date.split('-').map(Number);
   const t = new Date(Date.UTC(y, m - 1, d - 1));
   return lastMarketDay(iso(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()));
+}
+
+// ── Live market status (client only) ─────────────────────────────────────────
+
+// 1 PM ET closes: July 3, Black Friday and Christmas Eve when they're market days
+export function earlyClose(dateStr) {
+  if (!isMarketDay(dateStr)) return false;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (m === 7 && d === 3) return true;
+  if (m === 12 && d === 24) return true;
+  const thanksgiving = Number(nthWeekday(y, 11, 4, 4).slice(8));
+  return m === 11 && d === thanksgiving + 1;
+}
+
+function nextMarketDay(dateStr) {
+  let [y, m, d] = dateStr.split('-').map(Number);
+  for (;;) {
+    const t = new Date(Date.UTC(y, m - 1, d + 1));
+    [y, m, d] = [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()];
+    const s = iso(y, m, d);
+    if (isMarketDay(s)) return s;
+  }
+}
+
+const dur = mins => (mins >= 60 ? `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m` : `${mins}m`);
+const hhmm = mins => {
+  const h = Math.floor(mins / 60), m = mins % 60;
+  return `${((h + 11) % 12) + 1}${m ? ':' + String(m).padStart(2, '0') : ''} ${h < 12 ? 'AM' : 'PM'}`;
+};
+const OPEN = 9 * 60 + 30, PRE = 4 * 60, POST = 20 * 60;
+
+// { session: 'pre'|'open'|'after'|'closed', label } for a small status pill.
+// Times are New York time, shown as such.
+export function marketStatus(now = new Date()) {
+  const { date, minutes } = easternDate(now);
+  const close = earlyClose(date) ? 13 * 60 : 16 * 60;
+  if (isMarketDay(date)) {
+    if (minutes >= OPEN && minutes < close) return { session: 'open', label: `Market open · closes in ${dur(close - minutes)}` };
+    if (minutes >= PRE && minutes < OPEN) return { session: 'pre', label: `Pre-market · opens in ${dur(OPEN - minutes)}` };
+    if (minutes >= close && minutes < POST) return { session: 'after', label: `After hours · closed at ${hhmm(close)} ET` };
+    if (minutes < PRE) return { session: 'closed', label: `Closed · opens ${hhmm(OPEN)} ET` };
+  }
+  const next = nextMarketDay(date);
+  const [y, m, d] = next.split('-').map(Number);
+  const tomorrow = nextDay(date) === next;
+  const day = tomorrow ? 'tomorrow' : new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
+  const holiday = isWeekday(date) && !isMarketDay(date) ? 'Holiday' : 'Closed';
+  return { session: 'closed', label: `${holiday} · opens ${day} ${hhmm(OPEN)} ET` };
+}
+
+function nextDay(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d + 1));
+  return iso(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate());
+}
+function isWeekday(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const w = dow(y, m, d);
+  return w !== 0 && w !== 6;
 }

@@ -6,13 +6,16 @@ import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
 
 // ── Portfolio value over time (single series, touch/hover crosshair) ────────
 
-export function ValueChart({ points, hide }) {
-  const [hover, setHover] = useState(null);
+// onScrub(point | null): when given, the parent shows the touched value (in a
+// headline) and the chart drops its own readout row.
+export function ValueChart({ points, hide, onScrub }) {
+  const [hover, setHoverState] = useState(null);
+  const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
   const ref = useRef(null);
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
-        The chart fills in as days pass. A value is saved after each market close, and when you tap Update while the market is open.
+        The chart fills in as days pass. A value is saved after each market close, and whenever prices update while the market is open.
       </div>
     );
   }
@@ -37,7 +40,7 @@ export function ValueChart({ points, hide }) {
   const hp = hover !== null ? points[hover] : null;
   return (
     <div style={{ position: 'relative' }}>
-      <div style={{ height: 34, fontSize: 12, color: T.muted }}>
+      {!onScrub && <div style={{ height: 34, fontSize: 12, color: T.muted }}>
         {hp ? (
           <>
             <div style={{ color: T.text, fontSize: 15, fontWeight: 700 }}>{money(hp.value, hide)}</div>
@@ -46,7 +49,7 @@ export function ValueChart({ points, hide }) {
         ) : (
           <div style={{ paddingTop: 8 }}>Touch the chart to see values</div>
         )}
-      </div>
+      </div>}
       <svg
         ref={ref}
         viewBox={`0 0 ${W} ${H}`}
@@ -54,6 +57,8 @@ export function ValueChart({ points, hide }) {
         onPointerMove={e => pick(e.clientX)}
         onPointerDown={e => pick(e.clientX)}
         onPointerLeave={() => setHover(null)}
+        onPointerUp={e => { if (e.pointerType !== 'mouse') setHover(null); }}
+        onPointerCancel={() => setHover(null)}
         role="img"
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >

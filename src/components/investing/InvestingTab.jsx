@@ -1,10 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate } from '../../utils/dateUtils';
-import { isMarketDay, priceDate } from '../../utils/marketCalendar';
+import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { money, signedMoney, pct, qtyFmt, soldPositions, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
-import { earningsLabel } from './StockInfo';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -17,11 +16,40 @@ const writeHide = v => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } 
 
 const VIEWS = [
   { value: 'portfolio', label: 'Portfolio' },
-  { value: 'activity',  label: 'Activity' },
-  { value: 'insights',  label: 'Insights' },
   { value: 'watchlist', label: 'Watchlist' },
-  { value: 'sold',      label: 'Sold' },
+  { value: 'insights',  label: 'Insights' },
 ];
+
+const ADD_ACTIONS = [
+  { type: 'buy',      label: 'Buy',           hint: 'Record a purchase, or add shares you already own' },
+  { type: 'sell',     label: 'Sell',          hint: 'Record a sale' },
+  { type: 'deposit',  label: 'Add cash',      hint: 'Money in, like a paycheck' },
+  { type: 'withdraw', label: 'Withdraw cash', hint: 'Money out of the account' },
+  { type: 'dividend', label: 'Dividend',      hint: 'Paid by a stock you hold' },
+  { type: 'interest', label: 'Cash interest', hint: 'Earned by your cash itself' },
+];
+
+const STALE_OPEN_MS = 15 * 60 * 1000;      // during pre-market, the session and after hours
+const STALE_CLOSED_MS = 12 * 60 * 60 * 1000; // overnight and weekends
+const PULL_TRIGGER = 70;
+
+// "3 min ago" style label for the last price update
+const ago = iso => {
+  const m = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)} h ago`;
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+};
+
+// Short earnings badge: weekday within the week, otherwise the date
+const earningsBadge = (date, today) => {
+  const d = new Date(date + 'T12:00:00');
+  const days = Math.round((d - new Date(today + 'T12:00:00')) / 864e5);
+  if (days === 0) return 'today';
+  if (days === 1) return 'tmrw';
+  return d.toLocaleDateString('en-US', days < 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+};
 
 export default function InvestingTab({ hook, userId }) {
   const { txs, portfolio, assets, snapshots, cashTarget, refreshPrices, deleteTx, updateTx, setAsset } = hook;
@@ -29,12 +57,24 @@ export default function InvestingTab({ hook, userId }) {
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
+  const [adding, setAdding]   = useState(false);
   const [open, setOpen]       = useState(null);  // symbol
   const [targetFor, setTargetFor] = useState(null);
   const [updating, setUpdating] = useState(false);
-  const [updateMsg, setUpdateMsg] = useState(null);
+  const [updateErr, setUpdateErr] = useState(null);
+  const [scrub, setScrub]     = useState(null);  // chart point under the finger
+  const [status, setStatus]   = useState(() => marketStatus());
+  const [pull, setPull]       = useState(0);
+  const pullStart = useRef(null);
+  const autoTried = useRef(false);
 
   const toggleHide = () => { setHide(h => { writeHide(!h); return !h; }); };
+
+  // Market status pill ticks once a minute
+  useEffect(() => {
+    const id = setInterval(() => setStatus(marketStatus()), 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const today = toDateStr(new Date());
   const ret = useMemo(() => periodReturn(txs, snapshots, portfolio.value, period, today), [txs, snapshots, portfolio.value, period, today]);
@@ -52,29 +92,44 @@ export default function InvestingTab({ hook, userId }) {
     return txs.length ? [...pts, { date: nowDate, value: portfolio.value, label: 'Now' }] : [];
   }, [snapshots, period, today, portfolio.value, txs.length]);
 
-  const handleUpdate = async () => {
+  const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
+  const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
+
+  const update = useCallback(async () => {
     setUpdating(true);
-    setUpdateMsg(null);
-    try {
-      const res = await refreshPrices();
-      const n = Object.keys(res.prices || {}).length;
-      setUpdateMsg({ ok: true, text: n ? `Updated ${n} price${n !== 1 ? 's' : ''}` : 'Nothing to update yet' });
-    } catch (e) {
-      setUpdateMsg({ ok: false, text: e.message || 'Could not update prices' });
-    } finally {
-      setUpdating(false);
-    }
+    setUpdateErr(null);
+    try { await refreshPrices(); }
+    catch (e) { setUpdateErr(e.message || 'Could not update prices'); }
+    finally { setUpdating(false); }
+  }, [refreshPrices]);
+
+  // Refresh on open when prices are stale: 15 minutes while anything trades,
+  // 12 hours while the market is fully closed
+  useEffect(() => {
+    if (autoTried.current || !hasAuto) return;
+    autoTried.current = true;
+    const age = lastUpdate ? Date.now() - new Date(lastUpdate) : Infinity;
+    if (age > (status.session === 'closed' ? STALE_CLOSED_MS : STALE_OPEN_MS)) update();
+  }, [hasAuto, lastUpdate, status.session, update]);
+
+  // Pull down from the top of the page to refresh
+  const onTouchStart = e => {
+    const busy = updating || adding || trade || open || targetFor || e.target.closest?.('[data-nopull]');
+    pullStart.current = window.scrollY <= 0 && !busy ? e.touches[0].clientY : null;
+  };
+  const onTouchMove = e => {
+    if (pullStart.current === null) return;
+    const dy = e.touches[0].clientY - pullStart.current;
+    setPull(dy > 0 ? Math.min(dy * 0.5, PULL_TRIGGER + 20) : 0);
+  };
+  const onTouchEnd = () => {
+    if (pull >= PULL_TRIGGER) update();
+    pullStart.current = null;
+    setPull(0);
   };
 
   const bench = ret && !ret.unavailable ? benchmarkReturn(snapshots, ret.start, assets[BENCHMARK]?.price) : null;
 
-  // Holdings reporting earnings in the coming weeks
-  const upcoming = portfolio.holdings
-    .map(h => ({ symbol: h.symbol, next: assets[h.symbol]?.nextEarnings }))
-    .filter(x => x.next && x.next.date >= today)
-    .sort((a, b) => a.next.date.localeCompare(b.next.date));
-
-  const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const slices = allocationSlices(portfolio, assets, cashTarget);
   const sliceColor = Object.fromEntries(slices.map(x => [x.key, x.color]));
   const slicePct = Object.fromEntries(slices.map(x => [x.key, x.pct]));
@@ -86,6 +141,9 @@ export default function InvestingTab({ hook, userId }) {
     .filter(x => x.under >= 2 && x.amount >= 1)
     .sort((a, b) => b.under - a.under)[0] || null;
   const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
+  const sold = soldPositions(portfolio.closed, assets);
+  const soonDate = toDateStr(new Date(Date.now() + 7 * 864e5));
+  const laterDate = toDateStr(new Date(Date.now() + 21 * 864e5));
 
   // Owned stocks don't belong on the watchlist (catches ones bought before this rule)
   const ownedWatched = portfolio.holdings.filter(h => assets[h.symbol]?.watch).map(h => h.symbol).join(',');
@@ -94,195 +152,176 @@ export default function InvestingTab({ hook, userId }) {
     ownedWatched.split(',').forEach(s => setAsset(s, { watch: false }).catch(e => console.error('Unwatch failed:', e)));
   }, [ownedWatched, setAsset]);
 
+  // Headline: the touched chart point, else the current value
+  const first = chartPoints[0];
+  const headValue = scrub ? scrub.value : portfolio.value;
+  const scrubChange = scrub && first ? scrub.value - first.value : null;
+  const periodLabel = PERIODS.find(p => p.key === period)?.label;
+  const showCash = Math.abs(portfolio.cash) > 0.005;
+
   return (
-    <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-      {/* Summary */}
+    <div
+      style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
+      onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+    >
+      {(pull > 0 || updating) && (
+        <div style={{ height: updating ? 28 : pull * 0.5, overflow: 'hidden', textAlign: 'center', fontSize: 12, color: T.muted, transition: pull ? 'none' : 'height 0.2s' }}>
+          {updating ? 'Updating prices…' : pull >= PULL_TRIGGER ? 'Release to update' : 'Pull to update'}
+        </div>
+      )}
+
+      {/* Hero: value, period change, chart */}
       <Card>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: 12, color: T.muted }}>Total value</div>
-            <div style={{ fontSize: 30, fontWeight: 800, color: T.text, letterSpacing: -0.5, fontVariantNumeric: 'tabular-nums' }}>
-              {money(portfolio.value, hide)}
-            </div>
-            <div style={{ fontSize: 13, color: gainColor(portfolio.dayChange), marginTop: 2 }}>
-              {signedMoney(portfolio.dayChange, hide)} today
-            </div>
-            {portfolio.ext && (
-              <div style={{ fontSize: 12, color: gainColor(portfolio.ext.change), marginTop: 1 }}>
-                {signedMoney(portfolio.ext.change, hide)} {portfolio.ext.label.toLowerCase()}
-              </div>
-            )}
-          </div>
-          <button onClick={toggleHide} aria-label={hide ? 'Show amounts' : 'Hide amounts'} style={{ padding: 6 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+            color: status.session === 'open' ? T.green : status.session === 'closed' ? T.muted : T.khaki,
+            background: status.session === 'open' ? 'rgba(48,209,88,0.12)' : T.bg,
+          }}>
+            {status.session === 'open' ? '● ' : ''}{status.label}
+          </span>
+          <span style={{ flex: 1 }} />
+          <button onClick={toggleHide} aria-label={hide ? 'Show amounts' : 'Hide amounts'} style={{ padding: 4, flexShrink: 0 }}>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
               <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke={T.olive} strokeWidth="1.8" />
               <circle cx="12" cy="12" r="3" stroke={T.olive} strokeWidth="1.8" />
               {hide && <path d="M4 4l16 16" stroke={T.olive} strokeWidth="1.8" strokeLinecap="round" />}
             </svg>
           </button>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
-          <MiniStat label="Free cash" value={money(portfolio.cash, hide)} />
-          <MiniStat label="Invested" value={money(portfolio.holdingsValue, hide)} />
-          <MiniStat label="All-time gain" value={signedMoney(portfolio.totalGain, hide)} color={gainColor(portfolio.totalGain)} />
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14 }}>
           <button
-            onClick={handleUpdate}
-            disabled={updating}
-            style={{ padding: '9px 14px', borderRadius: 10, background: '#2A3A1A', border: `1px solid ${T.olive}`, color: T.khaki, fontSize: 13, fontWeight: 600 }}
-          >
-            {updating ? 'Updating…' : '↻ Update prices'}
-          </button>
-          <span style={{ fontSize: 11, color: updateMsg ? (updateMsg.ok ? T.green : T.red) : T.muted }}>
-            {updateMsg ? updateMsg.text : lastUpdate ? `Last: ${new Date(lastUpdate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
-          </span>
+            onClick={() => setAdding(true)}
+            aria-label="Add transaction"
+            style={{ width: 32, height: 32, borderRadius: 16, background: T.olive, color: '#fff', fontSize: 22, lineHeight: '30px', flexShrink: 0 }}
+          >+</button>
         </div>
+
+        <div style={{ marginTop: 10, fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
+          {money(headValue, hide)}
+        </div>
+
+        {scrub ? (
+          <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
+            {scrub.label || formatShortDate(scrub.date)}
+            {scrubChange !== null && first !== scrub && (
+              <span style={{ color: gainColor(scrubChange) }}> · {signedMoney(scrubChange, hide)} since {formatShortDate(first.date)}</span>
+            )}
+          </div>
+        ) : (
+          <>
+            {ret && !ret.unavailable && (
+              <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, color: gainColor(ret.gain) }}>
+                {signedMoney(ret.gain, hide)} ({pct(ret.pct)}) <span style={{ color: T.muted, fontWeight: 400 }}>· {period === 'ALL' ? 'all time' : periodLabel}</span>
+              </div>
+            )}
+            {txs.length > 0 && (
+              <div style={{ fontSize: 12, marginTop: 2, color: gainColor(portfolio.dayChange) }}>
+                {signedMoney(portfolio.dayChange, hide)} today
+                {portfolio.ext && (
+                  <span style={{ color: gainColor(portfolio.ext.change) }}> · {signedMoney(portfolio.ext.change, hide)} {portfolio.ext.label.toLowerCase()}</span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {txs.length > 0 && (
+          <>
+            <div style={{ marginTop: 12 }} data-nopull>
+              <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} />
+            </div>
+            <div style={{ marginTop: 10 }}>
+              <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={v => { setPeriod(v); setScrub(null); }} />
+            </div>
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 10, lineHeight: 1.45 }}>
+              {ret?.unavailable
+                ? `Not enough history for ${periodLabel} yet${ret.trackingSince ? ` (values saved since ${formatShortDate(ret.trackingSince)})` : ''}.`
+                : bench !== null && ret?.pct !== null && ret?.pct !== undefined
+                  ? <>S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts</>
+                  : 'S&P 500 comparison appears once there\'s enough history.'}
+              <span style={{ fontSize: 11, display: 'block', marginTop: 2 }}>Returns exclude cash you add or withdraw.</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, fontSize: 12, color: T.muted }}>
+              <span>Invested <b style={{ color: T.text, fontWeight: 600 }}>{money(portfolio.holdingsValue, hide)}</b></span>
+              {showCash && <span>Cash <b style={{ color: portfolio.cash < 0 ? T.red : T.text, fontWeight: 600 }}>{money(portfolio.cash, hide)}</b></span>}
+              <span>All-time <b style={{ color: gainColor(portfolio.totalGain), fontWeight: 600 }}>{signedMoney(portfolio.totalGain, hide)}</b></span>
+            </div>
+          </>
+        )}
+
+        {hasAuto && (
+          <button onClick={update} disabled={updating} style={{ marginTop: 8, padding: 0, fontSize: 11, color: updateErr ? T.red : T.muted, textAlign: 'left' }}>
+            {updating ? 'Updating prices…' : updateErr ? `${updateErr} · tap to retry` : lastUpdate ? `Prices updated ${ago(lastUpdate)} · ↻` : 'Tap to update prices ↻'}
+          </button>
+        )}
       </Card>
-
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[['buy', 'Buy'], ['sell', 'Sell'], ['deposit', '+ Cash']].map(([t, label]) => (
-          <button
-            key={t}
-            onClick={() => setTrade({ type: t })}
-            style={{ flex: 1, padding: 11, borderRadius: 12, background: t === 'buy' ? T.olive : T.subtle, color: '#fff', fontSize: 14, fontWeight: 600 }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
 
       <Chips options={VIEWS} value={view} onChange={setView} />
 
-      {txs.length === 0 && view !== 'watchlist' && view !== 'sold' && (
+      {txs.length === 0 && view !== 'watchlist' && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
-          Already own some stocks? Tap <b style={{ color: T.text }}>Buy</b> and pick <b style={{ color: T.text }}>Already owned</b> — free cash isn't touched.
-          For new money (like a paycheck) use <b style={{ color: T.text }}>+ Cash</b>, then <b style={{ color: T.text }}>Buy</b> from free cash. Past trades are fine — just pick their real date.
+          Tap <b style={{ color: T.text }}>+</b> to get started. Already own some stocks? Choose <b style={{ color: T.text }}>Buy</b> and pick <b style={{ color: T.text }}>Already owned</b> — free cash isn't touched.
+          For new money (like a paycheck) use <b style={{ color: T.text }}>Add cash</b>, then <b style={{ color: T.text }}>Buy</b> from free cash. Past trades are fine — just pick their real date.
         </div>
       )}
 
       {view === 'portfolio' && txs.length > 0 && (
-        <>
-          <Card>
-            <SectionTitle>Return</SectionTitle>
-            <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={setPeriod} />
-            <div style={{ marginTop: 12 }}>
-              {ret?.unavailable ? (
-                <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.5 }}>
-                  Not enough history for this period yet{ret.trackingSince ? ` (values saved since ${ret.trackingSince})` : ''}. It fills in as daily values are saved.
-                </div>
-              ) : ret && (
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                  <span style={{ fontSize: 26, fontWeight: 800, color: gainColor(ret.gain) }}>{pct(ret.pct)}</span>
-                  <span style={{ fontSize: 14, color: gainColor(ret.gain) }}>{signedMoney(ret.gain, hide)}</span>
-                </div>
-              )}
-              {ret && !ret.unavailable && (
-                <div style={{ fontSize: 13, color: T.muted, marginTop: 6 }}>
-                  S&P 500 same period:{' '}
-                  {bench !== null
-                    ? <span style={{ color: gainColor(bench), fontWeight: 600 }}>{pct(bench)}</span>
-                    : <span>not enough history yet</span>}
-                  {bench !== null && ret.pct !== null && (
-                    <span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(2)} pts</span>
-                  )}
-                </div>
-              )}
-              <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Excludes cash you added or withdrew — only how your money performed.</div>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <ValueChart points={chartPoints} hide={hide} />
-            </div>
-          </Card>
-
-          {upcoming.length > 0 && (
-            <Card>
-              <SectionTitle>Upcoming earnings</SectionTitle>
-              {upcoming.map(u => (
-                <button key={u.symbol} onClick={() => setOpen(u.symbol)} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', padding: '6px 0', fontSize: 14 }}>
-                  <span style={{ color: T.text, fontWeight: 700 }}>{u.symbol}</span>
-                  <span style={{ color: u.next.date <= toDateStr(new Date(Date.now() + 7 * 864e5)) ? T.khaki : T.muted, fontSize: 13 }}>{earningsLabel(u.next)}</span>
-                </button>
-              ))}
-              <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>You'll get a reminder the evening before (with notifications on).</div>
-            </Card>
-          )}
-
-          <Card style={{ padding: '6px 16px' }}>
-            {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
-            {portfolio.holdings.map((h, i) => (
+        <Card style={{ padding: '6px 16px' }}>
+          {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
+          {portfolio.holdings.map((h, i) => {
+            const next = assets[h.symbol]?.nextEarnings;
+            const showEarn = next && next.date >= today && next.date <= laterDate;
+            const share = slicePct[h.symbol];
+            return (
               <button
                 key={h.symbol}
                 onClick={() => setOpen(h.symbol)}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left' }}
+                style={{ width: '100%', padding: '12px 0 10px', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left', display: 'block' }}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
-                    {sliceColor[h.symbol] && <span style={{ width: 8, height: 8, borderRadius: 2, background: sliceColor[h.symbol], flexShrink: 0 }} />}
-                    {h.symbol}
-                    {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400, marginLeft: 6 }}>manual</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
+                      {h.symbol}
+                      {showEarn && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
+                          color: next.date <= soonDate ? T.khaki : T.muted, background: next.date <= soonDate ? '#2A2616' : T.bg,
+                        }}>
+                          Earnings {earningsBadge(next.date, today)}
+                        </span>
+                      )}
+                      {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
+                    </div>
+                    <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
-                    {slices.length > 1 && slicePct[h.symbol] ? ` · ${(slicePct[h.symbol] * 100).toFixed(0)}%` : ''}
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
+                    <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
+                      {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
+                    </div>
+                    {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                  <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
-                  <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
-                    {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
+                {share > 0 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+                    <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.bg }}>
+                      <div style={{ height: 4, borderRadius: 2, width: `${Math.max(1.5, share * 100)}%`, background: sliceColor[h.symbol] }} />
+                    </div>
+                    <span style={{ fontSize: 10, color: T.muted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{Math.round(share * 100)}%</span>
                   </div>
-                  {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
-                </div>
+                )}
               </button>
-            ))}
-          </Card>
-
-          {slices.length > 0 && (
-            <Card>
-              <SectionTitle>Allocation</SectionTitle>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <AllocationDonut slices={slices} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <AllocationLegend slices={slices} onEditTarget={setTargetFor} />
-                </div>
-              </div>
-              {nextBuy ? (
-                <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#2A2616', border: '1px solid #5A5130' }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Next buy idea</div>
-                  <div style={{ fontSize: 13, color: T.muted, marginTop: 3, lineHeight: 1.4 }}>
-                    {nextBuy.symbol} is {nextBuy.under.toFixed(1)} pts under its {nextBuy.target}% target — about {money(nextBuy.amount, hide)} more would get it there.
-                  </div>
-                </div>
-              ) : (
-                <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>
-                  {slices.some(x => x.target !== null && x.target !== undefined) ? 'Everything is close to its target.' : 'Tap “set target” on a holding to get buy suggestions.'}
-                </div>
-              )}
-            </Card>
-          )}
-        </>
+            );
+          })}
+        </Card>
       )}
 
-      {view === 'activity' && txs.length > 0 && (
-        <Card>
-          <SectionTitle right={
-            <span style={{ display: 'flex', gap: 12 }}>
-              <button onClick={() => setTrade({ type: 'interest' })} style={{ fontSize: 12, color: T.khaki }}>+ Interest</button>
-              <button onClick={() => setTrade({ type: 'dividend' })} style={{ fontSize: 12, color: T.khaki }}>+ Dividend</button>
-            </span>
-          }>
-            All transactions
-          </SectionTitle>
-          <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} />
-          {portfolio.closed.length > 0 && (
-            <div style={{ marginTop: 14, fontSize: 12, color: T.muted }}>
-              Fully sold: {portfolio.closed.map(c => `${c.symbol} (${signedMoney(c.realized + c.dividends, hide)})`).join(', ')}
-            </div>
-          )}
-        </Card>
+      {view === 'watchlist' && (
+        <>
+          <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
+          {sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
+        </>
       )}
 
       {view === 'insights' && txs.length > 0 && (
@@ -297,7 +336,20 @@ export default function InvestingTab({ hook, userId }) {
                 <AllocationLegend slices={slices} onEditTarget={setTargetFor} />
               </div>
             )}
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>Tap “set target” to choose your own target %. Drift shows how far off you are.</div>
+            {nextBuy ? (
+              <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 12, background: '#2A2616', border: '1px solid #5A5130' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Next buy idea</div>
+                <div style={{ fontSize: 13, color: T.muted, marginTop: 3, lineHeight: 1.4 }}>
+                  {nextBuy.symbol} is {nextBuy.under.toFixed(1)} pts under its {nextBuy.target}% target — about {money(nextBuy.amount, hide)} more would get it there.
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 11, color: T.muted, marginTop: 10 }}>
+                {slices.some(x => x.target !== null && x.target !== undefined)
+                  ? 'Everything is close to its target.'
+                  : 'Tap “set target” to choose your own target % and get buy suggestions.'}
+              </div>
+            )}
           </Card>
 
           <Card>
@@ -337,6 +389,7 @@ export default function InvestingTab({ hook, userId }) {
           <Card>
             <SectionTitle>Totals</SectionTitle>
             <TotalRow label="Money added (net)" value={money(portfolio.netDeposits, hide)} />
+            <TotalRow label="Free cash" value={money(portfolio.cash, hide)} color={portfolio.cash < -0.005 ? T.red : T.text} />
             <TotalRow label="Realized gains (sells)" value={signedMoney(portfolio.realized, hide)} color={gainColor(portfolio.realized)} />
             <TotalRow label="Dividends received" value={money(portfolio.dividends, hide)} />
             <TotalRow label="Interest on cash" value={money(portfolio.interest, hide)} />
@@ -350,17 +403,33 @@ export default function InvestingTab({ hook, userId }) {
             })()}
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
+
+          <Card>
+            <SectionTitle>All transactions</SectionTitle>
+            <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} />
+          </Card>
         </>
       )}
 
-      {view === 'watchlist' && (
-        <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
+      {adding && (
+        <Modal title="Add" onClose={() => setAdding(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ADD_ACTIONS.map(a => (
+              <button
+                key={a.type}
+                onClick={() => { setAdding(false); setTrade({ type: a.type }); }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', borderRadius: 12,
+                  background: a.type === 'buy' ? '#2A3A1A' : T.bg, border: `1px solid ${a.type === 'buy' ? T.olive : T.cardBorder}`, textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.label}</span>
+                <span style={{ fontSize: 12, color: T.muted }}>{a.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
       )}
-
-      {view === 'sold' && (
-        <SoldList items={soldPositions(portfolio.closed, assets)} hide={hide} onOpen={setOpen} />
-      )}
-
       {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
       {open && (
         <HoldingModal
@@ -377,15 +446,6 @@ export default function InvestingTab({ hook, userId }) {
           onClose={() => setTargetFor(null)}
         />
       )}
-    </div>
-  );
-}
-
-function MiniStat({ label, value, color = T.text }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0, background: T.bg, borderRadius: 10, padding: '8px 8px' }}>
-      <div style={{ fontSize: 10, color: T.muted }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 2, letterSpacing: -0.2, overflowWrap: 'anywhere', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
   );
 }
@@ -461,7 +521,7 @@ function SoldList({ items, hide, onOpen }) {
       ))}
       {items.length > 0 && (
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-          Gain/loss is what you sold for minus what you paid (fees included). “Since sold” compares today's price with your sell price; prices refresh with “Update prices”.
+          Gain/loss is what you sold for minus what you paid (fees included). “Since sold” compares today's price with your sell price; prices refresh automatically, or pull down to update.
         </div>
       )}
     </Card>
@@ -502,7 +562,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
         <button onClick={add} disabled={busy} style={{ height: 44, padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>{busy ? '…' : 'Add'}</button>
       </div>
       {msg && <div style={{ fontSize: 13, color: T.red, marginBottom: 8 }}>{msg}</div>}
-      {items.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Track stocks you don't own yet. Prices refresh with “Update prices”.</div>}
+      {items.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Track stocks you don't own yet. Prices refresh automatically, or pull down to update.</div>}
       {items.map((a, i) => {
         const day = a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null;
         const ext = extendedPrice(a);
