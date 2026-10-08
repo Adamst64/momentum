@@ -14,20 +14,13 @@ function bigMoney(millions) {
   return `$${(n / 1e6).toFixed(0)}M`;
 }
 
-const ago = (unix) => {
-  const h = Math.round((Date.now() / 1000 - unix) / 3600);
-  if (h < 1) return 'just now';
-  if (h < 24) return `${h}h ago`;
-  return `${Math.round(h / 24)}d ago`;
-};
-
 export function earningsLabel(next) {
   if (!next) return null;
   const d = new Date(next.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   return `${d}${HOUR_LABEL[next.hour] ? ` · ${HOUR_LABEL[next.hour]}` : ''}`;
 }
 
-// Stats, earnings and news for one stock, loaded when the holding screen opens
+// Stats and earnings for one stock, loaded when the holding screen opens
 export default function StockInfo({ symbol, price, stockInfo, hide }) {
   const [data, setData]   = useState(null);
   const [error, setError] = useState(null);
@@ -118,22 +111,6 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
         })}
       </div>
 
-      <div>
-        <SectionTitle>News</SectionTitle>
-        {data.news.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>No news in the last two weeks.</div>}
-        {data.news.map((n, i) => (
-          <a
-            key={n.id || n.url}
-            href={n.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: 'block', padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textDecoration: 'none' }}
-          >
-            <div style={{ fontSize: 14, color: T.text, lineHeight: 1.35 }}>{n.headline}</div>
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 3 }}>{n.source} · {ago(n.datetime)}</div>
-          </a>
-        ))}
-      </div>
     </div>
   );
 }

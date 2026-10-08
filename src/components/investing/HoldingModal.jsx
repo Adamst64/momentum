@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo from './StockInfo';
+import StockChart from './StockChart';
 
 const timeAgo = iso => {
   if (!iso) return 'never';
@@ -70,15 +71,19 @@ export function TxList({ txs, hide, onDelete, onUpdate }) {
 }
 
 export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo } = hook;
+  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
   const myAlerts = alerts.filter(a => a.symbol === symbol);
   const ext = asset.source === 'finnhub' ? extendedPrice(asset) : null;
+  const held = h && h.qty > 0;
+  const sold = !held && h ? soldPositions([h], assets)[0] || null : null;
 
   const [manualPrice, setManualPrice] = useState(asset.price ? String(asset.price) : '');
   const [target, setTarget]       = useState(asset.targetPct != null ? String(asset.targetPct) : '');
+  const [priceTarget, setPriceTarget] = useState(asset.priceTarget ? String(asset.priceTarget) : '');
+  const [targetAlert, setTargetAlert] = useState(true);
   const [alertDir, setAlertDir]   = useState('above');
   const [alertPrice, setAlertPrice] = useState('');
   const [msg, setMsg]             = useState(null);
@@ -117,7 +122,32 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {asset.name && <div style={{ fontSize: 13, color: T.muted, marginTop: -12 }}>{asset.name}</div>}
 
-        {h && (
+        <StockChart
+          symbol={symbol}
+          priceHistory={priceHistory}
+          livePrice={asset.source === 'finnhub' ? asset.price : null}
+          hide={hide}
+          refs={[
+            held && { value: h.avgCost, label: 'Avg cost', color: T.muted },
+            sold && { value: sold.avgSell, label: 'Sold at', color: T.khaki },
+            asset.priceTarget && { value: asset.priceTarget, label: 'Target', color: '#5AC8FA' },
+          ].filter(Boolean)}
+          markers={sold ? [{ date: sold.date, label: 'Sold' }] : []}
+          initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
+        />
+
+        {sold && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {stat('Sold', `${qtyFmt(sold.qty)} @ ${money(sold.avgSell, hide)}`)}
+            {stat('Sold on', formatShortDate(sold.date))}
+            {stat(sold.realized >= 0 ? 'Gain' : 'Loss', `${signedMoney(sold.realized, hide)} (${pct(sold.realizedPct)})`, gainColor(sold.realized))}
+            {stat('Since sold', pct(sold.sinceSell), gainColor(sold.sinceSell))}
+            {sold.ifHeld !== null && stat(sold.ifHeld > 0 ? 'Missed by selling' : 'Saved by selling', money(Math.abs(sold.ifHeld), hide), sold.ifHeld > 0 ? T.red : T.green)}
+            {sold.dividends > 0 && stat('Dividends', money(sold.dividends, hide), T.green)}
+          </div>
+        )}
+
+        {held && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {stat('Shares', qtyFmt(h.qty))}
             {stat('Avg cost / share', money(h.avgCost, hide))}
@@ -176,6 +206,42 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
         </div>
 
         <div>
+          <SectionTitle>Price target</SectionTitle>
+          {asset.priceTarget > 0 && asset.price > 0 && (
+            <div style={{ fontSize: 13, color: T.text, marginBottom: 8 }}>
+              {money(asset.priceTarget, hide)} is{' '}
+              <b style={{ color: '#5AC8FA' }}>{pct(asset.priceTarget / asset.price - 1)}</b> from today's {money(asset.price, hide)}
+              {Math.abs(asset.priceTarget / asset.price - 1) < 0.005 && ' — target reached'}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={priceTarget} onChange={e => setPriceTarget(e.target.value)} inputMode="decimal"
+              placeholder={held ? 'Price you expect or would sell at' : 'Price you would buy at'} style={inputStyle}
+            />
+            <button
+              onClick={() => {
+                const v = priceTarget.trim() === '' ? null : parseFloat(priceTarget.replace(/[$,]/g, ''));
+                if (v !== null && !(v > 0)) return;
+                run(async () => {
+                  await setAsset(symbol, { priceTarget: v });
+                  if (v && targetAlert && asset.price) {
+                    await addAlert(symbol, v >= asset.price ? 'above' : 'below', v);
+                    await registerPushToken(userId);
+                  }
+                }, v === null ? 'Price target cleared' : targetAlert && asset.price ? 'Price target saved, with an alert' : 'Price target saved');
+              }}
+              style={{ padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
+            >Save</button>
+          </div>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12, color: T.muted, marginTop: 8 }}>
+            <input type="checkbox" checked={targetAlert} onChange={e => setTargetAlert(e.target.checked)} />
+            Also add a price alert for it
+          </label>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>Your own target — shown on the chart and in your lists.</div>
+        </div>
+
+        {held && <div>
           <SectionTitle>Target allocation</SectionTitle>
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={target} onChange={e => setTarget(e.target.value)} inputMode="decimal" placeholder="e.g. 25 (% of portfolio)" style={inputStyle} />
@@ -187,7 +253,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
               style={{ padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
             >Save</button>
           </div>
-        </div>
+        </div>}
 
         <div>
           <SectionTitle>Price alerts</SectionTitle>

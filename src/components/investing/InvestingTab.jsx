@@ -294,6 +294,7 @@ export default function InvestingTab({ hook, userId }) {
                     <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
                     </div>
+                    <TargetLine target={assets[h.symbol]?.priceTarget} price={h.price} hide={hide} />
                   </div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
@@ -450,6 +451,18 @@ export default function InvestingTab({ hook, userId }) {
   );
 }
 
+// "Target $400 · +49%" under a holding or watched stock
+function TargetLine({ target, price, hide }) {
+  if (!(target > 0)) return null;
+  const gap = price > 0 ? target / price - 1 : null;
+  const hit = gap !== null && Math.abs(gap) < 0.005;
+  return (
+    <div style={{ fontSize: 11, color: '#5AC8FA', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      Target {hide ? '••••' : `$${Math.round(target).toLocaleString('en-US')}`}{gap !== null && (hit ? ' · reached' : ` · ${gap > 0 ? '+' : ''}${(gap * 100).toFixed(0)}%`)}
+    </div>
+  );
+}
+
 function TotalRow({ label, value, color = T.text }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', fontSize: 14 }}>
@@ -571,6 +584,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
             <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
               {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
+              <TargetLine target={a.priceTarget} price={a.price} hide={hide} />
             </button>
             <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>

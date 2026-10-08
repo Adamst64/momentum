@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
@@ -89,10 +89,22 @@ export function useInvesting(userId) {
     return 'manual';
   }, [assets, refreshPrices, setAsset]);
 
-  // Key stats, past earnings, profile and recent news for one symbol
+  // Key stats, past earnings and profile for one symbol
   const stockInfo = useCallback(async (symbol) => {
     const fn = httpsCallable(getFunctions(getApp()), 'stockInfo');
     return (await fn({ symbol })).data;
+  }, []);
+
+  // Daily closes for a stock's chart, cached per symbol and range for 15 minutes
+  const historyCache = useRef({});
+  const priceHistory = useCallback(async (symbol, range) => {
+    const key = `${symbol}:${range}`;
+    const hit = historyCache.current[key];
+    if (hit && Date.now() - hit.at < 15 * 60 * 1000) return hit.points;
+    const fn = httpsCallable(getFunctions(getApp()), 'priceHistory');
+    const points = (await fn({ symbol, range })).data.points || [];
+    historyCache.current[key] = { at: Date.now(), points };
+    return points;
   }, []);
 
   // Ticker suggestions: { results: [{ symbol, name }], exact: is `query` itself a real ticker }
@@ -122,7 +134,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
-    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, searchSymbols,
+    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

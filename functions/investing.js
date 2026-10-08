@@ -174,7 +174,7 @@ async function refreshPrices(db, request) {
   return { prices, notFound, updatedAt: now };
 }
 
-// ── Callable: details for one stock (stats, past earnings, news) ─────────────
+// ── Callable: details for one stock (stats, past earnings) ───────────────────
 
 async function stockInfo(db, request) {
   const uid = request.auth?.uid;
@@ -217,25 +217,12 @@ async function stockInfo(db, request) {
   }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
 
-  // News is fetched fresh each time (last two weeks, newest first)
-  let news = [];
-  try {
-    const to = new Date(), from = new Date(Date.now() - 14 * 864e5);
-    const items = await finnhub(`company-news?symbol=${encodeURIComponent(sym)}&from=${ymd(from)}&to=${ymd(to)}`, key);
-    news = (Array.isArray(items) ? items : [])
-      .filter(n => n.headline && /^https?:\/\//.test(n.url || ''))
-      .sort((a, b) => b.datetime - a.datetime)
-      .slice(0, 8)
-      .map(n => ({ id: n.id, headline: n.headline, source: n.source, url: n.url, datetime: n.datetime, summary: (n.summary || '').slice(0, 240) }));
-  } catch { /* news is optional */ }
-
   const merged = { ...cached, ...update };
   return {
     metrics: merged.metrics || null,
     earningsHistory: merged.earningsHistory || [],
     nextEarnings: merged.nextEarnings || null,
     profile: { name: merged.name || null, industry: merged.industry || null, logo: merged.logo || null, weburl: merged.weburl || null },
-    news,
   };
 }
 
@@ -400,6 +387,39 @@ async function runInvestingJobs(db, userDoc, notify) {
 // `exact` says whether what was typed is itself a real ticker, so the app can
 // refuse made-up ones (e.g. a company name typed in the symbol box).
 const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End Fund']);
+// ── Callable: daily price history for a stock's chart ─────────────────────────
+// Yahoo's chart endpoint (keyless, unofficial — same one as extended hours).
+// Daily candles only exist for trading days, so weekends and holidays never show.
+
+const HISTORY_RANGES = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk' };
+
+async function priceHistory(db, request) {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
+  const sym = String(request.data?.symbol || '').trim().toUpperCase();
+  const range = String(request.data?.range || '6mo');
+  if (!/^[A-Z0-9.\-^=]{1,15}$/.test(sym)) throw new HttpsError('invalid-argument', 'Symbol required');
+  if (!HISTORY_RANGES[range]) throw new HttpsError('invalid-argument', 'Unknown range');
+
+  const res = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${HISTORY_RANGES[range]}&range=${range}`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (res.status === 404) return { points: [] };
+  if (!res.ok) throw new HttpsError('unavailable', 'Price history is unavailable right now.');
+  const r = (await res.json())?.chart?.result?.[0];
+  const ts = r?.timestamp || [];
+  const closes = r?.indicators?.quote?.[0]?.close || [];
+  const points = [];
+  for (let i = 0; i < ts.length; i++) {
+    if (!(closes[i] > 0)) continue;
+    const date = easternNow(new Date(ts[i] * 1000)).today;
+    const value = Math.round(closes[i] * 1e4) / 1e4;
+    // The live (unfinished) candle can share a date with the last one; keep the newest
+    if (points.length && points[points.length - 1].date === date) points[points.length - 1].value = value;
+    else points.push({ date, value });
+  }
+  return { points };
+}
+
 async function searchSymbols(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const q = String(request.data?.query || '').trim().slice(0, 30);
@@ -421,4 +441,4 @@ async function searchSymbols(db, request) {
   return { results, exact };
 }
 
-module.exports = { refreshPrices, stockInfo, searchSymbols, runInvestingJobs, BENCHMARK };
+module.exports = { refreshPrices, stockInfo, priceHistory, searchSymbols, runInvestingJobs, BENCHMARK };

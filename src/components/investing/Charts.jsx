@@ -8,21 +8,24 @@ import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
 
 // onScrub(point | null): when given, the parent shows the touched value (in a
 // headline) and the chart drops its own readout row.
-export function ValueChart({ points, hide, onScrub }) {
+// refs: horizontal dashed lines [{ value, label, color }] (avg cost, target…),
+// markers: vertical lines [{ date, label }] at the first point on/after date.
+export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emptyText }) {
   const [hover, setHoverState] = useState(null);
   const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
   const ref = useRef(null);
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
-        The chart fills in as days pass. A value is saved after each market close, and whenever prices update while the market is open.
+        {emptyText || 'The chart fills in as days pass. A value is saved after each market close, and whenever prices update while the market is open.'}
       </div>
     );
   }
 
   const W = 340, H = 120, PAD = 4;
   const vals = points.map(p => p.value);
-  const min = Math.min(...vals), max = Math.max(...vals);
+  const refVals = refs.filter(r => r.value > 0).map(r => r.value);
+  const min = Math.min(...vals, ...refVals), max = Math.max(...vals, ...refVals);
   const span = max - min || 1;
   const x = i => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = v => PAD + (1 - (v - min) / span) * (H - PAD * 2);
@@ -63,6 +66,24 @@ export function ValueChart({ points, hide, onScrub }) {
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >
         <path d={area} fill={color} opacity={0.12} />
+        {refs.filter(r => r.value > 0).map(r => (
+          <g key={r.label}>
+            <line x1={0} x2={W} y1={y(r.value)} y2={y(r.value)} stroke={r.color} strokeWidth={1} strokeDasharray="4 3" opacity={0.8} />
+            <text x={W - 2} y={y(r.value) + (y(r.value) < 14 ? 10 : -3)} textAnchor="end" fontSize="9" fill={r.color}>
+              {r.label} {hide ? '' : money(r.value)}
+            </text>
+          </g>
+        ))}
+        {markers.map(m => {
+          const i = points.findIndex(p => p.date >= m.date);
+          if (i < 0) return null;
+          return (
+            <g key={m.label + m.date}>
+              <line x1={x(i)} x2={x(i)} y1={0} y2={H} stroke={T.khaki} strokeWidth={1} opacity={0.7} />
+              <text x={x(i) + (x(i) > W - 40 ? -3 : 3)} y={10} textAnchor={x(i) > W - 40 ? 'end' : 'start'} fontSize="9" fill={T.khaki}>{m.label}</text>
+            </g>
+          );
+        })}
         <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {hover !== null && (
           <>
