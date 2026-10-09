@@ -9,6 +9,11 @@ permissions:
   pages: write
   id-token: write
 
+# One deploy at a time, in push order, so an older commit never overwrites a newer one
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

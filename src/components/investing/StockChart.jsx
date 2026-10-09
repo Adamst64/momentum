@@ -11,6 +11,8 @@ const RANGES = [
   { value: '6mo', label: '6M' },
   { value: '1y',  label: '1Y' },
   { value: '5y',  label: '5Y' },
+  { value: '10y', label: '10Y' },
+  { value: 'max', label: 'Max' },
 ];
 
 // Price chart for one stock (trading days only), with optional reference lines

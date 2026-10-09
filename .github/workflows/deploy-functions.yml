@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# One deploy at a time, in push order. Without this, two quick pushes can
+# deploy in parallel and the older commit may finish last, rolling back the newer one.
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest

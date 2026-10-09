@@ -499,7 +499,7 @@ const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End 
 // Yahoo's chart endpoint (keyless, unofficial — same one as extended hours).
 // Daily candles only exist for trading days, so weekends and holidays never show.
 
-const HISTORY_RANGES = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk' };
+const HISTORY_RANGES = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk', '10y': '1wk', max: '1mo' };
 
 async function priceHistory(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
