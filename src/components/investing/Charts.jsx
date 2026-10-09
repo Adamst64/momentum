@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
-import { formatShortDate } from '../../utils/dateUtils';
+import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
 import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
 
@@ -47,7 +47,7 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
         {hp ? (
           <>
             <div style={{ color: T.text, fontSize: 15, fontWeight: 700 }}>{money(hp.value, hide)}</div>
-            <div>{hp.label || formatShortDate(hp.date)}</div>
+            <div>{hp.label || formatDateYear(hp.date)}</div>
           </>
         ) : (
           <div style={{ paddingTop: 8 }}>Touch the chart to see values</div>

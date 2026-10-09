@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { T } from '../../theme';
-import { formatShortDate } from '../../utils/dateUtils';
+import { formatDateYear } from '../../utils/dateUtils';
 import { money, signedMoney, pct } from '../../utils/investing';
 import { Chips, gainColor } from './ui';
 import { ValueChart } from './Charts';
@@ -47,9 +47,9 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
           <>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(shown.value, hide)}</div>
             <div style={{ fontSize: 12, color: T.muted }}>
-              {scrub ? formatShortDate(scrub.date) : 'Now'}
+              {scrub ? formatDateYear(scrub.date) : 'Now'}
               {change !== null && shown !== first && (
-                <span style={{ color: gainColor(change) }}> · {signedMoney(change, hide)} ({pct(change / first.value)}) since {formatShortDate(first.date)}</span>
+                <span style={{ color: gainColor(change) }}> · {signedMoney(change, hide)} ({pct(change / first.value)}) since {formatDateYear(first.date)}</span>
               )}
             </div>
           </>

@@ -72,7 +72,10 @@ function AnalystTargets({ a, price, hide }) {
           )}
         </>
       ) : (
-        <div style={{ fontSize: 13, color: T.muted }}>No price target available — ratings only.</div>
+        <div style={{ fontSize: 13, color: T.muted }}>
+          No price target available — ratings only.
+          {a.tried?.length > 0 && <div style={{ fontSize: 10, marginTop: 4 }}>Tried {a.tried.join(' · ')}</div>}
+        </div>
       )}
       {total > 0 && (
         <div style={{ marginTop: 14 }}>

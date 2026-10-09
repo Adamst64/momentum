@@ -31,6 +31,11 @@ export function formatShortDate(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// "Mar 14, 2023" — for charts, where the year matters
+export function formatDateYear(dateStr) {
+  return parseDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 export function formatLongDate(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',

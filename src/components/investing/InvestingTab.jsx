@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { toDateStr, formatShortDate } from '../../utils/dateUtils';
+import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { money, signedMoney, pct, qtyFmt, soldPositions, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
@@ -202,9 +202,9 @@ export default function InvestingTab({ hook, userId }) {
 
         {scrub ? (
           <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
-            {scrub.label || formatShortDate(scrub.date)}
+            {scrub.label || formatDateYear(scrub.date)}
             {scrubChange !== null && first !== scrub && (
-              <span style={{ color: gainColor(scrubChange) }}> · {signedMoney(scrubChange, hide)} since {formatShortDate(first.date)}</span>
+              <span style={{ color: gainColor(scrubChange) }}> · {signedMoney(scrubChange, hide)} since {formatDateYear(first.date)}</span>
             )}
           </div>
         ) : (

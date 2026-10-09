@@ -179,7 +179,8 @@ async function refreshPrices(db, request) {
 //  1. Yahoo quoteSummary (unofficial, keyless): mean/high/low target, analyst
 //     count, rating and Buy/Hold/Sell counts. Needs a session cookie + "crumb".
 //  2. Finnhub /stock/recommendation (free tier): Buy/Hold/Sell counts only.
-//  3. Alpha Vantage OVERVIEW (free key at config/alphavantage { key }, ~25/day):
+//  3. Nasdaq.com analyst endpoint (keyless): consensus target and counts.
+//  4. Alpha Vantage OVERVIEW (free key at config/alphavantage { key }, ~25/day):
 //     mean target and rating counts — only used when Yahoo gives no target.
 
 let yahooSession = null; // { cookie, crumb, at }
@@ -229,7 +230,8 @@ async function alphaVantageAnalyst(sym, avKey) {
   const res = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(avKey)}`);
   if (!res.ok) throw new Error(`Alpha Vantage ${res.status}`);
   const o = await res.json();
-  if (!o || o.Note || o.Information || !o.Symbol) return null; // rate limit or unknown symbol
+  if (o?.Note || o?.Information) throw new Error((o.Note || o.Information).slice(0, 60)); // rate limit / bad key
+  if (!o || !o.Symbol) return null; // unknown symbol
   const n = v => (v && v !== 'None' && v !== '-' ? Number(v) : null);
   return {
     targetMean: n(o.AnalystTargetPrice),
@@ -240,36 +242,91 @@ async function alphaVantageAnalyst(sym, avKey) {
   };
 }
 
-// Fields for the invAssets doc: { analyst: {...} | null, analystAt }
+// Nasdaq.com's own analyst endpoint (keyless, unofficial): consensus target
+// with low/high and Buy/Hold/Sell counts. Wants browser-like headers.
+const num = v => {
+  if (v === null || v === undefined || v === '' || v === 'N/A') return null;
+  const n = Number(String(v).replace(/[$,%\s]/g, ''));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+async function nasdaqAnalyst(sym) {
+  const res = await fetch(`https://api.nasdaq.com/api/analyst/${encodeURIComponent(sym)}/targetprice`, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'en-US,en;q=0.9',
+      Origin: 'https://www.nasdaq.com',
+      Referer: 'https://www.nasdaq.com/',
+    },
+  });
+  if (!res.ok) throw new Error(`Nasdaq ${res.status}`);
+  const c = (await res.json())?.data?.consensusOverview;
+  if (!c) return null;
+  const buy = num(c.buy) || 0, hold = num(c.hold) || 0, sell = num(c.sell) || 0;
+  return {
+    targetMean: num(c.priceTarget), targetHigh: num(c.highPriceTarget), targetLow: num(c.lowPriceTarget),
+    counts: buy + hold + sell ? { strongBuy: 0, buy, hold, sell, strongSell: 0 } : null,
+  };
+}
+
+// Fields for the invAssets doc: { analyst: {...} | null, analystAt }.
+// analyst.tried notes what each source did, shown under the section so a
+// failing source is visible in the app.
 async function fetchAnalyst(db, sym, key) {
   let out = { targetMean: null, targetHigh: null, targetLow: null, analysts: null, rating: null, counts: null, source: null };
+  const tried = [];
+  const note = (name, e, gotTarget) => tried.push(`${name}: ${e ? e.message || 'failed' : gotTarget ? 'ok' : 'no target'}`);
+
   try {
     const y = await yahooAnalyst(sym);
     out = { ...out, ...y, source: y.targetMean ? 'Yahoo Finance' : null };
-  } catch (e) { console.warn(`Yahoo analyst data for ${sym} failed:`, e.message); }
+    note('Yahoo', null, !!y.targetMean);
+  } catch (e) { note('Yahoo', e); }
 
-  if (!hasCounts(out.counts) && key) {
-    try { out.counts = await finnhubCounts(sym, key); } catch { /* optional */ }
+  if (!out.targetMean) {
+    try {
+      const n = await nasdaqAnalyst(sym);
+      if (n?.targetMean) Object.assign(out, { targetMean: n.targetMean, targetHigh: n.targetHigh, targetLow: n.targetLow, source: 'Nasdaq' });
+      if (n && !hasCounts(out.counts) && hasCounts(n.counts)) out.counts = n.counts;
+      note('Nasdaq', null, !!n?.targetMean);
+    } catch (e) { note('Nasdaq', e); }
   }
+
   if (!out.targetMean) {
     const avSnap = await db.doc('config/alphavantage').get();
-    const avKey = avSnap.exists ? avSnap.data().key : null;
-    if (avKey) {
+    const avKey = avSnap.exists ? String(avSnap.data().key || '').trim() : '';
+    if (!avKey) tried.push('Alpha Vantage: no key');
+    else {
       try {
         const av = await alphaVantageAnalyst(sym, avKey);
         if (av?.targetMean) { out.targetMean = av.targetMean; out.source = 'Alpha Vantage'; }
         if (av && !hasCounts(out.counts) && hasCounts(av.counts)) out.counts = av.counts;
-      } catch (e) { console.warn(`Alpha Vantage for ${sym} failed:`, e.message); }
+        note('Alpha Vantage', null, !!av?.targetMean);
+      } catch (e) { note('Alpha Vantage', e); }
     }
+  }
+
+  if (!hasCounts(out.counts) && key) {
+    try { out.counts = await finnhubCounts(sym, key); } catch { /* optional */ }
   }
   if (!hasCounts(out.counts)) out.counts = null;
   if (!out.analysts && out.counts) {
     const c = out.counts;
     out.analysts = c.strongBuy + c.buy + c.hold + c.sell + c.strongSell;
   }
+  if (!out.targetMean) console.warn(`No analyst target for ${sym}:`, tried.join('; '));
+  out.tried = tried;
   const any = out.targetMean || out.counts;
   return { analyst: any ? out : null, analystAt: new Date().toISOString() };
 }
+
+// Analyst data is refreshed daily, but retried after 2 hours when the last try found no target
+// (results saved before sources were noted in `tried` are retried right away)
+const analystStale = a => {
+  if (a.analyst && !a.analyst.targetMean && !a.analyst.tried) return true;
+  return isStale(a.analystAt, a.analyst?.targetMean ? HOURS(20) : HOURS(2));
+};
 
 // ── Callable: details for one stock (stats, past earnings, analysts) ─────────
 
@@ -312,7 +369,7 @@ async function stockInfo(db, request) {
   if (isStale(cached.earningsCheckedAt, HOURS(20))) {
     try { Object.assign(update, await fetchNextEarnings(sym, key)); } catch { /* optional */ }
   }
-  if (isStale(cached.analystAt, HOURS(20))) {
+  if (analystStale(cached)) {
     try { Object.assign(update, await fetchAnalyst(db, sym, key)); } catch { /* optional */ }
   }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
@@ -398,7 +455,7 @@ async function maybeSnapshot(db, userDoc, key, et) {
     } catch { /* benchmark is optional */ }
 
     // Analyst targets for holdings and the watchlist, once a day (they show in the lists)
-    const followed = assets.filter(x => x.source === 'finnhub' && (held.includes(x.symbol) || x.watch) && isStale(x.analystAt, HOURS(20)));
+    const followed = assets.filter(x => x.source === 'finnhub' && (held.includes(x.symbol) || x.watch) && analystStale(x));
     for (const a of followed.slice(0, 25)) {
       try { await userRef.collection('invAssets').doc(a.symbol).set(await fetchAnalyst(db, a.symbol, key), { merge: true }); }
       catch { /* optional */ }
