@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
@@ -41,6 +41,7 @@ const writePrefs = v => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(v
 
 // Home-screen shortcuts and links can open the app at ?action=<one of these>
 const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'review'];
+const REVIEW_OPENED_KEY = 'momentum_review_opened_for';
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
@@ -206,6 +207,35 @@ export default function App() {
       window.removeEventListener('pageshow', onVisible);
     };
   }, []);
+
+  // Opening the app soon after the review reminder opens the review, once per
+  // reminder. iOS doesn't reliably tell the app which notification was tapped
+  // (especially when the app was closed), so this doesn't depend on the tap.
+  const reviewSentAt = dailyReview?.lastSentAt;
+  const visibleSince = useRef(Date.now());
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') visibleSince.current = Date.now(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+  useEffect(() => {
+    if (!reviewSentAt) return;
+    const check = () => {
+      if (document.visibilityState !== 'visible') return;
+      if (Date.now() - reviewSentAt > 30 * 60 * 1000) return;
+      // Only right after coming forward (the reminder's data can arrive a few seconds
+      // later), never in the middle of using the app
+      if (Date.now() - visibleSince.current > 15 * 1000) return;
+      try {
+        if (localStorage.getItem(REVIEW_OPENED_KEY) === String(reviewSentAt)) return;
+        localStorage.setItem(REVIEW_OPENED_KEY, String(reviewSentAt));
+      } catch { /* storage unavailable */ }
+      setShowReview(true);
+    };
+    check();
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, [reviewSentAt]);
 
   const saveDailyReview = async (prefs) => {
     await setDoc(doc(db, 'users', userId), { preferences: { dailyReview: prefs } }, { merge: true });

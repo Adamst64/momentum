@@ -143,7 +143,8 @@ async function sendPush(db, messaging, uid, tokens, title, body, link = APP_URL)
   }
 }
 
-// Evening review reminder: users/{uid}.preferences.dailyReview = { enabled, time, timezone, lastSentDate }
+// Evening review reminder: users/{uid}.preferences.dailyReview = { enabled, time, timezone, lastSentDate, lastSentAt }
+// (the app opens the review when it comes forward soon after lastSentAt)
 async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
   const pref = userDoc.data().preferences?.dailyReview;
   if (!pref?.enabled || !pref.time) return;
@@ -151,7 +152,10 @@ async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
   if (!isDue(pref.time, now.minutes) || pref.lastSentDate === now.today) return;
 
   // Mark first so an overlapping run can't double-send
-  await userDoc.ref.update({ 'preferences.dailyReview.lastSentDate': now.today });
+  await userDoc.ref.update({
+    'preferences.dailyReview.lastSentDate': now.today,
+    'preferences.dailyReview.lastSentAt': Date.now(),
+  });
   await sendPush(db, messaging, userDoc.id, tokens,
     '🌙 Daily review', 'Take a minute to look back on today and plan tomorrow.',
     APP_URL + '?action=review');
