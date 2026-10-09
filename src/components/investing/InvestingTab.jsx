@@ -280,6 +280,7 @@ export default function InvestingTab({ hook, userId }) {
       )}
 
       {view === 'portfolio' && txs.length > 0 && (
+        <>
         <Card style={{ padding: '6px 16px' }}>
           {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
           {portfolio.holdings.map((h, i) => {
@@ -331,13 +332,12 @@ export default function InvestingTab({ hook, userId }) {
             );
           })}
         </Card>
+        {sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
+        </>
       )}
 
       {view === 'watchlist' && (
-        <>
-          <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
-          {sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
-        </>
+        <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
       )}
 
       {view === 'insights' && txs.length > 0 && (
