@@ -174,7 +174,104 @@ async function refreshPrices(db, request) {
   return { prices, notFound, updatedAt: now };
 }
 
-// ── Callable: details for one stock (stats, past earnings) ───────────────────
+// ── Analyst price targets and ratings ────────────────────────────────────────
+// Three free sources, best first:
+//  1. Yahoo quoteSummary (unofficial, keyless): mean/high/low target, analyst
+//     count, rating and Buy/Hold/Sell counts. Needs a session cookie + "crumb".
+//  2. Finnhub /stock/recommendation (free tier): Buy/Hold/Sell counts only.
+//  3. Alpha Vantage OVERVIEW (free key at config/alphavantage { key }, ~25/day):
+//     mean target and rating counts — only used when Yahoo gives no target.
+
+let yahooSession = null; // { cookie, crumb, at }
+
+async function getYahooSession() {
+  if (yahooSession && Date.now() - yahooSession.at < HOURS(6)) return yahooSession;
+  const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15' };
+  const first = await fetch('https://fc.yahoo.com', { headers: UA, redirect: 'manual' });
+  const setCookie = typeof first.headers.getSetCookie === 'function' ? first.headers.getSetCookie() : [first.headers.get('set-cookie') || ''];
+  const cookie = setCookie.map(c => c.split(';')[0]).filter(Boolean).join('; ');
+  if (!cookie) throw new Error('Yahoo cookie missing');
+  const res = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { ...UA, Cookie: cookie } });
+  const crumb = (await res.text()).trim();
+  if (!res.ok || !crumb || crumb.includes('<')) throw new Error(`Yahoo crumb ${res.status}`);
+  yahooSession = { cookie, crumb, at: Date.now(), UA };
+  return yahooSession;
+}
+
+const raw = v => (v && typeof v === 'object' ? v.raw ?? null : v ?? null);
+const counts = t => (t ? {
+  strongBuy: t.strongBuy || 0, buy: t.buy || 0, hold: t.hold || 0, sell: t.sell || 0, strongSell: t.strongSell || 0,
+} : null);
+const hasCounts = c => c && c.strongBuy + c.buy + c.hold + c.sell + c.strongSell > 0;
+
+async function yahooAnalyst(sym) {
+  const s = await getYahooSession();
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}?modules=financialData,recommendationTrend&crumb=${encodeURIComponent(s.crumb)}`;
+  const res = await fetch(url, { headers: { ...s.UA, Cookie: s.cookie } });
+  if (res.status === 401 || res.status === 403) { yahooSession = null; throw new Error(`Yahoo ${res.status}`); }
+  if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+  const r = (await res.json())?.quoteSummary?.result?.[0] || {};
+  const f = r.financialData || {};
+  const trend = (r.recommendationTrend?.trend || []).find(t => t.period === '0m');
+  return {
+    targetMean: raw(f.targetMeanPrice), targetHigh: raw(f.targetHighPrice), targetLow: raw(f.targetLowPrice),
+    analysts: raw(f.numberOfAnalystOpinions), rating: f.recommendationKey && f.recommendationKey !== 'none' ? f.recommendationKey : null,
+    counts: counts(trend),
+  };
+}
+
+async function finnhubCounts(sym, key) {
+  const rows = await finnhub(`stock/recommendation?symbol=${encodeURIComponent(sym)}`, key);
+  return Array.isArray(rows) && rows.length ? counts(rows[0]) : null;
+}
+
+async function alphaVantageAnalyst(sym, avKey) {
+  const res = await fetch(`https://www.alphavantage.co/query?function=OVERVIEW&symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(avKey)}`);
+  if (!res.ok) throw new Error(`Alpha Vantage ${res.status}`);
+  const o = await res.json();
+  if (!o || o.Note || o.Information || !o.Symbol) return null; // rate limit or unknown symbol
+  const n = v => (v && v !== 'None' && v !== '-' ? Number(v) : null);
+  return {
+    targetMean: n(o.AnalystTargetPrice),
+    counts: counts({
+      strongBuy: n(o.AnalystRatingStrongBuy), buy: n(o.AnalystRatingBuy), hold: n(o.AnalystRatingHold),
+      sell: n(o.AnalystRatingSell), strongSell: n(o.AnalystRatingStrongSell),
+    }),
+  };
+}
+
+// Fields for the invAssets doc: { analyst: {...} | null, analystAt }
+async function fetchAnalyst(db, sym, key) {
+  let out = { targetMean: null, targetHigh: null, targetLow: null, analysts: null, rating: null, counts: null, source: null };
+  try {
+    const y = await yahooAnalyst(sym);
+    out = { ...out, ...y, source: y.targetMean ? 'Yahoo Finance' : null };
+  } catch (e) { console.warn(`Yahoo analyst data for ${sym} failed:`, e.message); }
+
+  if (!hasCounts(out.counts) && key) {
+    try { out.counts = await finnhubCounts(sym, key); } catch { /* optional */ }
+  }
+  if (!out.targetMean) {
+    const avSnap = await db.doc('config/alphavantage').get();
+    const avKey = avSnap.exists ? avSnap.data().key : null;
+    if (avKey) {
+      try {
+        const av = await alphaVantageAnalyst(sym, avKey);
+        if (av?.targetMean) { out.targetMean = av.targetMean; out.source = 'Alpha Vantage'; }
+        if (av && !hasCounts(out.counts) && hasCounts(av.counts)) out.counts = av.counts;
+      } catch (e) { console.warn(`Alpha Vantage for ${sym} failed:`, e.message); }
+    }
+  }
+  if (!hasCounts(out.counts)) out.counts = null;
+  if (!out.analysts && out.counts) {
+    const c = out.counts;
+    out.analysts = c.strongBuy + c.buy + c.hold + c.sell + c.strongSell;
+  }
+  const any = out.targetMean || out.counts;
+  return { analyst: any ? out : null, analystAt: new Date().toISOString() };
+}
+
+// ── Callable: details for one stock (stats, past earnings, analysts) ─────────
 
 async function stockInfo(db, request) {
   const uid = request.auth?.uid;
@@ -215,6 +312,9 @@ async function stockInfo(db, request) {
   if (isStale(cached.earningsCheckedAt, HOURS(20))) {
     try { Object.assign(update, await fetchNextEarnings(sym, key)); } catch { /* optional */ }
   }
+  if (isStale(cached.analystAt, HOURS(20))) {
+    try { Object.assign(update, await fetchAnalyst(db, sym, key)); } catch { /* optional */ }
+  }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
 
   const merged = { ...cached, ...update };
@@ -222,6 +322,7 @@ async function stockInfo(db, request) {
     metrics: merged.metrics || null,
     earningsHistory: merged.earningsHistory || [],
     nextEarnings: merged.nextEarnings || null,
+    analyst: merged.analyst || null,
     profile: { name: merged.name || null, industry: merged.industry || null, logo: merged.logo || null, weburl: merged.weburl || null },
   };
 }
@@ -295,6 +396,13 @@ async function maybeSnapshot(db, userDoc, key, et) {
           { symbol: BENCHMARK, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: new Date().toISOString() }, { merge: true });
       }
     } catch { /* benchmark is optional */ }
+
+    // Analyst targets for holdings and the watchlist, once a day (they show in the lists)
+    const followed = assets.filter(x => x.source === 'finnhub' && (held.includes(x.symbol) || x.watch) && isStale(x.analystAt, HOURS(20)));
+    for (const a of followed.slice(0, 25)) {
+      try { await userRef.collection('invAssets').doc(a.symbol).set(await fetchAnalyst(db, a.symbol, key), { merge: true }); }
+      catch { /* optional */ }
+    }
 
     // Keep upcoming earnings dates fresh for holdings
     for (const a of assets.filter(x => x.source === 'finnhub' && held.includes(x.symbol) && isStale(x.earningsCheckedAt, HOURS(20)))) {

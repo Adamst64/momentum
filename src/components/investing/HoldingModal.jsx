@@ -5,7 +5,7 @@ import { formatShortDate } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
-import StockInfo from './StockInfo';
+import StockInfo, { ANALYST_COLOR } from './StockInfo';
 import StockChart from './StockChart';
 
 const timeAgo = iso => {
@@ -131,6 +131,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             held && { value: h.avgCost, label: 'Avg cost', color: T.muted },
             sold && { value: sold.avgSell, label: 'Sold at', color: T.khaki },
             asset.priceTarget && { value: asset.priceTarget, label: 'Target', color: '#5AC8FA' },
+            asset.analyst?.targetMean && { value: asset.analyst.targetMean, label: 'Analysts', color: ANALYST_COLOR },
           ].filter(Boolean)}
           markers={sold ? [{ date: sold.date, label: 'Sold' }] : []}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}

@@ -20,6 +20,79 @@ export function earningsLabel(next) {
   return `${d}${HOUR_LABEL[next.hour] ? ` · ${HOUR_LABEL[next.hour]}` : ''}`;
 }
 
+export const ANALYST_COLOR = '#BF5AF2';
+
+const RATING_LABEL = { strong_buy: 'Strong buy', buy: 'Buy', hold: 'Hold', underperform: 'Underperform', sell: 'Sell', strongbuy: 'Strong buy' };
+const COUNT_ROWS = [
+  ['strongBuy', 'Strong buy', '#30D158'],
+  ['buy', 'Buy', '#7BC96F'],
+  ['hold', 'Hold', '#8E8E93'],
+  ['sell', 'Sell', '#FF9F0A'],
+  ['strongSell', 'Strong sell', '#FF453A'],
+];
+
+// Wall Street consensus: average target with its low–high range, and the rating mix
+function AnalystTargets({ a, price, hide }) {
+  const upside = a.targetMean && price ? a.targetMean / price - 1 : null;
+  const lo = Math.min(a.targetLow ?? a.targetMean ?? price, price ?? Infinity);
+  const hi = Math.max(a.targetHigh ?? a.targetMean ?? price, price ?? -Infinity);
+  const at = v => (hi > lo ? ((v - lo) / (hi - lo)) * 100 : 50);
+  const c = a.counts;
+  const total = c ? COUNT_ROWS.reduce((t, [k]) => t + (c[k] || 0), 0) : 0;
+  return (
+    <div>
+      <SectionTitle>Analyst targets</SectionTitle>
+      {a.targetMean ? (
+        <>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 20, fontWeight: 800, color: ANALYST_COLOR }}>{money(a.targetMean, hide)}</span>
+            {upside !== null && (
+              <span style={{ fontSize: 13, fontWeight: 600, color: upside >= 0 ? T.green : T.red }}>
+                {upside >= 0 ? '+' : ''}{(upside * 100).toFixed(1)}% {upside >= 0 ? 'upside' : 'downside'}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+            Average target{a.analysts ? ` from ${a.analysts} analyst${a.analysts !== 1 ? 's' : ''}` : ''}
+            {a.rating && <> · consensus <b style={{ color: T.text }}>{RATING_LABEL[a.rating] || a.rating}</b></>}
+          </div>
+          {a.targetLow && a.targetHigh && price && (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ position: 'relative', height: 6, borderRadius: 3, background: T.subtle }}>
+                <div style={{ position: 'absolute', left: `${at(a.targetLow)}%`, right: `${100 - at(a.targetHigh)}%`, top: 0, bottom: 0, borderRadius: 3, background: ANALYST_COLOR, opacity: 0.35 }} />
+                <div title="Average target" style={{ position: 'absolute', left: `calc(${at(a.targetMean)}% - 1.5px)`, top: -4, width: 3, height: 14, borderRadius: 2, background: ANALYST_COLOR }} />
+                <div title="Today" style={{ position: 'absolute', left: `calc(${at(price)}% - 6px)`, top: -3, width: 12, height: 12, borderRadius: '50%', background: T.text, border: `2px solid ${T.card}` }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted, marginTop: 6 }}>
+                <span>Low {money(a.targetLow, hide)}</span>
+                <span>Today {money(price, hide)}</span>
+                <span>High {money(a.targetHigh, hide)}</span>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ fontSize: 13, color: T.muted }}>No price target available — ratings only.</div>
+      )}
+      {total > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: 'flex', height: 8, borderRadius: 4, overflow: 'hidden', gap: 2 }}>
+            {COUNT_ROWS.filter(([k]) => c[k] > 0).map(([k, , color]) => (
+              <div key={k} style={{ flex: c[k], background: color }} />
+            ))}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11, color: T.muted, marginTop: 6 }}>
+            {COUNT_ROWS.filter(([k]) => c[k] > 0).map(([k, label, color]) => (
+              <span key={k}><span style={{ color, fontWeight: 700 }}>{c[k]}</span> {label}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      {a.source && <div style={{ fontSize: 10, color: T.muted, marginTop: 8 }}>Source: {a.source}. Updated daily; not advice.</div>}
+    </div>
+  );
+}
+
 // Stats and earnings for one stock, loaded when the holding screen opens
 export default function StockInfo({ symbol, price, stockInfo, hide }) {
   const [data, setData]   = useState(null);
@@ -85,6 +158,8 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
           </div>
         </div>
       )}
+
+      {data.analyst && <AnalystTargets a={data.analyst} price={price} hide={hide} />}
 
       <div>
         <SectionTitle>Earnings</SectionTitle>

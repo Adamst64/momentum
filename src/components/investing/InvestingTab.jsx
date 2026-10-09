@@ -9,6 +9,7 @@ import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, Monthl
 import TxModal from './TxModal';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
+import { ANALYST_COLOR } from './StockInfo';
 
 const HIDE_KEY = 'momentum_hide_amounts';
 const readHide = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
@@ -294,7 +295,7 @@ export default function InvestingTab({ hook, userId }) {
                     <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
                     </div>
-                    <TargetLine target={assets[h.symbol]?.priceTarget} price={h.price} hide={hide} />
+                    <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
                   </div>
                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
                     <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
@@ -451,14 +452,24 @@ export default function InvestingTab({ hook, userId }) {
   );
 }
 
-// "Target $400 · +49%" under a holding or watched stock
-function TargetLine({ target, price, hide }) {
-  if (!(target > 0)) return null;
-  const gap = price > 0 ? target / price - 1 : null;
-  const hit = gap !== null && Math.abs(gap) < 0.005;
+// "Target $400 +49% · Analysts $350 +31%" under a holding or watched stock
+function TargetLine({ target, analyst, price, hide }) {
+  if (!(target > 0) && !(analyst > 0)) return null;
+  const part = (label, v, color) => {
+    const gap = price > 0 ? v / price - 1 : null;
+    const hit = gap !== null && Math.abs(gap) < 0.005;
+    return (
+      <span style={{ color }}>
+        {label} {hide ? '••••' : `$${Math.round(v).toLocaleString('en-US')}`}
+        {gap !== null && (hit ? ' reached' : ` ${gap > 0 ? '+' : ''}${(gap * 100).toFixed(0)}%`)}
+      </span>
+    );
+  };
   return (
-    <div style={{ fontSize: 11, color: '#5AC8FA', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-      Target {hide ? '••••' : `$${Math.round(target).toLocaleString('en-US')}`}{gap !== null && (hit ? ' · reached' : ` · ${gap > 0 ? '+' : ''}${(gap * 100).toFixed(0)}%`)}
+    <div style={{ fontSize: 11, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+      {target > 0 && part('Target', target, '#5AC8FA')}
+      {target > 0 && analyst > 0 && <span style={{ color: T.muted }}> · </span>}
+      {analyst > 0 && part('Analysts', analyst, ANALYST_COLOR)}
     </div>
   );
 }
@@ -584,7 +595,7 @@ function Watchlist({ hook, items, hide, onOpen }) {
             <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
               <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
               {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
-              <TargetLine target={a.priceTarget} price={a.price} hide={hide} />
+              <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
             </button>
             <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
               <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
