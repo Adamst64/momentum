@@ -41,6 +41,17 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
   };
 
   const hp = hover !== null ? points[hover] : null;
+
+  // Year marks along the bottom for charts spanning 2+ years (at most ~6 labels)
+  const yearTicks = [];
+  const firstYear = Number(points[0].date.slice(0, 4)), lastYear = Number(points[points.length - 1].date.slice(0, 4));
+  if (lastYear - firstYear >= 2) {
+    const step = Math.ceil((lastYear - firstYear) / 6);
+    for (let i = 1; i < points.length; i++) {
+      const yr = Number(points[i].date.slice(0, 4));
+      if (yr !== Number(points[i - 1].date.slice(0, 4)) && (yr - firstYear) % step === 0) yearTicks.push({ year: yr, i });
+    }
+  }
   return (
     <div style={{ position: 'relative' }}>
       {!onScrub && <div style={{ height: 34, fontSize: 12, color: T.muted }}>
@@ -84,13 +95,27 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
             </g>
           );
         })}
+        {yearTicks.map(t => (
+          <g key={t.year}>
+            <line x1={x(t.i)} x2={x(t.i)} y1={H - 12} y2={H} stroke={T.muted} strokeWidth={0.5} opacity={0.5} />
+            <text x={x(t.i) + 2} y={H - 3} fontSize="8" fill={T.muted}>{t.year}</text>
+          </g>
+        ))}
         <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        {hover !== null && (
-          <>
-            <line x1={x(hover)} x2={x(hover)} y1={0} y2={H} stroke={T.muted} strokeWidth={1} strokeDasharray="3 3" />
-            <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={color} stroke={T.card} strokeWidth={2} />
-          </>
-        )}
+        {hover !== null && (() => {
+          // Date pill at the top of the crosshair, flipped to stay inside the chart
+          const label = hp.label || formatDateYear(hp.date);
+          const w = label.length * 5.2 + 10;
+          const px = Math.min(Math.max(x(hover) - w / 2, 0), W - w);
+          return (
+            <>
+              <line x1={x(hover)} x2={x(hover)} y1={14} y2={H} stroke={T.muted} strokeWidth={1} strokeDasharray="3 3" />
+              <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={color} stroke={T.card} strokeWidth={2} />
+              <rect x={px} y={0} width={w} height={13} rx={6.5} fill={T.subtle} />
+              <text x={px + w / 2} y={9.5} textAnchor="middle" fontSize="9" fontWeight="700" fill={T.text}>{label}</text>
+            </>
+          );
+        })()}
       </svg>
     </div>
   );

@@ -31,6 +31,28 @@ const COUNT_ROWS = [
   ['strongSell', 'Strong sell', '#FF453A'],
 ];
 
+// Low/High under the ends of the purple range (where they actually sit on the
+// bar), or one combined label when the range is too narrow for two
+function RangeLabels({ lowPos, highPos, low, high }) {
+  const style = pos => ({
+    position: 'absolute', whiteSpace: 'nowrap',
+    ...(pos < 12 ? { left: `${pos}%` } : pos > 88 ? { right: `${100 - pos}%` } : { left: `${pos}%`, transform: 'translateX(-50%)' }),
+  });
+  const narrow = highPos - lowPos < 34;
+  return (
+    <div style={{ position: 'relative', height: 16, fontSize: 11, color: T.muted, marginTop: 6 }}>
+      {narrow ? (
+        <span style={style((lowPos + highPos) / 2)}>Low {low} – High {high}</span>
+      ) : (
+        <>
+          <span style={style(lowPos)}>Low {low}</span>
+          <span style={style(highPos)}>High {high}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
 // Wall Street consensus: average target with its low–high range, and the rating mix
 function AnalystTargets({ a, price, hide }) {
   const upside = a.targetMean && price ? a.targetMean / price - 1 : null;
@@ -63,10 +85,17 @@ function AnalystTargets({ a, price, hide }) {
                 <div title="Average target" style={{ position: 'absolute', left: `calc(${at(a.targetMean)}% - 1.5px)`, top: -4, width: 3, height: 14, borderRadius: 2, background: ANALYST_COLOR }} />
                 <div title="Today" style={{ position: 'absolute', left: `calc(${at(price)}% - 6px)`, top: -3, width: 12, height: 12, borderRadius: '50%', background: T.text, border: `2px solid ${T.card}` }} />
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: T.muted, marginTop: 6 }}>
-                <span>Low {money(a.targetLow, hide)}</span>
-                <span>Today {money(price, hide)}</span>
-                <span>High {money(a.targetHigh, hide)}</span>
+              <RangeLabels lowPos={at(a.targetLow)} highPos={at(a.targetHigh)} low={money(a.targetLow, hide)} high={money(a.targetHigh, hide)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: T.muted, marginTop: 8 }}>
+                <span style={{ width: 10, height: 10, borderRadius: '50%', background: T.text, flexShrink: 0 }} />
+                <span>
+                  Today <b style={{ color: T.text }}>{money(price, hide)}</b> · {
+                    price < a.targetLow ? `${((1 - price / a.targetLow) * 100).toFixed(0)}% below the lowest target`
+                    : price > a.targetHigh ? `${((price / a.targetHigh - 1) * 100).toFixed(0)}% above the highest target`
+                    : price < a.targetMean ? 'between the low and the average target'
+                    : 'between the average and the high target'
+                  }
+                </span>
               </div>
             </div>
           )}
