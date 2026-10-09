@@ -12,11 +12,19 @@ import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
 // markers: vertical lines [{ date, label }] at the first point on/after date.
 // trades: buy/sell dots [{ id, date, price, type }] drawn at the trade price;
 // a tap (not a drag) on or next to one calls onTradeTap(id), elsewhere onTradeTap(null).
-export function ValueChart({ points, hide, onScrub, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText }) {
+// onRange({ from, to } | null): two fingers on the chart select the period between them.
+export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText }) {
   const [hover, setHoverState] = useState(null);
   const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
+  const [range, setRangeState] = useState(null); // [fromIndex, toIndex]
+  const setRange = r => {
+    setRangeState(r);
+    if (onRange) onRange(r ? { from: points[r[0]], to: points[r[1]] } : null);
+  };
   const ref = useRef(null);
   const downAt = useRef(null);
+  const fingers = useRef(new Map()); // pointerId → clientX
+  const pinching = useRef(false);
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
@@ -50,12 +58,41 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], tra
     const scale = Math.min(r.width / W, r.height / H);
     return (clientX - r.left - (r.width - W * scale) / 2) / scale;
   };
-  const pick = (clientX) => {
+  const indexAt = clientX => {
     const i = Math.round(((toChartX(clientX) - PAD) / (W - PAD * 2)) * (points.length - 1));
-    setHover(Math.max(0, Math.min(points.length - 1, i)));
+    return Math.max(0, Math.min(points.length - 1, i));
   };
-  const onDown = e => { downAt.current = { x: e.clientX, y: e.clientY }; pick(e.clientX); };
+  const pick = clientX => setHover(indexAt(clientX));
+  const updateRange = () => {
+    const [a, b] = [...fingers.current.values()].slice(0, 2).map(indexAt).sort((m, n) => m - n);
+    if (a !== b) setRange([a, b]);
+  };
+  const onDown = e => {
+    fingers.current.set(e.pointerId, e.clientX);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+    if (fingers.current.size >= 2) {
+      pinching.current = true;
+      downAt.current = null; // a pinch is never a tap
+      setHover(null);
+      updateRange();
+      return;
+    }
+    downAt.current = { x: e.clientX, y: e.clientY };
+    pick(e.clientX);
+  };
+  const onMove = e => {
+    if (fingers.current.has(e.pointerId)) fingers.current.set(e.pointerId, e.clientX);
+    if (fingers.current.size >= 2) updateRange();
+    else if (!pinching.current) pick(e.clientX);
+  };
   const onUp = e => {
+    fingers.current.delete(e.pointerId);
+    if (pinching.current) {
+      // Lifting either finger ends the selection (like Robinhood)
+      if (fingers.current.size < 2) setRange(null);
+      if (fingers.current.size === 0) { pinching.current = false; setHover(null); }
+      return;
+    }
     const d = downAt.current;
     downAt.current = null;
     if (onTradeTap && d && Math.abs(e.clientX - d.x) < 8 && Math.abs(e.clientY - d.y) < 8) {
@@ -97,11 +134,11 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], tra
         ref={ref}
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: H, display: 'block', touchAction: 'none' }}
-        onPointerMove={e => pick(e.clientX)}
+        onPointerMove={onMove}
         onPointerDown={onDown}
-        onPointerLeave={() => setHover(null)}
+        onPointerLeave={() => { if (!fingers.current.size) setHover(null); }}
         onPointerUp={onUp}
-        onPointerCancel={() => setHover(null)}
+        onPointerCancel={e => { fingers.current.delete(e.pointerId); pinching.current = fingers.current.size > 0 && pinching.current; setRange(null); setHover(null); }}
         role="img"
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >
@@ -143,7 +180,33 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], tra
             </g>
           );
         })}
-        {hover !== null && (() => {
+        {range && (() => {
+          // Two-finger period: shaded span, a line and date pill at each end
+          const [a, b] = range;
+          const pa = points[a], pb = points[b];
+          const up2 = pb.value >= pa.value;
+          const c2 = up2 ? T.oliveLight : T.red;
+          const la = formatDateYear(pa.date), lb = formatDateYear(pb.date);
+          const wa = la.length * 5.2 + 10, wb = lb.length * 5.2 + 10;
+          const xa = Math.max(0, Math.min(x(a) - wa, W - wa - wb));
+          const xb = Math.min(W - wb, Math.max(x(b), xa + wa + 2));
+          return (
+            <>
+              <rect x={x(a)} y={14} width={x(b) - x(a)} height={H - 14} fill={c2} opacity={0.12} />
+              {[a, b].map(i => (
+                <g key={i}>
+                  <line x1={x(i)} x2={x(i)} y1={14} y2={H} stroke={T.muted} strokeWidth={1} strokeDasharray="3 3" />
+                  <circle cx={x(i)} cy={y(points[i].value)} r={4.5} fill={c2} stroke={T.card} strokeWidth={2} />
+                </g>
+              ))}
+              <rect x={xa} y={0} width={wa} height={13} rx={6.5} fill={T.subtle} />
+              <text x={xa + wa / 2} y={9.5} textAnchor="middle" fontSize="9" fontWeight="700" fill={T.text}>{la}</text>
+              <rect x={xb} y={0} width={wb} height={13} rx={6.5} fill={T.subtle} />
+              <text x={xb + wb / 2} y={9.5} textAnchor="middle" fontSize="9" fontWeight="700" fill={T.text}>{lb}</text>
+            </>
+          );
+        })()}
+        {hover !== null && !range && (() => {
           // Date pill at the top of the crosshair, flipped to stay inside the chart
           const label = hp.label || formatDateYear(hp.date);
           const w = label.length * 5.2 + 10;

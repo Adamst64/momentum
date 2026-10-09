@@ -64,6 +64,7 @@ export default function InvestingTab({ hook, userId }) {
   const [updating, setUpdating] = useState(false);
   const [updateErr, setUpdateErr] = useState(null);
   const [scrub, setScrub]     = useState(null);  // chart point under the finger
+  const [span, setSpan]       = useState(null);  // two-finger { from, to } on the chart
   const [status, setStatus]   = useState(() => marketStatus());
   const [pull, setPull]       = useState(0);
   const pullStart = useRef(null);
@@ -90,8 +91,8 @@ export default function InvestingTab({ hook, userId }) {
     const pts = snapshots
       .filter(s => s.date > start && s.date < nowDate && isMarketDay(s.date))
       .sort((a, b) => a.date.localeCompare(b.date));
-    return txs.length ? [...pts, { date: nowDate, value: portfolio.value, label: 'Now' }] : [];
-  }, [snapshots, period, today, portfolio.value, txs.length]);
+    return txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
+  }, [snapshots, period, today, portfolio.value, portfolio.netDeposits, txs.length]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
@@ -155,7 +156,7 @@ export default function InvestingTab({ hook, userId }) {
 
   // Headline: the touched chart point, else the current value
   const first = chartPoints[0];
-  const headValue = scrub ? scrub.value : portfolio.value;
+  const headValue = span ? span.to.value : scrub ? scrub.value : portfolio.value;
   const scrubChange = scrub && first ? scrub.value - first.value : null;
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
   const showCash = Math.abs(portfolio.cash) > 0.005;
@@ -200,7 +201,20 @@ export default function InvestingTab({ hook, userId }) {
           {money(headValue, hide)}
         </div>
 
-        {scrub ? (
+        {span ? (() => {
+          // Gain between two dates, not counting money added or withdrawn in between
+          const nd = typeof span.to.netDeposits === 'number' && typeof span.from.netDeposits === 'number';
+          const flows = nd ? span.to.netDeposits - span.from.netDeposits : 0;
+          const gain = span.to.value - span.from.value - flows;
+          const base = span.from.value + Math.max(0, flows);
+          return (
+            <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
+              <span style={{ color: gainColor(gain), fontWeight: 700 }}>{signedMoney(gain, hide)}{base > 0 ? ` (${pct(gain / base)})` : ''}</span>
+              {' · '}{formatDateYear(span.from.date)} → {span.to.label || formatDateYear(span.to.date)}
+              {Math.abs(flows) > 0.005 && <div style={{ fontSize: 11 }}>Excludes {signedMoney(flows, hide)} you added or withdrew</div>}
+            </div>
+          );
+        })() : scrub ? (
           <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
             {scrub.label || formatDateYear(scrub.date)}
             {scrubChange !== null && first !== scrub && (
@@ -228,7 +242,7 @@ export default function InvestingTab({ hook, userId }) {
         {txs.length > 0 && (
           <>
             <div style={{ marginTop: 12 }} data-nopull>
-              <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} />
+              <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} onRange={setSpan} />
             </div>
             <div style={{ marginTop: 10 }}>
               <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={v => { setPeriod(v); setScrub(null); }} />

@@ -24,6 +24,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   const [error, setError]   = useState(null);
   const [scrub, setScrub]   = useState(null);
   const [tradeId, setTradeId] = useState(null);
+  const [span, setSpan]     = useState(null); // two-finger { from, to }
   const trade = trades.find(t => t.id === tradeId) || null;
 
   useEffect(() => {
@@ -45,7 +46,16 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   return (
     <div>
       <div style={{ minHeight: 38 }}>
-        {shown && (
+        {span ? (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 800, color: gainColor(span.to.value - span.from.value), fontVariantNumeric: 'tabular-nums' }}>
+              {signedMoney(span.to.value - span.from.value, hide)} ({pct(span.to.value / span.from.value - 1)})
+            </div>
+            <div style={{ fontSize: 12, color: T.muted }}>
+              {formatDateYear(span.from.date)} → {formatDateYear(span.to.date)} · {money(span.from.value, hide)} → {money(span.to.value, hide)}
+            </div>
+          </>
+        ) : shown && (
           <>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(shown.value, hide)}</div>
             <div style={{ fontSize: 12, color: T.muted }}>
@@ -63,13 +73,13 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         ) : points === null ? (
           <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.muted }}>Loading chart…</div>
         ) : (
-          <ValueChart points={pts} hide={hide} onScrub={setScrub} refs={refs} markers={markers} trades={trades} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
+          <ValueChart points={pts} hide={hide} onScrub={setScrub} onRange={setSpan} refs={refs} markers={markers} trades={trades} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
         )}
       </div>
       {trade && <TradeCard t={trade} hide={hide} onClose={() => setTradeId(null)} />}
       {!trade && trades.length > 0 && points?.length > 1 && (
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
-          <span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells — tap one for details
+          <span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells — tap one for details · two fingers to compare dates
         </div>
       )}
       <div style={{ marginTop: 10 }}>
