@@ -143,6 +143,39 @@ export function computePortfolio(txs, assets) {
   };
 }
 
+// Every buy and sell of one symbol, in date order, with what each one did:
+// buys get today's value of those shares; sells get the realized gain at the
+// average cost back then (the same average-cost method as replay).
+export function tradeDetails(txs, symbol, priceNow = null) {
+  let qty = 0, cost = 0;
+  return sortTx(txs.filter(t => t.symbol === symbol && (t.type === 'buy' || t.type === 'sell'))).map(t => {
+    const fee = t.fee || 0;
+    if (t.type === 'buy') {
+      const total = t.quantity * t.price + fee;
+      qty += t.quantity; cost += total;
+      const valueNow = priceNow ? t.quantity * priceNow : null;
+      return {
+        ...t, total, valueNow,
+        gain: valueNow !== null ? valueNow - total : null,
+        gainPct: valueNow !== null && total > 0 ? valueNow / total - 1 : null,
+      };
+    }
+    const avg = qty > 0 ? cost / qty : 0;
+    const sold = Math.min(t.quantity, qty);
+    const proceeds = t.quantity * t.price - fee;
+    const basis = avg * sold;
+    const realized = sold * (t.price - avg) - fee;
+    cost -= basis; qty -= sold;
+    if (qty < 1e-9) { qty = 0; cost = 0; }
+    return {
+      ...t, proceeds, basis, avgCost: avg, realized,
+      realizedPct: basis > 0 ? realized / basis : null,
+      closedOut: qty === 0,
+      sinceSell: priceNow && t.price ? priceNow / t.price - 1 : null,
+    };
+  });
+}
+
 // Fully sold positions with how the price moved since. "If held" is what the
 // sold shares would be worth now versus what you got for them: positive means
 // the price kept rising after you sold, negative means selling saved you that.

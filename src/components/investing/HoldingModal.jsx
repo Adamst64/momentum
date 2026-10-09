@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
@@ -133,7 +133,8 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             asset.priceTarget && { value: asset.priceTarget, label: 'Target', color: '#5AC8FA' },
             asset.analyst?.targetMean && { value: asset.analyst.targetMean, label: 'Analysts', color: ANALYST_COLOR },
           ].filter(Boolean)}
-          markers={sold ? [{ date: sold.date, label: 'Sold' }] : []}
+          markers={[]}
+          trades={tradeDetails(txs, symbol, asset.price || null)}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 

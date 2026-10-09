@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
-import { money, signedMoney, pct } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt } from '../../utils/investing';
 import { Chips, gainColor } from './ui';
 import { ValueChart } from './Charts';
 
@@ -18,11 +18,13 @@ const RANGES = [
 // Price chart for one stock (trading days only), with optional reference lines
 // (avg cost, sell price, your target) and markers (when you sold).
 // livePrice replaces the last close so the chart ends at the current quote.
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, hide, initialRange = '6mo' }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], hide, initialRange = '6mo' }) {
   const [range, setRange]   = useState(initialRange);
   const [points, setPoints] = useState(null);
   const [error, setError]   = useState(null);
   const [scrub, setScrub]   = useState(null);
+  const [tradeId, setTradeId] = useState(null);
+  const trade = trades.find(t => t.id === tradeId) || null;
 
   useEffect(() => {
     let live = true;
@@ -61,12 +63,56 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         ) : points === null ? (
           <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.muted }}>Loading chart…</div>
         ) : (
-          <ValueChart points={pts} hide={hide} onScrub={setScrub} refs={refs} markers={markers} emptyText="No price history for this symbol." />
+          <ValueChart points={pts} hide={hide} onScrub={setScrub} refs={refs} markers={markers} trades={trades} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
         )}
       </div>
+      {trade && <TradeCard t={trade} hide={hide} onClose={() => setTradeId(null)} />}
+      {!trade && trades.length > 0 && points?.length > 1 && (
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
+          <span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells — tap one for details
+        </div>
+      )}
       <div style={{ marginTop: 10 }}>
         <Chips small options={RANGES} value={range} onChange={v => { setRange(v); setScrub(null); }} />
       </div>
+    </div>
+  );
+}
+
+// Details for one tapped buy or sell
+function TradeCard({ t, hide, onClose }) {
+  const buy = t.type === 'buy';
+  const row = (label, value, color = T.text) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '3px 0' }}>
+      <span style={{ color: T.muted }}>{label}</span>
+      <span style={{ color, fontVariantNumeric: 'tabular-nums', textAlign: 'right' }}>{value}</span>
+    </div>
+  );
+  return (
+    <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${buy ? '#30D158' : '#FF9F0A'}55` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: buy ? '#30D158' : '#FF9F0A' }}>
+          {buy ? (t.fromCash === false ? 'Added (already owned)' : 'Bought') : t.closedOut ? 'Sold (all)' : 'Sold'}
+        </span>
+        <span style={{ fontSize: 12, color: T.muted, flex: 1 }}>{formatDateYear(t.date)}</span>
+        <button onClick={onClose} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
+      </div>
+      {row('Shares', `${qtyFmt(t.quantity)} @ ${money(t.price, hide)}`)}
+      {t.fee ? row('Fee', money(t.fee, hide)) : null}
+      {buy ? (
+        <>
+          {row('Total paid', money(t.total, hide))}
+          {t.valueNow !== null && row('Worth today', money(t.valueNow, hide))}
+          {t.gain !== null && row('Gain since', `${signedMoney(t.gain, hide)} (${pct(t.gainPct)})`, gainColor(t.gain))}
+        </>
+      ) : (
+        <>
+          {row('Received', money(t.proceeds, hide))}
+          {row('Cost of those shares', `${money(t.basis, hide)} (avg ${money(t.avgCost, hide)})`)}
+          {row(t.realized >= 0 ? 'Gain' : 'Loss', `${signedMoney(t.realized, hide)} (${pct(t.realizedPct)})`, gainColor(t.realized))}
+          {t.sinceSell !== null && row('Price since', pct(t.sinceSell), gainColor(t.sinceSell))}
+        </>
+      )}
     </div>
   );
 }

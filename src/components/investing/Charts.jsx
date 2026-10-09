@@ -10,10 +10,13 @@ import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
 // headline) and the chart drops its own readout row.
 // refs: horizontal dashed lines [{ value, label, color }] (avg cost, target…),
 // markers: vertical lines [{ date, label }] at the first point on/after date.
-export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emptyText }) {
+// trades: buy/sell dots [{ id, date, price, type }] drawn at the trade price;
+// a tap (not a drag) on or next to one calls onTradeTap(id), elsewhere onTradeTap(null).
+export function ValueChart({ points, hide, onScrub, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText }) {
   const [hover, setHoverState] = useState(null);
   const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
   const ref = useRef(null);
+  const downAt = useRef(null);
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
@@ -25,7 +28,14 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
   const W = 340, H = 120, PAD = 4;
   const vals = points.map(p => p.value);
   const refVals = refs.filter(r => r.value > 0).map(r => r.value);
-  const min = Math.min(...vals, ...refVals), max = Math.max(...vals, ...refVals);
+  // Trades inside the chart's dates, each placed on its day (or the next point)
+  const lastDate = points[points.length - 1].date;
+  const tradeDots = trades
+    .filter(t => t.date >= points[0].date && t.date <= lastDate && t.price > 0)
+    .map(t => ({ ...t, i: points.findIndex(p => p.date >= t.date) }))
+    .filter(t => t.i >= 0);
+  const tradeVals = tradeDots.map(t => t.price);
+  const min = Math.min(...vals, ...refVals, ...tradeVals), max = Math.max(...vals, ...refVals, ...tradeVals);
   const span = max - min || 1;
   const x = i => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = v => PAD + (1 - (v - min) / span) * (H - PAD * 2);
@@ -34,10 +44,29 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
   const up = vals[vals.length - 1] >= vals[0];
   const color = up ? T.oliveLight : T.red;
 
-  const pick = (clientX) => {
+  // Screen ↔ chart coordinates (the SVG keeps its aspect ratio, centered)
+  const toChartX = clientX => {
     const r = ref.current.getBoundingClientRect();
-    const i = Math.round(((clientX - r.left) / r.width) * (points.length - 1));
+    const scale = Math.min(r.width / W, r.height / H);
+    return (clientX - r.left - (r.width - W * scale) / 2) / scale;
+  };
+  const pick = (clientX) => {
+    const i = Math.round(((toChartX(clientX) - PAD) / (W - PAD * 2)) * (points.length - 1));
     setHover(Math.max(0, Math.min(points.length - 1, i)));
+  };
+  const onDown = e => { downAt.current = { x: e.clientX, y: e.clientY }; pick(e.clientX); };
+  const onUp = e => {
+    const d = downAt.current;
+    downAt.current = null;
+    if (onTradeTap && d && Math.abs(e.clientX - d.x) < 8 && Math.abs(e.clientY - d.y) < 8) {
+      const cx = toChartX(e.clientX);
+      const near = tradeDots
+        .map(t => ({ t, dist: Math.abs(x(t.i) - cx) }))
+        .filter(o => o.dist <= 14)
+        .sort((a, b) => a.dist - b.dist)[0];
+      onTradeTap(near ? near.t.id : null);
+    }
+    if (e.pointerType !== 'mouse') setHover(null);
   };
 
   const hp = hover !== null ? points[hover] : null;
@@ -69,9 +98,9 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
         viewBox={`0 0 ${W} ${H}`}
         style={{ width: '100%', height: H, display: 'block', touchAction: 'none' }}
         onPointerMove={e => pick(e.clientX)}
-        onPointerDown={e => pick(e.clientX)}
+        onPointerDown={onDown}
         onPointerLeave={() => setHover(null)}
-        onPointerUp={e => { if (e.pointerType !== 'mouse') setHover(null); }}
+        onPointerUp={onUp}
         onPointerCancel={() => setHover(null)}
         role="img"
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
@@ -102,6 +131,18 @@ export function ValueChart({ points, hide, onScrub, refs = [], markers = [], emp
           </g>
         ))}
         <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {tradeDots.map(t => {
+          const buy = t.type === 'buy';
+          const sel = selectedTrade === t.id;
+          const cx = x(t.i), cy = y(t.price);
+          return (
+            <g key={t.id} style={{ pointerEvents: 'none' }}>
+              {sel && <circle cx={cx} cy={cy} r={9} fill="none" stroke={T.text} strokeWidth={1.5} />}
+              <circle cx={cx} cy={cy} r={6} fill={buy ? '#30D158' : '#FF9F0A'} stroke={T.card} strokeWidth={1.5} />
+              <text x={cx} y={cy + 2.6} textAnchor="middle" fontSize="7" fontWeight="800" fill="#000">{buy ? 'B' : 'S'}</text>
+            </g>
+          );
+        })}
         {hover !== null && (() => {
           // Date pill at the top of the crosshair, flipped to stay inside the chart
           const label = hp.label || formatDateYear(hp.date);
