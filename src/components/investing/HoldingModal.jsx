@@ -109,7 +109,7 @@ const rowBtn = { fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius
 // account: opened from that account's row → starts showing just that account,
 // with a switch to all accounts. undefined → all accounts.
 export default function HoldingModal({ hook, symbol, account, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, accounts, setTxAccount, alerts, setAsset, deleteTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
+  const { portfolio, assets, txs, accounts, watchLists = [], addMark, deleteMark, setTxAccount, alerts, setAsset, deleteTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
@@ -191,6 +191,15 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
           trades={tradeDetails(scoped ? scopeTx : txs, symbol, asset.price || null)}
           onDeleteTrade={id => deleteTx(id)}
           onEditTrade={id => { const t = txs.find(x => x.id === id); if (t) editTx(t); }}
+          notes={[
+            ...(asset.marks || []),
+            ...(asset.watch ? (asset.lists || []).map(id => {
+              const l = watchLists.find(x => x.id === id);
+              return l && asset.listAdded?.[id] ? { id: `list:${id}`, date: asset.listAdded[id], label: `Added to ${l.name}`, auto: true } : null;
+            }).filter(Boolean) : []),
+          ]}
+          onAddNote={(date, label) => addMark(symbol, date, label)}
+          onDeleteNote={id => { const m = (asset.marks || []).find(x => x.id === id); return m ? deleteMark(symbol, m) : null; }}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 

@@ -4,6 +4,8 @@ import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
 import { SERIES, OTHER_COLOR, gainColor, noSelect } from './ui';
 
+export const NOTE_COLOR = '#FFD60A'; // your own marks on a chart
+
 // ── Portfolio value over time (single series, touch/hover crosshair) ────────
 
 // onScrub(point | null): when given, the parent shows the touched value (in a
@@ -229,6 +231,17 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
           const buy = t.type === 'buy';
           const sel = selectedTrade === t.id;
           const cx = x(t.i), cy = y(t.price);
+          if (t.type === 'note') {
+            // Your own mark: a thin line through the day and a ★ on the price
+            return (
+              <g key={t.id} style={{ pointerEvents: 'none' }}>
+                <line x1={cx} x2={cx} y1={14} y2={H} stroke={NOTE_COLOR} strokeWidth={1} strokeDasharray="2 3" opacity={0.6} />
+                {sel && <circle cx={cx} cy={cy} r={9} fill="none" stroke={T.text} strokeWidth={1.5} />}
+                <circle cx={cx} cy={cy} r={6} fill={NOTE_COLOR} stroke={T.card} strokeWidth={1.5} />
+                <text x={cx} y={cy + 2.7} textAnchor="middle" fontSize="7.5" fontWeight="800" fill="#000">★</text>
+              </g>
+            );
+          }
           return (
             <g key={t.id} style={{ pointerEvents: 'none' }}>
               {sel && <circle cx={cx} cy={cy} r={9} fill="none" stroke={T.text} strokeWidth={1.5} />}

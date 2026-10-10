@@ -55,7 +55,7 @@ const earningsBadge = (date, today) => {
 export default function InvestingTab({ hook, userId }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('portfolio');
-  const setView = v => { setViewState(v); setOpenAccountId(null); };
+  const setView = v => { setViewState(v); setOpenAccountId(null); setOpenListId(null); };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
@@ -71,6 +71,10 @@ export default function InvestingTab({ hook, userId }) {
   const [openAccountId, setOpenAccountId] = useState(null);
   useBackHandler(openAccountId !== null, () => setOpenAccountId(null));
   useEffect(() => { if (openAccountId !== null) window.scrollTo(0, 0); }, [openAccountId]);
+  // Same for a watch list opened from the Watchlist
+  const [openListId, setOpenListId] = useState(null);
+  useBackHandler(openListId !== null, () => setOpenListId(null));
+  useEffect(() => { if (openListId !== null) window.scrollTo(0, 0); }, [openListId]);
   const [targetFor, setTargetFor] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [updateErr, setUpdateErr] = useState(null);
@@ -265,6 +269,14 @@ export default function InvestingTab({ hook, userId }) {
 
   // An account opened from the Portfolio: its own page; swipe right (or ‹) to go back
   const pageGroup = openAccountId !== null ? groups.find(g => g.id === openAccountId) || null : null;
+  if (openListId !== null && view === 'watchlist') {
+    return (
+      <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <WatchListPage hook={hook} listId={openListId} items={watch} hide={hide} onBack={() => setOpenListId(null)} onOpen={setOpen} />
+        {overlays}
+      </div>
+    );
+  }
   if (pageGroup) {
     return (
       <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -420,7 +432,7 @@ export default function InvestingTab({ hook, userId }) {
       )}
 
       {view === 'watchlist' && (
-        <Watchlist hook={hook} items={watch} hide={hide} onOpen={setOpen} />
+        <WatchHome hook={hook} items={watch} onOpenList={setOpenListId} />
       )}
 
       {view === 'insights' && txs.length > 0 && (
@@ -862,23 +874,104 @@ function SoldRows({ items, hide, onOpen }) {
   );
 }
 
-function Watchlist({ hook, items, hide, onOpen }) {
-  const { portfolio, setAsset, removeAsset, refreshPrices } = hook;
-  const [asking, setAsking] = useState(null); // symbol waiting for "are you sure?"
+const NO_LIST = '__none'; // stocks you watch that aren't in any list
+
+const dayPct = a => (a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null);
+
+// Watchlist home: your lists; tap one to open it
+function WatchHome({ hook, items, onOpenList }) {
+  const { watchLists, addWatchList } = hook;
+  const [name, setName] = useState('');
+  const [err, setErr] = useState(null);
+  const loose = items.filter(a => !(a.lists || []).some(id => watchLists.some(l => l.id === id)));
+  const cards = [
+    ...watchLists.map(l => ({ id: l.id, name: l.name, items: items.filter(a => (a.lists || []).includes(l.id)) })),
+    ...(loose.length ? [{ id: NO_LIST, name: 'Not in a list', items: loose }] : []),
+  ];
+  const create = async () => {
+    if (!name.trim()) return;
+    setErr(null);
+    try { const id = await addWatchList(name); setName(''); onOpenList(id); }
+    catch (e) { setErr(e.message || 'Could not create the list'); }
+  };
+  return (
+    <>
+      {cards.map(c => {
+        const moves = c.items.map(dayPct).filter(x => x !== null);
+        const avg = moves.length ? moves.reduce((t, x) => t + x, 0) / moves.length : null;
+        return (
+          <Card key={c.id} style={{ padding: '4px 16px' }}>
+            <button onClick={() => onOpenList(c.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', textAlign: 'left' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: c.id === NO_LIST ? T.muted : T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
+                <span style={{ display: 'block', fontSize: 11, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {c.items.length} item{c.items.length !== 1 ? 's' : ''}{c.items.length ? ` · ${c.items.slice(0, 4).map(a => a.symbol).join(', ')}${c.items.length > 4 ? '…' : ''}` : ''}
+                </span>
+              </span>
+              {avg !== null && <span style={{ fontSize: 12, color: gainColor(avg), fontVariantNumeric: 'tabular-nums' }}>{pct(avg)} avg today</span>}
+              <span style={{ fontSize: 18, color: T.muted }}>›</span>
+            </button>
+          </Card>
+        );
+      })}
+      <Card>
+        <SectionTitle>{watchLists.length ? 'New list' : 'Make your first list'}</SectionTitle>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} placeholder="e.g. My picks, YouTuber picks" style={{ ...inputStyle, flex: 1 }} />
+          <button onClick={create} style={{ padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>Create</button>
+        </div>
+        {err && <div style={{ fontSize: 13, color: T.red, marginTop: 6 }}>{err}</div>}
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>A stock can be in several lists. Each list remembers when you added it and the price then.</div>
+      </Card>
+    </>
+  );
+}
+
+const LIST_SORTS = [
+  { value: 'az', label: 'A–Z' },
+  { value: 'today', label: 'Today' },
+  { value: 'since', label: 'Since added' },
+  { value: 'added', label: 'Newest' },
+];
+
+// One watch list's own page (swipe right / ‹ to go back)
+function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
+  const { portfolio, watchLists, refreshPrices, addToList, removeFromList, renameWatchList, deleteWatchList } = hook;
+  const list = watchLists.find(l => l.id === listId) || null;
+  const isLoose = listId === NO_LIST;
+  const rows = isLoose
+    ? items.filter(a => !(a.lists || []).some(id => watchLists.some(l => l.id === id)))
+    : items.filter(a => (a.lists || []).includes(listId));
+  const [sort, setSort] = useState('az');
   const [sym, setSym] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [asking, setAsking] = useState(null);   // { title, message, label, action }
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState(list?.name || '');
+
+  const since = a => {
+    const p0 = a.listAddedPrice?.[listId];
+    return p0 && a.price ? a.price / p0 - 1 : null;
+  };
+  const sorted = [...rows].sort((a, b) => {
+    if (sort === 'today') return (dayPct(b) ?? -Infinity) - (dayPct(a) ?? -Infinity);
+    if (sort === 'since') return (since(b) ?? -Infinity) - (since(a) ?? -Infinity);
+    if (sort === 'added') return (b.listAdded?.[listId] || '').localeCompare(a.listAdded?.[listId] || '');
+    return a.symbol.localeCompare(b.symbol);
+  });
 
   const add = async () => {
     const s = sym.trim().toUpperCase();
     if (!s || busy) return;
     if (portfolio.holdings.some(h => h.symbol === s)) { setMsg(`You already own ${s} — it's in your portfolio.`); return; }
+    if (rows.some(a => a.symbol === s)) { setMsg(`${s} is already in this list.`); return; }
     setBusy(true);
     setMsg(null);
     try {
       const res = await refreshPrices([s]);
       if (res.notFound?.includes(s)) { setMsg(`Couldn't find a price for ${s}. Check the ticker.`); return; }
-      await setAsset(s, { watch: true });
+      await addToList(s, isLoose ? null : listId, res.prices?.[s]?.price || null);
       setSym('');
     } catch (e) {
       setMsg(e.message || 'Could not add');
@@ -887,45 +980,87 @@ function Watchlist({ hook, items, hide, onOpen }) {
     }
   };
 
+  if (!list && !isLoose) return <div style={{ fontSize: 13, color: T.muted }}>This list was deleted. <button onClick={onBack} style={{ color: T.khaki }}>Back</button></div>;
+  const title = isLoose ? 'Not in a list' : list.name;
+
   return (
-    <Card>
-      <SectionTitle>Watchlist</SectionTitle>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 10 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <SymbolInput hook={hook} value={sym} onChange={setSym} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Ticker or company, e.g. NVDA" />
-        </div>
-        <button onClick={add} disabled={busy} style={{ height: 44, padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>{busy ? '…' : 'Add'}</button>
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={onBack} style={{ fontSize: 15, color: T.khaki, padding: '6px 0', fontWeight: 600 }}>‹ Watchlist</button>
+        <span style={{ flex: 1 }} />
+        {!isLoose && <button onClick={() => { setNewName(list.name); setRenaming(r => !r); }} style={{ fontSize: 13, color: T.khaki }}>Rename</button>}
+        {!isLoose && (
+          <button
+            onClick={() => setAsking({
+              title: `Delete “${list.name}”?`,
+              message: `The list is removed. Its ${rows.length} stock${rows.length !== 1 ? 's stay' : ' stays'} on your watchlist${rows.length ? ' (under “Not in a list” unless in another list)' : ''}.`,
+              action: async () => { await deleteWatchList(listId); onBack(); },
+            })}
+            style={{ fontSize: 13, color: T.red, marginLeft: 8 }}
+          >Delete</button>
+        )}
       </div>
-      {msg && <div style={{ fontSize: 13, color: T.red, marginBottom: 8 }}>{msg}</div>}
-      {items.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Track stocks you don't own yet. Prices refresh automatically, or pull down to update.</div>}
-      {items.map((a, i) => {
-        const day = a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null;
-        const ext = extendedPrice(a);
-        return (
-          <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
-            <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
-              {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
-              <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
-            </button>
-            <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-              <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
-              <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
-              {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
-            </div>
-            <button onClick={() => setAsking(a.symbol)} aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}>×</button>
+
+      <Card>
+        {renaming ? (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={newName} onChange={e => setNewName(e.target.value)} autoFocus style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={async () => { if (newName.trim()) { await renameWatchList(listId, newName); setRenaming(false); } }} style={{ padding: '0 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>Save</button>
           </div>
-        );
-      })}
-      {asking && (
-        <ConfirmDialog
-          title={`Remove ${asking} from your watchlist?`}
-          message="It stops showing here. You can add it back any time."
-          confirmLabel="Remove"
-          onConfirm={() => removeAsset(asking)}
-          onClose={() => setAsking(null)}
-        />
-      )}
-    </Card>
+        ) : (
+          <div style={{ fontSize: 20, fontWeight: 800, color: T.text }}>{title}</div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <SymbolInput hook={hook} value={sym} onChange={setSym} onKeyDown={e => e.key === 'Enter' && add()} placeholder="Add a ticker or company, e.g. NVDA" />
+          </div>
+          <button onClick={add} disabled={busy} style={{ height: 44, padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>{busy ? '…' : 'Add'}</button>
+        </div>
+        {msg && <div style={{ fontSize: 13, color: T.red, marginTop: 8 }}>{msg}</div>}
+      </Card>
+
+      <Card style={{ padding: '10px 16px' }}>
+        {rows.length > 1 && <Chips small options={LIST_SORTS.filter(o => !isLoose || (o.value !== 'since' && o.value !== 'added'))} value={sort} onChange={setSort} />}
+        {rows.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '6px 0' }}>Nothing here yet — add a ticker above.</div>}
+        {sorted.map((a, i) => {
+          const day = dayPct(a);
+          const ext = extendedPrice(a);
+          const s0 = since(a);
+          const added = a.listAdded?.[listId];
+          return (
+            <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i || rows.length > 1 ? `1px solid ${T.cardBorder}` : 'none', marginTop: i === 0 && rows.length > 1 ? 10 : 0 }}>
+              <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
+                {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
+                {added && (
+                  <div style={{ fontSize: 11, color: T.muted }}>
+                    Added {formatDateYear(added)}{s0 !== null && <span style={{ color: gainColor(s0) }}> · {pct(s0)} since</span>}
+                  </div>
+                )}
+                <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
+              </button>
+              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
+                <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
+                {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
+              </div>
+              <button
+                onClick={() => setAsking({
+                  title: `Remove ${a.symbol} from ${isLoose ? 'your watchlist' : `“${title}”`}?`,
+                  message: (a.lists || []).filter(x => x !== listId).length
+                    ? 'It stays in your other lists.'
+                    : 'It isn\'t in any other list, so it leaves your watchlist. Its chart marks and targets are kept.',
+                  label: 'Remove',
+                  action: () => removeFromList(a.symbol, isLoose ? null : listId),
+                })}
+                aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}
+              >×</button>
+            </div>
+          );
+        })}
+      </Card>
+      <div style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>Swipe right from the left edge to go back</div>
+      {asking && <ConfirmDialog title={asking.title} message={asking.message} confirmLabel={asking.label || 'Delete'} onConfirm={asking.action} onClose={() => setAsking(null)} />}
+    </>
   );
 }

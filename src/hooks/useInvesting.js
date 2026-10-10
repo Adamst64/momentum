@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch, arrayUnion, arrayRemove, deleteField } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { priceDate, easternDate } from '../utils/marketCalendar';
+import { toDateStr } from '../utils/dateUtils';
 import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
@@ -13,15 +14,19 @@ import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 // users/{uid}/invSnapshots/{date} — { date, value, cash, netDeposits } for the value chart and returns
 // users/{uid}/invAlerts/{id} — { symbol, direction: 'above'|'below', target, enabled, triggeredAt }
 // users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
+// users/{uid}/invWatchLists/{id} — { name, order } named watchlists; a stock's asset doc lists them in
+//   lists: [id] with listAdded.{id}: date and listAddedPrice.{id}: price when added
+// Chart marks live on the asset doc: marks: [{ id, date, label }]
 export function useInvesting(userId) {
   const [txs, setTxs]             = useState([]);
   const [assetDocs, setAssetDocs] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
   const [alerts, setAlerts]       = useState([]);
   const [accountDocs, setAccountDocs] = useState([]);
+  const [listDocs, setListDocs] = useState([]);
 
   useEffect(() => {
-    if (!userId) { setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); return; }
+    if (!userId) { setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); setListDocs([]); return; }
     const col = name => collection(db, 'users', userId, name);
     const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unsubs = [
@@ -30,6 +35,7 @@ export function useInvesting(userId) {
       onSnapshot(col('invSnapshots'),    s => setSnapshots(rows(s))),
       onSnapshot(col('invAlerts'),       s => setAlerts(rows(s))),
       onSnapshot(col('invAccounts'),     s => setAccountDocs(rows(s))),
+      onSnapshot(col('invWatchLists'),   s => setListDocs(rows(s))),
     ];
     return () => unsubs.forEach(u => u());
   }, [userId]);
@@ -38,6 +44,9 @@ export function useInvesting(userId) {
     () => Object.fromEntries(assetDocs.filter(a => a.id !== CASH_ID).map(a => [a.id, a])),
     [assetDocs]);
   const portfolio  = useMemo(() => computePortfolio(txs, assets), [txs, assets]);
+  const watchLists = useMemo(
+    () => [...listDocs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name)),
+    [listDocs]);
   const accounts   = useMemo(
     () => [...accountDocs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name)),
     [accountDocs]);
@@ -102,6 +111,50 @@ export function useInvesting(userId) {
       await batch.commit();
     }
   }, [txs, ref]);
+
+  // ── Watch lists ──
+  const addWatchList = useCallback(async (name) => {
+    const id = genId();
+    await setDoc(ref('invWatchLists', id), { name: name.trim(), order: listDocs.length, createdAt: new Date().toISOString() });
+    return id;
+  }, [ref, listDocs.length]);
+
+  const renameWatchList = useCallback((id, name) => updateDoc(ref('invWatchLists', id), { name: name.trim() }), [ref]);
+
+  // The stocks stay watched; they just aren't in that list anymore
+  const deleteWatchList = useCallback(async (id) => {
+    const batch = writeBatch(db);
+    assetDocs.filter(a => (a.lists || []).includes(id)).forEach(a => batch.update(ref('invAssets', a.id), {
+      lists: arrayRemove(id), [`listAdded.${id}`]: deleteField(), [`listAddedPrice.${id}`]: deleteField(),
+    }));
+    batch.delete(ref('invWatchLists', id));
+    await batch.commit();
+  }, [assetDocs, ref]);
+
+  // listId null = watched without a list. Remembers the day and price it was added.
+  const addToList = useCallback((symbol, listId, price) => setDoc(ref('invAssets', symbol), {
+    symbol, watch: true,
+    ...(listId ? {
+      lists: arrayUnion(listId),
+      listAdded: { [listId]: toDateStr(new Date()) },
+      ...(price ? { listAddedPrice: { [listId]: price } } : {}),
+    } : {}),
+  }, { merge: true }), [ref]);
+
+  // Out of one list; out of the watchlist entirely when it's in no list anymore
+  const removeFromList = useCallback((symbol, listId) => {
+    const a = assets[symbol] || {};
+    const left = (a.lists || []).filter(x => x !== listId);
+    return updateDoc(ref('invAssets', symbol), {
+      ...(listId ? { lists: arrayRemove(listId), [`listAdded.${listId}`]: deleteField(), [`listAddedPrice.${listId}`]: deleteField() } : {}),
+      ...(left.length === 0 ? { watch: false } : {}),
+    });
+  }, [assets, ref]);
+
+  // ── Your own marks on a stock's chart ──
+  const addMark = useCallback((symbol, date, label) =>
+    setDoc(ref('invAssets', symbol), { symbol, marks: arrayUnion({ id: genId(), date, label: label.trim() }) }, { merge: true }), [ref]);
+  const deleteMark = useCallback((symbol, mark) => updateDoc(ref('invAssets', symbol), { marks: arrayRemove(mark) }), [ref]);
 
   const addAccount = useCallback(async (name) => {
     const id = genId();
@@ -215,7 +268,8 @@ export function useInvesting(userId) {
   }, [txs, alerts, assets, ref]);
 
   return {
-    txs, assets, assetDocs, snapshots, alerts, portfolio, accounts,
+    txs, assets, assetDocs, snapshots, alerts, portfolio, accounts, watchLists,
+    addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, deleteMark,
     addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
