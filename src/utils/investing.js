@@ -19,7 +19,7 @@ import { toDateStr, addDays } from './dateUtils';
 // Deposits/withdrawals (and already-owned buys) are external money, so they never count as return.
 // Buys/sells/dividends/interest move money between cash and holdings and do count.
 
-export const CASH_ID = 'cash'; // invAssets doc holding the cash target %
+export const CASH_ID = 'cash'; // old invAssets doc for a cash target %, ignored
 export const BENCHMARK = 'SPY'; // S&P 500 ETF; its price is saved with each daily snapshot
 
 // Pre-market / after-hours price saved on an invAssets doc (extPrice, extSession,

@@ -30,8 +30,8 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
     if (t.type === 'buy' && t.fromCash === false) return `Added ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'buy' || t.type === 'sell') return `${t.type === 'buy' ? 'Bought' : 'Sold'} ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'dividend') return `${t.symbol} dividend`;
-    if (t.type === 'interest') return 'Interest on cash';
-    return t.note || (t.type === 'deposit' ? 'Cash added' : 'Cash withdrawn');
+    if (t.type === 'interest') return 'Interest';
+    return t.note || (t.type === 'deposit' ? 'Money added' : 'Money withdrawn');
   };
   const amount = t => {
     if (t.type === 'buy')  return -(t.quantity * t.price + (t.fee || 0));

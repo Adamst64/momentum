@@ -268,10 +268,10 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
 // ── Allocation donut + optional targets ─────────────────────────────────────
 
 // Colors follow the holding (first-purchase order), so they don't shuffle as values move
-export function allocationSlices(portfolio, assets, cashTarget) {
+export function allocationSlices(portfolio, assets) {
   const byFirst = [...portfolio.holdings].sort((a, b) => (a.firstDate || '').localeCompare(b.firstDate || ''));
   const colorOf = Object.fromEntries(byFirst.map((h, i) => [h.symbol, SERIES[i] || OTHER_COLOR]));
-  // Share of what you hold (cash isn't tracked: money sits in funds, which are holdings)
+  // Share of what you hold (money market funds like FDRXX are holdings too)
   const total = portfolio.holdings.reduce((a, h) => a + Math.max(0, h.value || 0), 0) || 1;
 
   const slices = portfolio.holdings.map(h => ({

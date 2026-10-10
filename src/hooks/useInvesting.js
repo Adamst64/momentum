@@ -5,12 +5,11 @@ import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { priceDate, easternDate } from '../utils/marketCalendar';
-import { toDateStr } from '../utils/dateUtils';
 import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
 // users/{uid}/invAssets/{SYMBOL} — { symbol, name, source: 'finnhub'|'manual', price, prevClose,
-//                                   priceUpdatedAt, targetPct, watch }; doc 'cash' holds the cash target %
+//                                   priceUpdatedAt, targetPct, watch } (an old 'cash' doc, if any, is ignored)
 // users/{uid}/invSnapshots/{date} — { date, value, cash, netDeposits } for the value chart and returns
 // users/{uid}/invAlerts/{id} — { symbol, direction: 'above'|'below', target, enabled, triggeredAt }
 // users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
@@ -38,7 +37,6 @@ export function useInvesting(userId) {
   const assets = useMemo(
     () => Object.fromEntries(assetDocs.filter(a => a.id !== CASH_ID).map(a => [a.id, a])),
     [assetDocs]);
-  const cashTarget = assetDocs.find(a => a.id === CASH_ID)?.targetPct ?? null;
   const portfolio  = useMemo(() => computePortfolio(txs, assets), [txs, assets]);
   const accounts   = useMemo(
     () => [...accountDocs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name)),
@@ -91,13 +89,6 @@ export function useInvesting(userId) {
     }
   }, [txs, ref]);
 
-  // Cash left in an account from older entries (before money lived in funds):
-  // zero it with a one-off withdrawal (or deposit, if it's negative) dated today
-  const clearCash = useCallback((account, amount) => addTx({
-    type: amount > 0 ? 'withdraw' : 'deposit', date: toDateStr(new Date()), amount: Math.round(Math.abs(amount) * 100) / 100,
-    note: 'Cleared leftover cash', ...(account ? { account } : {}),
-  }), [addTx]);
-
   const addAccount = useCallback(async (name) => {
     const id = genId();
     await setDoc(ref('invAccounts', id), { name: name.trim(), order: accountDocs.length, createdAt: new Date().toISOString() });
@@ -117,7 +108,7 @@ export function useInvesting(userId) {
   const updateTx = useCallback((id, fields) => updateDoc(ref('invTransactions', id), fields), [ref]);
 
   const setAsset = useCallback((symbol, fields) =>
-    setDoc(ref('invAssets', symbol), symbol === CASH_ID ? fields : { symbol, ...fields }, { merge: true }), [ref]);
+    setDoc(ref('invAssets', symbol), { symbol, ...fields }, { merge: true }), [ref]);
 
   const removeAsset = useCallback(symbol => deleteDoc(ref('invAssets', symbol)), [ref]);
 
@@ -204,8 +195,8 @@ export function useInvesting(userId) {
   }, [txs, alerts, assets, ref]);
 
   return {
-    txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget, accounts,
-    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, clearCash, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    txs, assets, assetDocs, snapshots, alerts, portfolio, accounts,
+    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

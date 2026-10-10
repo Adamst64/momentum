@@ -3,7 +3,7 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -52,7 +52,7 @@ const earningsBadge = (date, today) => {
 };
 
 export default function InvestingTab({ hook, userId }) {
-  const { txs, portfolio, assets, snapshots, cashTarget, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset, clearCash } = hook;
+  const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset } = hook;
   const [view, setView]       = useState('portfolio');
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -153,13 +153,13 @@ export default function InvestingTab({ hook, userId }) {
 
   const bench = ret && !ret.unavailable ? benchmarkReturn(snapshots, ret.start, assets[BENCHMARK]?.price) : null;
 
-  const slices = allocationSlices(portfolio, assets, cashTarget);
+  const slices = allocationSlices(portfolio, assets);
   const sliceColor = Object.fromEntries(slices.map(x => [x.key, x.color]));
   const slicePct = Object.fromEntries(slices.map(x => [x.key, x.pct]));
   const allocTotal = slices.reduce((t, x) => t + x.value, 0);
   // Most underweight holding (by target %), at least 2 pts and $1 short
   const nextBuy = slices
-    .filter(x => x.key !== 'cash' && x.key !== 'other' && x.target !== null && x.target !== undefined)
+    .filter(x => x.key !== 'other' && x.target !== null && x.target !== undefined)
     .map(x => ({ symbol: x.key, target: x.target, under: x.target - x.pct * 100, amount: (x.target / 100) * allocTotal - x.value }))
     .filter(x => x.under >= 2 && x.amount >= 1)
     .sort((a, b) => b.under - a.under)[0] || null;
@@ -281,7 +281,7 @@ export default function InvestingTab({ hook, userId }) {
                 : bench !== null && ret?.pct !== null && ret?.pct !== undefined
                   ? <>S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts</>
                   : 'S&P 500 comparison appears once there\'s enough history.'}
-              <span style={{ fontSize: 11, display: 'block', marginTop: 2 }}>Returns exclude cash you add or withdraw.</span>
+              <span style={{ fontSize: 11, display: 'block', marginTop: 2 }}>Returns exclude money you add or withdraw.</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, fontSize: 12, color: T.muted }}>
               <span>Invested <b style={{ color: T.text, fontWeight: 600 }}>{money(portfolio.holdingsValue, hide)}</b></span>
@@ -318,7 +318,7 @@ export default function InvestingTab({ hook, userId }) {
         {byAccount ? groups.map(g => (
           <AccountCard
             key={g.id || 'none'} g={g} hide={hide} open={openAccounts.has(g.id)} onToggle={() => toggleAccount(g.id)}
-            onAssign={() => setManageAccounts(true)} onClearCash={() => clearCash(g.id, g.cash)}
+            onAssign={() => setManageAccounts(true)}
             renderRow={pos => <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />}
             onOpenSold={sym => setOpen({ symbol: sym, account: g.id })}
           />
@@ -384,7 +384,7 @@ export default function InvestingTab({ hook, userId }) {
                       </div>
                     </div>
                   ))}
-                  <div style={{ fontSize: 11, color: T.muted }}>Share of invested money (cash excluded). ETFs are grouped since the free data plan doesn't break them down.</div>
+                  <div style={{ fontSize: 11, color: T.muted }}>Share of invested money. ETFs are grouped since the free data plan doesn't break them down.</div>
                 </div>
               );
             })()}
@@ -403,12 +403,8 @@ export default function InvestingTab({ hook, userId }) {
           <Card>
             <SectionTitle>Totals</SectionTitle>
             <TotalRow label="Money added (net)" value={money(portfolio.netDeposits, hide)} />
-            {Math.abs(portfolio.cash) > 0.005 && (
-              <TotalRow label="Cash from older entries" value={money(portfolio.cash, hide)} color={portfolio.cash < -0.005 ? T.red : T.text} />
-            )}
             <TotalRow label="Realized gains (sells)" value={signedMoney(portfolio.realized, hide)} color={gainColor(portfolio.realized)} />
             <TotalRow label="Dividends received" value={money(portfolio.dividends, hide)} />
-            {portfolio.interest > 0 && <TotalRow label="Interest (older entries)" value={money(portfolio.interest, hide)} />}
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
 
@@ -456,9 +452,9 @@ export default function InvestingTab({ hook, userId }) {
       )}
       {targetFor && (
         <TargetModal
-          label={targetFor === 'cash' ? 'Cash' : targetFor}
-          initial={targetFor === 'cash' ? cashTarget : assets[targetFor]?.targetPct}
-          onSave={v => setAsset(targetFor === 'cash' ? CASH_ID : targetFor, { targetPct: v })}
+          label={targetFor}
+          initial={assets[targetFor]?.targetPct}
+          onSave={v => setAsset(targetFor, { targetPct: v })}
           onClose={() => setTargetFor(null)}
         />
       )}
@@ -518,10 +514,10 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
 // Add, rename and delete accounts
 function AccountsModal({ hook, onClose }) {
   const { accounts, txs, addAccount, renameAccount, deleteAccount, assignTxs } = hook;
-  // Unassigned transactions grouped by stock; deposits/withdrawals/interest as "Cash"
+  // Unassigned transactions grouped by stock; older money in/out entries as "Money in/out"
   const loose = {};
-  txs.filter(t => !t.account).forEach(t => { const k = t.symbol || 'Cash'; (loose[k] = loose[k] || []).push(t.id); });
-  const looseKeys = Object.keys(loose).sort((a, b) => (a === 'Cash') - (b === 'Cash') || a.localeCompare(b));
+  txs.filter(t => !t.account).forEach(t => { const k = t.symbol || 'Money in/out'; (loose[k] = loose[k] || []).push(t.id); });
+  const looseKeys = Object.keys(loose).sort((a, b) => (a === 'Money in/out') - (b === 'Money in/out') || a.localeCompare(b));
   const [moved, setMoved] = useState(null);
   const assign = (key, ids, acc) => run(async () => {
     await assignTxs(ids, acc);
@@ -692,8 +688,7 @@ function SoldList({ items, hide, onOpen }) {
 }
 
 // One account in the Portfolio: tap the header to fold/unfold its holdings
-function AccountCard({ g, hide, open, onToggle, onAssign, onClearCash, renderRow, onOpenSold }) {
-  const [confirmClear, setConfirmClear] = useState(false);
+function AccountCard({ g, hide, open, onToggle, onAssign, renderRow, onOpenSold }) {
   const n = g.positions.length;
   return (
     <Card style={{ padding: '4px 16px' }}>
@@ -710,16 +705,6 @@ function AccountCard({ g, hide, open, onToggle, onAssign, onClearCash, renderRow
           {Math.abs(g.dayChange) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.dayChange) }}>{signedMoney(g.dayChange, hide)} today</span>}
         </span>
       </button>
-
-      {Math.abs(g.cash) > 0.005 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.muted, padding: '0 0 10px' }}>
-          <span style={{ flex: 1 }}>Leftover cash from older entries: <b style={{ color: g.cash < 0 ? T.red : T.text }}>{money(g.cash, hide)}</b></span>
-          <button
-            onClick={() => (confirmClear ? (onClearCash(), setConfirmClear(false)) : setConfirmClear(true))}
-            style={{ fontSize: 12, fontWeight: 600, color: confirmClear ? T.red : T.khaki }}
-          >{confirmClear ? 'Tap to confirm' : 'Clear'}</button>
-        </div>
-      )}
 
       {open && (
         <div style={{ paddingBottom: 6 }}>

@@ -4,7 +4,6 @@ import { T } from '../../theme';
 // Allocation colors: validated categorical palette for the dark card surface
 // (adjacent-pair CVD ΔE ≥ 8.4). Assigned by first-purchase order, never by rank.
 export const SERIES = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9'];
-export const CASH_COLOR  = '#8E8E93';
 export const OTHER_COLOR = '#5A5A5E';
 
 export const gainColor = n => (n === null || n === undefined || Math.abs(n) < 1e-9 ? T.muted : n > 0 ? T.green : T.red);
