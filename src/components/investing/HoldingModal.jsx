@@ -79,10 +79,13 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
           </span>
           <button
             onClick={() => confirm === t.id ? (onDelete(t.id), setConfirm(null)) : setConfirm(t.id)}
-            style={{ fontSize: confirm === t.id ? 11 : 16, color: confirm === t.id ? T.red : T.subtle, padding: '0 2px' }}
+            style={{
+              fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius: 8, flexShrink: 0,
+              color: confirm === t.id ? '#fff' : T.red, background: confirm === t.id ? T.red : 'transparent', border: `1px solid ${T.red}66`,
+            }}
             aria-label="Delete transaction"
           >
-            {confirm === t.id ? 'Delete?' : '×'}
+            {confirm === t.id ? 'Confirm' : 'Delete'}
           </button>
         </div>
       ))}
@@ -128,7 +131,7 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
     setDeleting(true);
     setMsg(null);
     try {
-      await deleteHolding(symbol);
+      await deleteHolding(symbol, scoped ? scope : undefined);
       onClose();
     } catch (e) {
       setMsg({ ok: false, text: e.message || 'Could not delete. Try again.' });
@@ -177,6 +180,7 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
           ].filter(Boolean)}
           markers={[]}
           trades={tradeDetails(scoped ? scopeTx : txs, symbol, asset.price || null)}
+          onDeleteTrade={id => run(() => deleteTx(id), 'Transaction deleted')}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 
@@ -229,6 +233,13 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
             </button>
           ))}
         </div>
+
+        {scopeTx.length > 0 && (
+          <div>
+            <SectionTitle>Transactions{scoped ? ` · ${scoped.name}` : ''}</SectionTitle>
+            <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id), 'Transaction deleted')} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
+          </div>
+        )}
 
         {asset.source === 'finnhub' && (
           <StockInfo symbol={symbol} price={asset.price} stockInfo={stockInfo} hide={hide} />
@@ -353,11 +364,6 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
 
         {msg && <div style={{ fontSize: 13, color: msg.ok ? T.green : T.red }}>{msg.text}</div>}
 
-        <div>
-          <SectionTitle>Transactions</SectionTitle>
-          <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
-        </div>
-
         {myTx.length > 0 && (
           <div>
             <button
@@ -369,11 +375,12 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
                 color: confirmDelete ? '#fff' : T.red,
               }}
             >
-              {deleting ? 'Deleting…' : confirmDelete ? `Tap again to delete ${symbol}` : `Delete ${symbol}`}
+              {deleting ? 'Deleting…' : `${confirmDelete ? 'Tap again to delete' : 'Delete'} ${symbol}${scoped ? ` from ${scoped.name}` : multi ? ' from all accounts' : ''}`}
             </button>
             {confirmDelete && !deleting && (
               <div style={{ fontSize: 12, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-                Removes all {myTx.length} {symbol} transaction{myTx.length !== 1 ? 's' : ''}{myAlerts.length ? ' and its price alerts' : ''}, as if you never added it.
+                Removes all {scopeTx.length} {symbol} transaction{scopeTx.length !== 1 ? 's' : ''}{scoped ? ` in ${scoped.name}` : ''}{!scoped && myAlerts.length ? ' and its price alerts' : ''}, as if you never added {scoped ? 'them' : 'it'}.
+                To remove just one, use Delete on that transaction above.
                 {' '}<button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, color: T.khaki, padding: 0 }}>Cancel</button>
               </div>
             )}

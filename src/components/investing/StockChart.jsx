@@ -18,7 +18,7 @@ const RANGES = [
 // Price chart for one stock (trading days only), with optional reference lines
 // (avg cost, sell price, your target) and markers (when you sold).
 // livePrice replaces the last close so the chart ends at the current quote.
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], hide, initialRange = '6mo' }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, hide, initialRange = '6mo' }) {
   const [range, setRange]   = useState(initialRange);
   const [points, setPoints] = useState(null);
   const [error, setError]   = useState(null);
@@ -76,7 +76,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
           <ValueChart points={pts} hide={hide} onScrub={setScrub} onRange={setSpan} refs={refs} markers={markers} trades={trades} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
         )}
       </div>
-      {trade && <TradeCard t={trade} hide={hide} onClose={() => setTradeId(null)} />}
+      {trade && <TradeCard key={trade.id} t={trade} hide={hide} onClose={() => setTradeId(null)} onDelete={onDeleteTrade && (() => { onDeleteTrade(trade.id); setTradeId(null); })} />}
       {!trade && trades.length > 0 && points?.length > 1 && (
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
           <span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells — tap one for details · two fingers to compare dates
@@ -90,7 +90,8 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
 }
 
 // Details for one tapped buy or sell
-function TradeCard({ t, hide, onClose }) {
+function TradeCard({ t, hide, onClose, onDelete }) {
+  const [confirm, setConfirm] = useState(false);
   const buy = t.type === 'buy';
   const row = (label, value, color = T.text) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '3px 0' }}>
@@ -122,6 +123,14 @@ function TradeCard({ t, hide, onClose }) {
           {row(t.realized >= 0 ? 'Gain' : 'Loss', `${signedMoney(t.realized, hide)} (${pct(t.realizedPct)})`, gainColor(t.realized))}
           {t.sinceSell !== null && row('Price since', pct(t.sinceSell), gainColor(t.sinceSell))}
         </>
+      )}
+      {onDelete && (
+        <button
+          onClick={() => (confirm ? onDelete() : setConfirm(true))}
+          style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: confirm ? '#fff' : T.red, background: confirm ? T.red : 'transparent', border: `1px solid ${T.red}66`, borderRadius: 8, padding: '5px 10px' }}
+        >
+          {confirm ? `Tap again to delete${t.linkId ? ' (and its linked fund trade)' : ''}` : 'Delete this transaction'}
+        </button>
       )}
     </div>
   );

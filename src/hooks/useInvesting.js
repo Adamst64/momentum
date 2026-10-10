@@ -183,14 +183,20 @@ export function useInvesting(userId) {
 
   // Removes a holding entirely: all its transactions and alerts, and its asset
   // doc unless it's on the watchlist. One batch, so it never half-deletes.
-  const deleteHolding = useCallback(async (symbol) => {
+  // account given ('' = no account): only that account's transactions go, and the
+  // stock's alerts/asset doc stay while other accounts still have it.
+  const deleteHolding = useCallback(async (symbol, account) => {
     const batch = writeBatch(db);
+    const inScope = t => t.symbol === symbol && (account === undefined || (t.account || '') === account);
     // …plus the other half of any linked pair (the fund sale that paid for a buy)
-    const mine = txs.filter(t => t.symbol === symbol);
+    const mine = txs.filter(inScope);
     const links = new Set(mine.map(t => t.linkId).filter(Boolean));
-    txs.filter(t => t.symbol === symbol || (t.linkId && links.has(t.linkId))).forEach(t => batch.delete(ref('invTransactions', t.id)));
-    alerts.filter(a => a.symbol === symbol).forEach(a => batch.delete(ref('invAlerts', a.id)));
-    if (!assets[symbol]?.watch) batch.delete(ref('invAssets', symbol));
+    txs.filter(t => inScope(t) || (t.linkId && links.has(t.linkId))).forEach(t => batch.delete(ref('invTransactions', t.id)));
+    const remaining = txs.some(t => t.symbol === symbol && !inScope(t));
+    if (!remaining) {
+      alerts.filter(a => a.symbol === symbol).forEach(a => batch.delete(ref('invAlerts', a.id)));
+      if (!assets[symbol]?.watch) batch.delete(ref('invAssets', symbol));
+    }
     await batch.commit();
   }, [txs, alerts, assets, ref]);
 
