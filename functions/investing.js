@@ -574,7 +574,7 @@ async function runInvestingJobs(db, userDoc, notify) {
 // Ticker suggestions while typing. US-listed stocks, ETFs and ADRs only.
 // `exact` says whether what was typed is itself a real ticker, so the app can
 // refuse made-up ones (e.g. a company name typed in the symbol box).
-const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End Fund']);
+const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End Fund', 'Mutual Fund', 'Open-End Fund', 'Money Market Fund']);
 // ── Callable: daily price history for a stock's chart ─────────────────────────
 // Yahoo's chart endpoint (keyless, unofficial — same one as extended hours).
 // Daily candles only exist for trading days, so weekends and holidays never show.
@@ -608,26 +608,53 @@ async function priceHistory(db, request) {
   return { points };
 }
 
+// Yahoo's search (keyless): finds mutual funds and funds by name, which
+// Finnhub's free search often misses. Best effort.
+const YAHOO_TYPES = new Set(['EQUITY', 'ETF', 'MUTUALFUND', 'MONEYMARKET']);
+async function yahooSearch(q) {
+  try {
+    const res = await fetch(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=8&newsCount=0&listsCount=0`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (!res.ok) return [];
+    return ((await res.json())?.quotes || [])
+      .filter(r => r.symbol && YAHOO_TYPES.has(r.quoteType) && !r.symbol.includes('.')) // US listings only
+      .map(r => ({ symbol: r.symbol.toUpperCase(), name: r.longname || r.shortname || '', fund: r.quoteType === 'MUTUALFUND' }));
+  } catch { return []; }
+}
+
 async function searchSymbols(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const q = String(request.data?.query || '').trim().slice(0, 30);
   if (!q) return { results: [], exact: false };
   const key = await getFinnhubKey(db);
   if (!key) throw new HttpsError('failed-precondition', 'Price service is not set up yet (missing Finnhub key).');
-  const res = await finnhub(`search?q=${encodeURIComponent(q)}&exchange=US`, key);
   const upper = q.toUpperCase();
-  const all = res?.result || [];
-  let exact = all.some(r => r.symbol === upper);
-  // Search is fuzzy and misses mutual funds; a live price settles it
+  const [fh, yh] = await Promise.all([
+    finnhub(`search?q=${encodeURIComponent(q)}&exchange=US`, key).catch(() => null),
+    yahooSearch(q),
+  ]);
+  const fromFinnhub = (fh?.result || [])
+    .filter(r => r.symbol && (!r.type || SEARCH_TYPES.has(r.type) || r.symbol === upper))
+    .map(r => ({ symbol: r.symbol, name: r.description || '' }));
+
+  // Merge, Finnhub first; Yahoo adds what Finnhub missed (funds above all)
+  const seen = new Set();
+  const merged = [...fromFinnhub, ...yh].filter(r => !seen.has(r.symbol) && seen.add(r.symbol));
+
+  // A listed match is real only if it can be priced; otherwise check the typed ticker directly
+  let exact = merged.some(r => r.symbol === upper);
   let found = null;
-  if (!exact && /^[A-Z][A-Z.-]{0,6}$/.test(upper)) { found = await quote(upper, key); exact = !!found; }
-  const results = all
-    .filter(r => r.symbol && (!r.type || SEARCH_TYPES.has(r.type)))
-    .map(r => ({ symbol: r.symbol, name: r.description || '' }))
+  if (/^[A-Z][A-Z0-9.-]{0,6}$/.test(upper) && (!exact || !fromFinnhub.some(r => r.symbol === upper))) {
+    found = await quote(upper, key).catch(() => null);
+    exact = !!found || (exact && fromFinnhub.some(r => r.symbol === upper));
+  }
+  if (found && !merged.some(r => r.symbol === upper)) merged.unshift({ symbol: upper, name: found.name || '' });
+
+  const results = merged
     // Exact ticker first, then tickers starting with what was typed
     .sort((a, b) => (b.symbol === upper) - (a.symbol === upper) || b.symbol.startsWith(upper) - a.symbol.startsWith(upper))
-    .slice(0, 8);
-  if (found && !results.some(r => r.symbol === upper)) results.unshift({ symbol: upper, name: found.name || '' });
+    .slice(0, 8)
+    .map(({ symbol, name }) => ({ symbol, name }));
   return { results, exact };
 }
 
