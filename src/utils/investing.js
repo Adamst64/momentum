@@ -64,7 +64,7 @@ export function replay(txs, { byAccount = false } = {}) {
   const h = {};
   const hold = sym => {
     const k = byAccount ? `${curAcct}|${sym}` : sym;
-    return (h[k] = h[k] || { key: k, symbol: sym, account: byAccount ? curAcct : null, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
+    return (h[k] = h[k] || { key: k, symbol: sym, account: byAccount ? curAcct : null, qty: 0, cost: 0, realized: 0, soldBasis: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
   };
   let curAcct = '';
   const addCash = n => { cash += n; cashBy[curAcct] = (cashBy[curAcct] || 0) + n; };
@@ -98,6 +98,7 @@ export function replay(txs, { byAccount = false } = {}) {
       if (t.toCash === false) netDeposits -= proceeds;
       else addCash(proceeds);
       x.realized += sold * (t.price - avg) - (t.fee || 0);
+      x.soldBasis += avg * sold;
       if (x.lot) {
         x.lot.sold += sold;
         x.lot.proceeds += sold * t.price - (t.fee || 0);
@@ -164,6 +165,10 @@ export function accountGroups(txs, assets, accounts = []) {
         id, name: id ? accounts.find(a => a.id === id)?.name || 'Deleted account' : 'No account',
         positions: ps, cash,
         sold: soldPositions(closed.filter(p => p.account === id), assets),
+        // Gains for the whole account: every position it ever held, open or sold
+        realized: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.realized, 0),
+        soldBasis: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.soldBasis, 0),
+        dividends: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.dividends, 0),
         value: cash + ps.reduce((t, p) => t + (p.value || 0), 0),
         dayChange: ps.reduce((t, p) => t + (p.prevClose && p.price ? p.qty * (p.price - p.prevClose) : 0), 0),
       };

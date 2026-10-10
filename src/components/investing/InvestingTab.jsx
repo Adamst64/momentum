@@ -757,11 +757,28 @@ function AccountCard({ g, hide, onOpen }) {
   );
 }
 
+// "Realized (sold)   +$120.00  +13.3%" — % of the money it's measured against
+function GainRow({ label, sub, value, pctOf, hide, strong }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: strong ? 15 : 13 }}>
+      <span style={{ flex: 1, color: strong ? T.text : T.muted, fontWeight: strong ? 700 : 400 }}>
+        {label}{sub && <span style={{ fontSize: 11 }}> · {sub}</span>}
+      </span>
+      <span style={{ color: gainColor(value), fontWeight: strong ? 800 : 600, fontVariantNumeric: 'tabular-nums' }}>{signedMoney(value, hide)}</span>
+      <span style={{ width: 64, textAlign: 'right', color: gainColor(value), fontVariantNumeric: 'tabular-nums', fontWeight: strong ? 700 : 400 }}>
+        {pctOf > 0 ? pct(value / pctOf) : ''}
+      </span>
+    </div>
+  );
+}
+
 // An account's own page: its holdings and what was sold from it
 function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold }) {
   const n = g.positions.length;
   const cost = g.positions.reduce((t, p) => t + (p.cost || 0), 0);
   const unrealized = g.positions.reduce((t, p) => t + (p.unrealized || 0), 0);
+  const total = g.realized + unrealized + g.dividends;
+  const prevValue = g.value - g.dayChange; // yesterday's close of what's held now
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -773,15 +790,20 @@ function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold }
       <Card style={noSelect}>
         <div style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{g.name}</div>
         <div style={{ marginTop: 4, fontSize: 30, fontWeight: 800, color: T.text, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</div>
-        {Math.abs(g.dayChange) > 0.005 && (
-          <div style={{ fontSize: 13, color: gainColor(g.dayChange), marginTop: 2 }}>{signedMoney(g.dayChange, hide)} today</div>
-        )}
-        {cost > 0 && (
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>
-            Unrealized <b style={{ color: gainColor(unrealized), fontWeight: 600 }}>{signedMoney(unrealized, hide)} ({pct(unrealized / cost)})</b>
-            {' · '}{n} holding{n !== 1 ? 's' : ''}
+        <div style={{ fontSize: 13, color: gainColor(g.dayChange), marginTop: 2 }}>
+          {signedMoney(g.dayChange, hide)}{prevValue > 0 ? ` (${pct(g.dayChange / prevValue)})` : ''} today
+        </div>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <GainRow label="Realized" sub="sold" value={g.realized} pctOf={g.soldBasis} hide={hide} />
+          <GainRow label="Unrealized" sub="still held" value={unrealized} pctOf={cost} hide={hide} />
+          {g.dividends > 0.005 && <GainRow label="Dividends" value={g.dividends} hide={hide} />}
+          <div style={{ borderTop: `1px solid ${T.cardBorder}`, paddingTop: 6 }}>
+            <GainRow label="Total gain" value={total} pctOf={cost + g.soldBasis} hide={hide} strong />
           </div>
-        )}
+        </div>
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>
+          {n} holding{n !== 1 ? 's' : ''}{g.sold.length ? ` · ${g.sold.length} sold` : ''} · total = realized + unrealized{g.dividends > 0.005 ? ' + dividends' : ''}
+        </div>
       </Card>
 
       {g.id === '' && (
