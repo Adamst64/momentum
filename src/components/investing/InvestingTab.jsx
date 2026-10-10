@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
+import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -93,20 +93,45 @@ export default function InvestingTab({ hook, userId }) {
   }, []);
 
   const today = toDateStr(new Date());
-  const ret = useMemo(() => periodReturn(txs, snapshots, portfolio.value, period, today), [txs, snapshots, portfolio.value, period, today]);
+  // Value history rebuilt from your transactions: daily closes for everything
+  // you've traded (plus SPY for the comparison), from the first transaction on
+  const tradedSymbols = useMemo(() => [...new Set(txs.filter(t => t.symbol).map(t => t.symbol))].sort().join(','), [txs]);
+  const firstDate = useMemo(() => sortTx(txs)[0]?.date || null, [txs]);
+  const [histories, setHistories] = useState(null);
+  useEffect(() => {
+    if (!firstDate || !hook.priceHistory) return undefined;
+    let live = true;
+    const age = (Date.now() - new Date(firstDate + 'T12:00:00')) / 864e5;
+    const range = age <= 350 ? '1y' : age <= 715 ? 'd2y' : 'd5y';
+    const syms = [...tradedSymbols.split(',').filter(Boolean), BENCHMARK];
+    Promise.all(syms.map(s => hook.priceHistory(s, range).then(pts => [s, pts]).catch(() => [s, null])))
+      .then(pairs => { if (live) setHistories(Object.fromEntries(pairs.filter(([, pts]) => pts && pts.length))); });
+    return () => { live = false; };
+  }, [tradedSymbols, firstDate]); // eslint-disable-line react-hooks/exhaustive-deps
+  const history = useMemo(() => {
+    if (!histories || !firstDate) return null;
+    const end = priceDate(); // today's point is the live value, added below
+    const days = [];
+    for (let d = firstDate; d < end; d = addDays(d, 1)) if (isMarketDay(d)) days.push(d);
+    return buildValueHistory(txs, histories, assets, days);
+  }, [histories, txs, assets, firstDate]);
+  // Until prices load, fall back to the values saved each day
+  const series = history || snapshots;
 
-  // Chart: saved daily values in the selected period, plus "now". Only market
+  const ret = useMemo(() => periodReturn(txs, series, portfolio.value, period, today), [txs, series, portfolio.value, period, today]);
+
+  // Chart: the value history in the selected period, plus "now". Only market
   // days, so weekends and holidays don't show up as flat stretches. "Now" stands
   // in for the session current prices belong to (the last one when closed).
   const chartPoints = useMemo(() => {
     const p = PERIODS.find(x => x.key === period);
     const start = p.start ? p.start(today) : '0000';
     const nowDate = priceDate();
-    const pts = snapshots
+    const pts = series
       .filter(s => s.date > start && s.date < nowDate && isMarketDay(s.date))
       .sort((a, b) => a.date.localeCompare(b.date));
     return txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
-  }, [snapshots, period, today, portfolio.value, portfolio.netDeposits, txs.length]);
+  }, [series, period, today, portfolio.value, portfolio.netDeposits, txs.length]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
@@ -152,7 +177,7 @@ export default function InvestingTab({ hook, userId }) {
     setPull(0);
   };
 
-  const bench = ret && !ret.unavailable ? benchmarkReturn(snapshots, ret.start, assets[BENCHMARK]?.price) : null;
+  const bench = ret && !ret.unavailable ? benchmarkReturn(series, ret.start, assets[BENCHMARK]?.price || histories?.[BENCHMARK]?.slice(-1)[0]?.value) : null;
 
   const slices = allocationSlices(portfolio, assets);
   const sliceColor = Object.fromEntries(slices.map(x => [x.key, x.color]));
@@ -281,7 +306,7 @@ export default function InvestingTab({ hook, userId }) {
                 ? `Not enough history for ${periodLabel} yet${ret.trackingSince ? ` (values saved since ${formatShortDate(ret.trackingSince)})` : ''}.`
                 : bench !== null && ret?.pct !== null && ret?.pct !== undefined
                   ? <>S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts</>
-                  : 'S&P 500 comparison appears once there\'s enough history.'}
+                  : !history ? 'Building your history from past prices…' : 'S&P 500 comparison appears once there\'s enough history.'}
               <span style={{ fontSize: 11, display: 'block', marginTop: 2 }}>Returns exclude money you add or withdraw.</span>
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, fontSize: 12, color: T.muted }}>

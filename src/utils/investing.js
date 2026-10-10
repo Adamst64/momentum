@@ -288,6 +288,59 @@ export function txEditInit(tx, txs) {
   return null;
 }
 
+// Rebuilds the portfolio's value for every market day from the first
+// transaction to endDate: replays the transactions (same rules as replay) and
+// values what was held each day at that day's close.
+//   histories: { SYMBOL: [{ date, value }] } daily closes (and BENCHMARK for spy)
+//   marketDays: sorted 'YYYY-MM-DD' dates the market was open
+// A symbol with no close yet on a day uses its last trade price, then today's
+// price (manual assets). Returns [{ date, value, netDeposits, spy }].
+export function buildValueHistory(txs, histories, assets, marketDays) {
+  const sorted = sortTx(txs);
+  if (!sorted.length) return [];
+  const first = sorted[0].date;
+  const days = marketDays.filter(d => d >= first);
+  const qty = {}, lastTrade = {}, cursor = {};
+  let cash = 0, netDeposits = 0, ti = 0;
+  const closeOn = (sym, d) => {
+    const h = histories[sym];
+    if (!h || !h.length) return null;
+    let i = cursor[sym] ?? -1;
+    while (i + 1 < h.length && h[i + 1].date <= d) i++;
+    cursor[sym] = i;
+    return i >= 0 ? h[i].value : null;
+  };
+  const out = [];
+  for (const d of days) {
+    for (; ti < sorted.length && sorted[ti].date <= d; ti++) {
+      const t = sorted[ti];
+      if (t.type === 'deposit')  { cash += t.amount; netDeposits += t.amount; }
+      if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
+      if (t.type === 'dividend' || t.type === 'interest') cash += t.amount;
+      if (t.type === 'buy') {
+        const total = t.quantity * t.price + (t.fee || 0);
+        if (t.fromCash === false) netDeposits += total; else cash -= total;
+        qty[t.symbol] = (qty[t.symbol] || 0) + t.quantity;
+        lastTrade[t.symbol] = t.price;
+      }
+      if (t.type === 'sell') {
+        const proceeds = t.quantity * t.price - (t.fee || 0);
+        if (t.toCash === false) netDeposits -= proceeds; else cash += proceeds;
+        qty[t.symbol] = (qty[t.symbol] || 0) - t.quantity;
+        lastTrade[t.symbol] = t.price;
+      }
+    }
+    let value = cash;
+    for (const [sym, q] of Object.entries(qty)) {
+      if (q <= 1e-9) continue;
+      const px = closeOn(sym, d) ?? lastTrade[sym] ?? assets[sym]?.price ?? 0;
+      value += q * px;
+    }
+    out.push({ date: d, value, netDeposits, spy: closeOn(BENCHMARK, d) });
+  }
+  return out;
+}
+
 // Checks a new/edited transaction against the rest before saving
 // tx can be one transaction or several saved together (a buy paid from a fund).
 // Checked per account: selling more than that account holds, or its cash going negative.

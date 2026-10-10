@@ -591,7 +591,12 @@ const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End 
 // Yahoo's chart endpoint (keyless, unofficial — same one as extended hours).
 // Daily candles only exist for trading days, so weekends and holidays never show.
 
-const HISTORY_RANGES = { '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk', '10y': '1wk', max: '1mo' };
+// range → interval; the d* ranges are daily over a longer span (used to rebuild
+// the portfolio's value day by day from your transactions)
+const HISTORY_RANGES = {
+  '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk', '10y': '1wk', max: '1mo',
+  d2y: ['2y', '1d'], d5y: ['5y', '1d'],
+};
 
 async function priceHistory(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
@@ -600,8 +605,10 @@ async function priceHistory(db, request) {
   if (!/^[A-Z0-9.\-^=]{1,15}$/.test(sym)) throw new HttpsError('invalid-argument', 'Symbol required');
   if (!HISTORY_RANGES[range]) throw new HttpsError('invalid-argument', 'Unknown range');
 
+  const spec = HISTORY_RANGES[range];
+  const [yRange, interval] = Array.isArray(spec) ? spec : [range, spec];
   const res = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${HISTORY_RANGES[range]}&range=${range}`,
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${yRange}`,
     { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (res.status === 404) return { points: [] };
   if (!res.ok) throw new HttpsError('unavailable', 'Price history is unavailable right now.');
