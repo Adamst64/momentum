@@ -4,7 +4,7 @@ import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { money, signedMoney, pct, qtyFmt, soldPositions, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
-import { Card, SectionTitle, Chips, inputStyle, gainColor } from './ui';
+import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
 import SymbolInput from './SymbolInput';
@@ -181,7 +181,7 @@ export default function InvestingTab({ hook, userId }) {
       )}
 
       {/* Hero: value, period change, chart */}
-      <Card>
+      <Card style={noSelect}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{
             fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,

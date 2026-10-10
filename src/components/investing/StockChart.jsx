@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt } from '../../utils/investing';
-import { Chips, gainColor } from './ui';
+import { Chips, gainColor, noSelect } from './ui';
 import { ValueChart } from './Charts';
 
 const RANGES = [
@@ -44,7 +44,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   const change = shown && first ? shown.value - first.value : null;
 
   return (
-    <div>
+    <div style={noSelect}>
       <div style={{ minHeight: 38 }}>
         {span ? (
           <>

@@ -1,8 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
-import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor } from './ui';
+import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor, noSelect } from './ui';
 
 // ── Portfolio value over time (single series, touch/hover crosshair) ────────
 
@@ -28,6 +28,18 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   // One finger: 'pending' until it moves sideways (scrub) or vertically (left to
   // the page: scroll / pull to refresh), or rests 200 ms (scrub in place)
   const gesture = useRef(null); // { mode, x0, y0, timer }
+
+  // A second finger on the chart is ours: stop Safari from treating it as a
+  // text selection or zoom (needs a non-passive native listener)
+  const hasChart = points.length >= 2;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const stop = e => { if (e.touches.length > 1) e.preventDefault(); };
+    el.addEventListener('touchstart', stop, { passive: false });
+    el.addEventListener('touchmove', stop, { passive: false });
+    return () => { el.removeEventListener('touchstart', stop); el.removeEventListener('touchmove', stop); };
+  }, [hasChart]);
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
@@ -145,7 +157,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     }
   }
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative', ...noSelect }}>
       {!onScrub && <div style={{ height: 34, fontSize: 12, color: T.muted }}>
         {hp ? (
           <>

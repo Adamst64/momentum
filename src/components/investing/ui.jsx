@@ -9,6 +9,12 @@ export const OTHER_COLOR = '#5A5A5E';
 
 export const gainColor = n => (n === null || n === undefined || Math.abs(n) < 1e-9 ? T.muted : n > 0 ? T.green : T.red);
 
+// For anything you touch-and-drag (charts and their headlines): no iOS text
+// selection, no long-press callout, no grey tap flash
+export const noSelect = {
+  userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none', WebkitTapHighlightColor: 'transparent',
+};
+
 export const inputStyle = {
   width: '100%', boxSizing: 'border-box',
   padding: '11px 14px', borderRadius: 10,
