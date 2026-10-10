@@ -16,9 +16,31 @@ async function finnhub(path, key) {
 }
 
 // Returns { price, prevClose } or null when Finnhub doesn't know the symbol
+// Finnhub first; anything it doesn't price (mutual funds like FXAIX, many
+// non-US listings) falls back to Yahoo's daily chart data.
 async function quote(symbol, key) {
   const q = await finnhub(`quote?symbol=${encodeURIComponent(symbol)}`, key);
-  return q && q.c > 0 ? { price: q.c, prevClose: q.pc || null } : null;
+  if (q && q.c > 0) return { price: q.c, prevClose: q.pc || null };
+  try { return await yahooQuote(symbol); }
+  catch (e) { console.warn(`Yahoo quote for ${symbol} failed:`, e.message); return null; }
+}
+
+// Latest price, previous close and name from Yahoo (keyless). Mutual funds
+// have one price a day (NAV, published in the evening).
+async function yahooQuote(symbol) {
+  if (!/^[A-Z0-9.\-^=]{1,15}$/.test(symbol)) return null;
+  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+  const r = (await res.json())?.chart?.result?.[0];
+  if (!r) return null;
+  const closes = (r.indicators?.quote?.[0]?.close || []).filter(c => c > 0);
+  const price = r.meta?.regularMarketPrice > 0 ? r.meta.regularMarketPrice : closes[closes.length - 1];
+  if (!(price > 0)) return null;
+  const prevClose = closes.length >= 2 ? closes[closes.length - 2] : (r.meta?.chartPreviousClose || null);
+  const round = n => (n ? Math.round(n * 1e4) / 1e4 : null);
+  return { price: round(price), prevClose: round(prevClose), name: r.meta?.longName || r.meta?.shortName || null, provider: 'yahoo' };
 }
 
 // Fetch quotes for symbols (sequential: free tier allows ~60 calls/minute)
@@ -158,7 +180,8 @@ async function refreshPrices(db, request) {
     const ref = assetsCol.doc(sym);
     const existing = (await ref.get()).data() || {};
     const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now,
-      ...(await extendedFields(sym, et)) };
+      ...(q.provider === 'yahoo' ? { priceProvider: 'yahoo', ...(!existing.name && q.name ? { name: q.name } : {}) } : {}),
+      ...(q.provider === 'yahoo' ? {} : await extendedFields(sym, et)) };
     if (sym === BENCHMARK && !existing.watch) update.benchmark = true;
 
     if (sym !== BENCHMARK || existing.watch) {
@@ -595,14 +618,16 @@ async function searchSymbols(db, request) {
   const upper = q.toUpperCase();
   const all = res?.result || [];
   let exact = all.some(r => r.symbol === upper);
-  // Search is fuzzy and can miss a real ticker; a live price settles it
-  if (!exact && /^[A-Z][A-Z.-]{0,6}$/.test(upper)) exact = !!(await quote(upper, key));
+  // Search is fuzzy and misses mutual funds; a live price settles it
+  let found = null;
+  if (!exact && /^[A-Z][A-Z.-]{0,6}$/.test(upper)) { found = await quote(upper, key); exact = !!found; }
   const results = all
     .filter(r => r.symbol && (!r.type || SEARCH_TYPES.has(r.type)))
     .map(r => ({ symbol: r.symbol, name: r.description || '' }))
     // Exact ticker first, then tickers starting with what was typed
     .sort((a, b) => (b.symbol === upper) - (a.symbol === upper) || b.symbol.startsWith(upper) - a.symbol.startsWith(upper))
     .slice(0, 8);
+  if (found && !results.some(r => r.symbol === upper)) results.unshift({ symbol: upper, name: found.name || '' });
   return { results, exact };
 }
 

@@ -186,7 +186,10 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             onChange={src => run(() => setAsset(symbol, { source: src }), src === 'finnhub' ? 'Will update automatically' : 'Switched to manual price')}
             options={[{ value: 'finnhub', label: 'Auto (live)' }, { value: 'manual', label: 'Manual' }]}
           />
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>Updated {timeAgo(asset.priceUpdatedAt)}</div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 8 }}>
+            Updated {timeAgo(asset.priceUpdatedAt)}
+            {asset.source === 'finnhub' && asset.priceProvider === 'yahoo' && ' · from Yahoo Finance — mutual funds get one price a day, published in the evening'}
+          </div>
           {ext && (
             <div style={{ fontSize: 13, color: T.text, marginTop: 6 }}>
               {ext.label}: {money(ext.price, hide)} <span style={{ color: gainColor(ext.pct) }}>({pct(ext.pct)})</span>
