@@ -96,10 +96,27 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
             <span style={{ fontSize: 14, fontWeight: 700, color: NOTE_COLOR, flex: 1, minWidth: 0 }}>★ {trade.label}</span>
             <button onClick={() => { setTradeId(null); setEditingNote(null); }} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
           </div>
-          <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
-            {formatDateYear(trade.date)} · {money(trade.priceThen, hide)} then
-            {trade.priceNow && trade.priceThen ? <span style={{ color: gainColor(trade.priceNow - trade.priceThen) }}> · {pct(trade.priceNow / trade.priceThen - 1)} since</span> : null}
-          </div>
+          {(() => {
+            // How the stock moved from that day to right now (live price when there is one)
+            const now = livePrice || trade.priceNow;
+            const then = trade.priceThen;
+            const diff = now && then ? now - then : null;
+            return (
+              <>
+                {diff !== null && (
+                  <div style={{ marginTop: 8 }}>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: gainColor(diff), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+                      {pct(diff / then)} <span style={{ fontSize: 15, fontWeight: 700 }}>{signedMoney(diff, hide)}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+                      since {formatDateYear(trade.date)} · {money(then, hide)} then → {money(now, hide)} now
+                    </div>
+                  </div>
+                )}
+                {diff === null && <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatDateYear(trade.date)}</div>}
+              </>
+            );
+          })()}
           {editingNote?.id === trade.noteId ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
               <input value={editingNote.label} onChange={e => setEditingNote(n => ({ ...n, label: e.target.value }))} placeholder="Mark name" style={inputStyle} />
