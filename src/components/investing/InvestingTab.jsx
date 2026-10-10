@@ -434,7 +434,7 @@ export default function InvestingTab({ hook, userId }) {
           </div>
         </Modal>
       )}
-      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} initialAccount={trade.account} onClose={() => setTrade(null)} />}
+      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
       {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
       {open && (
         <HoldingModal
