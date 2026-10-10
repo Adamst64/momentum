@@ -53,7 +53,8 @@ const earningsBadge = (date, today) => {
 
 export default function InvestingTab({ hook, userId }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
-  const [view, setView]       = useState('portfolio');
+  const [view, setViewState] = useState('portfolio');
+  const setView = v => { setViewState(v); setOpenAccounts(new Set()); };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
@@ -64,14 +65,12 @@ export default function InvestingTab({ hook, userId }) {
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
   const [editing, setEditing] = useState(null); // transaction being edited from All transactions
-  // Account cards start folded; the ones you open are remembered
-  const [openAccounts, setOpenAccounts] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('momentum_open_accounts') || '[]')); } catch { return new Set(); }
-  });
+  // Account cards always start folded: leaving the Investing tab (or switching
+  // to Watchlist/Insights) folds them all again. Nothing is remembered.
+  const [openAccounts, setOpenAccounts] = useState(() => new Set());
   const toggleAccount = id => setOpenAccounts(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
-    try { localStorage.setItem('momentum_open_accounts', JSON.stringify([...next])); } catch { /* storage unavailable */ }
     return next;
   });
   const [targetFor, setTargetFor] = useState(null);
