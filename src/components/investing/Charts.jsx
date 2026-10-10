@@ -424,16 +424,24 @@ export function MonthlyFlows({ months, hide }) {
 
 // ── Best / worst holdings by unrealized return ──────────────────────────────
 
-export function Performers({ holdings, hide, onOpen }) {
-  const ranked = holdings.filter(h => h.unrealizedPct !== null).sort((a, b) => b.unrealizedPct - a.unrealizedPct);
+// Held positions are ranked by their gain so far, fully sold ones by the gain
+// they locked in (what you sold for vs. what you paid), tagged "sold".
+export function Performers({ holdings, sold = [], hide, onOpen }) {
+  const ranked = [
+    ...holdings.filter(h => h.unrealizedPct !== null).map(h => ({ symbol: h.symbol, pct: h.unrealizedPct, gain: h.unrealized })),
+    ...sold.filter(s => s.realizedPct !== null).map(s => ({ symbol: s.symbol, pct: s.realizedPct, gain: s.realized, sold: true })),
+  ].sort((a, b) => b.pct - a.pct);
   if (ranked.length < 2) return <div style={{ fontSize: 13, color: T.muted }}>Needs at least two priced holdings.</div>;
   const best = ranked.slice(0, Math.min(3, Math.ceil(ranked.length / 2)));
   const worst = ranked.slice(-Math.min(3, Math.floor(ranked.length / 2))).reverse();
   const row = h => (
     <button key={h.symbol} onClick={() => onOpen(h.symbol)} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', width: '100%' }}>
-      <span style={{ fontSize: 14, color: T.text, fontWeight: 600 }}>{h.symbol}</span>
-      <span style={{ fontSize: 13, color: gainColor(h.unrealized) }}>
-        {pct(h.unrealizedPct)} {!hide && <span style={{ color: T.muted }}>· {money(h.unrealized)}</span>}
+      <span style={{ fontSize: 14, color: T.text, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+        {h.symbol}
+        {h.sold && <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 6, padding: '1px 5px' }}>sold</span>}
+      </span>
+      <span style={{ fontSize: 13, color: gainColor(h.gain) }}>
+        {pct(h.pct)} {!hide && <span style={{ color: T.muted }}>· {money(h.gain)}</span>}
       </span>
     </button>
   );

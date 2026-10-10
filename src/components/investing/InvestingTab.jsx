@@ -484,7 +484,8 @@ export default function InvestingTab({ hook, userId }) {
 
           <Card>
             <SectionTitle>Top & bottom performers</SectionTitle>
-            <Performers holdings={portfolio.holdings} hide={hide} onOpen={setOpen} />
+            <Performers holdings={portfolio.holdings} sold={sold} hide={hide} onOpen={setOpen} />
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Held: gain so far. Sold: the gain you locked in when you sold.</div>
           </Card>
 
           <Card>
