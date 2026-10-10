@@ -59,7 +59,8 @@ export default function InvestingTab({ hook, userId }) {
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
   const [adding, setAdding]   = useState(false);
-  const [open, setOpen]       = useState(null);  // symbol
+  const [open, setOpen]       = useState(null);  // symbol, or { symbol, account } from an account's row
+  const openSym = typeof open === 'object' && open ? open.symbol : open;
   const [byAccountPref, setByAccountPrefState] = useState(() => { try { return localStorage.getItem('momentum_by_account') !== '0'; } catch { return true; } });
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
@@ -162,6 +163,9 @@ export default function InvestingTab({ hook, userId }) {
   const soonDate = toDateStr(new Date(Date.now() + 7 * 864e5));
   const laterDate = toDateStr(new Date(Date.now() + 21 * 864e5));
   const rowProps = { assets, today, soonDate, laterDate, hide, sliceColor, onOpen: setOpen };
+  // How many accounts hold each symbol (for the "in 3 accounts" tag)
+  const acctCount = {};
+  groups.forEach(g => g.positions.forEach(p => { acctCount[p.symbol] = (acctCount[p.symbol] || 0) + 1; }));
 
   // Owned stocks don't belong on the watchlist (catches ones bought before this rule)
   const ownedWatched = portfolio.holdings.filter(h => assets[h.symbol]?.watch).map(h => h.symbol).join(',');
@@ -314,7 +318,7 @@ export default function InvestingTab({ hook, userId }) {
               <div style={{ fontSize: 12, color: g.cash < 0 ? T.red : T.muted, paddingBottom: 4 }}>Free cash {money(g.cash, hide)}</div>
             )}
             {g.positions.map(pos => (
-              <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />
+              <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />
             ))}
             {g.positions.length === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px' }}>Only cash in this account.</div>}
           </Card>
@@ -444,12 +448,14 @@ export default function InvestingTab({ hook, userId }) {
       {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
       {open && (
         <HoldingModal
-          hook={hook} symbol={open} hide={hide} userId={userId}
-          onTrade={(type, symbol) => {
-            // Held in exactly one account → trade there by default
+          key={openSym}
+          hook={hook} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
+          onTrade={(type, symbol, acct) => {
+            // The account being viewed, or the only one holding it
             const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
+            const account = acct !== undefined ? acct : where.length === 1 ? where[0] : undefined;
             setOpen(null);
-            setTrade({ type, symbol, ...(where.length === 1 ? { account: where[0] } : {}) });
+            setTrade({ type, symbol, ...(account !== undefined ? { account } : {}) });
           }}
           onClose={() => setOpen(null)}
         />
@@ -467,12 +473,12 @@ export default function InvestingTab({ hook, userId }) {
 }
 
 // One holding (or one account's position) in the Portfolio list
-function HoldingRow({ h, first, share, assets, today, soonDate, laterDate, hide, sliceColor, onOpen }) {
+function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, laterDate, hide, sliceColor, onOpen }) {
   const next = assets[h.symbol]?.nextEarnings;
   const showEarn = next && next.date >= today && next.date <= laterDate;
   return (
     <button
-      onClick={() => onOpen(h.symbol)}
+      onClick={() => onOpen(h.account !== null && h.account !== undefined ? { symbol: h.symbol, account: h.account } : h.symbol)}
       style={{ width: '100%', padding: '12px 0 10px', borderTop: first ? 'none' : `1px solid ${T.cardBorder}`, textAlign: 'left', display: 'block' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -488,6 +494,7 @@ function HoldingRow({ h, first, share, assets, today, soonDate, laterDate, hide,
               </span>
             )}
             {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
+            {inAccounts > 1 && <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, background: T.bg, padding: '2px 6px', borderRadius: 8 }}>in {inAccounts} accounts</span>}
           </div>
           <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}

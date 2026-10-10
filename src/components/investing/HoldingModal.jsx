@@ -98,7 +98,9 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
   );
 }
 
-export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
+// account: opened from that account's row → starts showing just that account,
+// with a switch to all accounts. undefined → all accounts.
+export default function HoldingModal({ hook, symbol, account, hide, userId, onTrade, onClose }) {
   const { portfolio, assets, txs, accounts, setTxAccount, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
@@ -111,6 +113,13 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
   const ext = asset.source === 'finnhub' ? extendedPrice(asset) : null;
   const held = h && h.qty > 0;
   const sold = !held && h ? soldPositions([h], assets)[0] || null : null;
+
+  // One account or all of them (only offered when it's held in several)
+  const multi = byAcct.length > 1;
+  const [scope, setScope] = useState(account !== undefined && account !== null ? account : 'all');
+  const scoped = multi && scope !== 'all' ? byAcct.find(g => g.id === scope) : null;
+  const v = scoped ? scoped.pos : h;          // numbers shown in the stats
+  const scopeTx = scoped ? myTx.filter(t => (t.account || '') === scope) : myTx;
 
   const [manualPrice, setManualPrice] = useState(asset.price ? String(asset.price) : '');
   const [target, setTarget]       = useState(asset.targetPct != null ? String(asset.targetPct) : '');
@@ -154,19 +163,28 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {asset.name && <div style={{ fontSize: 13, color: T.muted, marginTop: -12 }}>{asset.name}</div>}
 
+        {multi && (
+          <Chips
+            small
+            options={[...byAcct.map(g => ({ value: g.id, label: g.name })), { value: 'all', label: `All accounts (${byAcct.length})` }]}
+            value={scoped ? scope : 'all'}
+            onChange={setScope}
+          />
+        )}
+
         <StockChart
           symbol={symbol}
           priceHistory={priceHistory}
           livePrice={asset.source === 'finnhub' ? asset.price : null}
           hide={hide}
           refs={[
-            held && { value: h.avgCost, label: 'Avg cost', color: T.muted },
+            held && { value: v.avgCost, label: 'Avg cost', color: T.muted },
             sold && { value: sold.avgSell, label: 'Sold at', color: T.khaki },
             asset.priceTarget && { value: asset.priceTarget, label: 'Target', color: '#5AC8FA' },
             asset.analyst?.targetMean && { value: asset.analyst.targetMean, label: 'Analysts', color: ANALYST_COLOR },
           ].filter(Boolean)}
           markers={[]}
-          trades={tradeDetails(txs, symbol, asset.price || null)}
+          trades={tradeDetails(scoped ? scopeTx : txs, symbol, asset.price || null)}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 
@@ -183,27 +201,27 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
 
         {held && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            {stat('Shares', qtyFmt(h.qty))}
-            {stat('Avg cost / share', money(h.avgCost, hide))}
-            {stat('Price', money(h.price, hide))}
-            {stat('Value', money(h.value, hide))}
-            {stat('Unrealized', `${signedMoney(h.unrealized, hide)} (${pct(h.unrealizedPct)})`, gainColor(h.unrealized))}
-            {stat('Today', pct(h.dayPct), gainColor(h.dayPct))}
-            {stat('Realized (sells)', signedMoney(h.realized, hide), gainColor(h.realized))}
-            {stat('Dividends', money(h.dividends, hide), h.dividends > 0 ? T.green : T.text)}
+            {stat(scoped ? 'Shares' : multi ? 'Total shares' : 'Shares', qtyFmt(v.qty))}
+            {stat('Avg cost / share', money(v.avgCost, hide))}
+            {stat('Price', money(v.price, hide))}
+            {stat(scoped || !multi ? 'Value' : 'Total value', money(v.value, hide))}
+            {stat('Unrealized', `${signedMoney(v.unrealized, hide)} (${pct(v.unrealizedPct)})`, gainColor(v.unrealized))}
+            {stat('Today', pct(v.dayPct), gainColor(v.dayPct))}
+            {stat('Realized (sells)', signedMoney(v.realized, hide), gainColor(v.realized))}
+            {stat('Dividends', money(v.dividends, hide), v.dividends > 0 ? T.green : T.text)}
           </div>
         )}
 
-        {byAcct.length > 1 && (
+        {multi && !scoped && (
           <div>
             <SectionTitle>By account</SectionTitle>
             {byAcct.map(g => (
-              <div key={g.id || 'none'} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 0', fontSize: 13 }}>
+              <button key={g.id || 'none'} onClick={() => setScope(g.id)} style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', fontSize: 13 }}>
                 <span style={{ color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
                 <span style={{ color: T.muted }}>{qtyFmt(g.pos.qty)} @ {money(g.pos.avgCost, hide)}</span>
                 <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(g.pos.value, hide)}</span>
                 <span style={{ color: gainColor(g.pos.unrealized), width: 58, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct(g.pos.unrealizedPct)}</span>
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -212,7 +230,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
           {['buy', 'sell', 'dividend'].map(t => (
             <button
               key={t}
-              onClick={() => onTrade(t, symbol)}
+              onClick={() => onTrade(t, symbol, scoped ? scope : undefined)}
               style={{ flex: 1, padding: 10, borderRadius: 10, background: t === 'buy' ? T.olive : T.subtle, color: '#fff', fontSize: 14, fontWeight: 600 }}
             >
               {t === 'buy' ? 'Buy' : t === 'sell' ? 'Sell' : 'Dividend'}
@@ -345,7 +363,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
 
         <div>
           <SectionTitle>Transactions</SectionTitle>
-          <TxList txs={myTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
+          <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
         </div>
 
         {myTx.length > 0 && (
