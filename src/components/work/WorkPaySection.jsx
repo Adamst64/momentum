@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import { getMondayId, formatWeekRange, parsePayEntry, dayEntries } from '../../utils/workUtils';
+import { ConfirmSheet } from '../routines/CommitmentSheets';
 
 const NO_LEAD = '#E8875A'; // orange tag for days worked without being crew leader
 
@@ -18,17 +19,24 @@ function StatBox({ value, label, color, strong }) {
   );
 }
 
-function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, isCurrentWeek }) {
+// Every week works the same: the amount shows with a pencil to edit it, and
+// Paid can be undone (with a confirm) if it was marked by mistake
+function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment }) {
   const { paid, amount: savedAmount } = parsePayEntry(rawEntry);
   const crew = crews.find(c => c.id === crewId);
-  const [localAmt, setLocalAmt] = useState(savedAmount > 0 ? String(savedAmount) : '');
-  const [editing, setEditing]   = useState(false);
+  const [localAmt, setLocalAmt]       = useState('');
+  const [editing, setEditing]         = useState(false);
+  const [confirmUnpay, setConfirmUnpay] = useState(false);
 
-  const showInput = isCurrentWeek || editing;
-
-  const save = (newPaid = paid) => {
-    onSetPayment(mondayId, crewId, newPaid, parseFloat(localAmt) || 0);
-    if (editing) setEditing(false);
+  const startEdit = () => { setLocalAmt(savedAmount > 0 ? String(savedAmount) : ''); setEditing(true); };
+  const saveAmount = () => {
+    onSetPayment(mondayId, crewId, paid, parseFloat(localAmt) || 0);
+    setEditing(false);
+  };
+  const setPaid = (newPaid) => {
+    const amount = editing ? parseFloat(localAmt) || 0 : savedAmount;
+    onSetPayment(mondayId, crewId, newPaid, amount);
+    setEditing(false);
   };
 
   const dc = stats.days.length;
@@ -45,14 +53,13 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
           <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{crew?.name || 'No crew'}</span>
         </div>
         <button
-          onClick={() => { if (!paid || editing) save(!paid); }}
+          onClick={() => (paid ? setConfirmUnpay(true) : setPaid(true))}
+          aria-label={paid ? 'Paid. Tap to mark as unpaid' : 'Mark paid'}
           style={{
             padding: '6px 13px', borderRadius: 10, fontSize: 13, fontWeight: 600, flexShrink: 0,
             background: paid ? T.green + '22' : T.subtle,
             color: paid ? T.green : T.muted,
             border: `1px solid ${paid ? T.green + '44' : T.cardBorder}`,
-            cursor: paid && !editing ? 'default' : 'pointer',
-            opacity: paid && !editing ? 0.85 : 1,
           }}
         >{paid ? 'Paid ✓' : 'Mark Paid'}</button>
       </div>
@@ -89,29 +96,32 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
         })}
       </div>
 
-      {showInput ? (
+      {editing ? (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 14, color: T.muted }}>$</span>
           <input
             value={localAmt}
             onChange={e => setLocalAmt(e.target.value.replace(/[^0-9.]/g, ''))}
-            onBlur={() => { if (isCurrentWeek) save(); }}
-            onKeyDown={e => e.key === 'Enter' && save()}
+            onKeyDown={e => { if (e.key === 'Enter') saveAmount(); if (e.key === 'Escape') setEditing(false); }}
             placeholder="Amount…"
             inputMode="decimal"
-            autoFocus={editing}
+            autoFocus
             style={{
-              flex: 1, background: T.bg, border: `1px solid ${T.cardBorder}`,
+              flex: 1, minWidth: 0, background: T.bg, border: `1px solid ${T.cardBorder}`,
               borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 15,
               outline: 'none', colorScheme: 'dark',
             }}
           />
-          {editing && (
-            <button
-              onClick={() => save()}
-              style={{ padding: '8px 14px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0 }}
-            >✓</button>
-          )}
+          <button
+            onClick={() => setEditing(false)}
+            aria-label="Cancel"
+            style={{ padding: '8px 12px', borderRadius: 8, background: T.subtle, color: T.muted, fontSize: 14, fontWeight: 700, flexShrink: 0 }}
+          >✕</button>
+          <button
+            onClick={saveAmount}
+            aria-label="Save amount"
+            style={{ padding: '8px 14px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 700, flexShrink: 0 }}
+          >✓</button>
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -119,10 +129,21 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment, i
             {savedAmount > 0 ? `$${savedAmount.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` : '—'}
           </span>
           <button
-            onClick={() => setEditing(true)}
+            onClick={startEdit}
+            aria-label="Edit amount"
             style={{ fontSize: 16, color: T.muted, padding: '4px 8px' }}
           >✎</button>
         </div>
+      )}
+
+      {confirmUnpay && (
+        <ConfirmSheet
+          title={`Mark ${crew?.name || 'this crew'} as unpaid?`}
+          message={`For the week of ${formatWeekRange(mondayId)}.${savedAmount > 0 ? ` The amount ($${savedAmount.toLocaleString('en-US')}) is kept.` : ''}`}
+          confirmLabel="Mark unpaid"
+          onConfirm={() => setPaid(false)}
+          onClose={() => setConfirmUnpay(false)}
+        />
       )}
     </div>
   );
@@ -403,7 +424,6 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                         rawEntry={weekDoc[crewId]}
                         crews={crews}
                         onSetPayment={onSetPayment}
-                        isCurrentWeek={mondayId === currentMondayId}
                       />
                     ))}
                   </div>
