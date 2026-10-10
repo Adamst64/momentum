@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
@@ -17,9 +17,13 @@ const timeAgo = iso => {
   return formatShortDate(iso.slice(0, 10));
 };
 
-export function TxList({ txs, hide, onDelete, onUpdate }) {
+// allTxs: every transaction, to name the other half of a linked pair when
+// txs is filtered to one symbol. accounts + onSetAccount: account label you can change.
+export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts = [], onSetAccount }) {
   const [confirm, setConfirm] = useState(null);
   if (!txs.length) return <div style={{ fontSize: 13, color: T.muted }}>No transactions yet.</div>;
+  const partner = t => (t.linkId ? allTxs.find(o => o.linkId === t.linkId && o.id !== t.id) : null);
+  const showAccounts = accounts.length > 0 || txs.some(t => t.account);
   const describe = t => {
     if (t.type === 'buy' && t.fromCash === false) return `Added ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'buy' || t.type === 'sell') return `${t.type === 'buy' ? 'Bought' : 'Sold'} ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
@@ -40,7 +44,12 @@ export function TxList({ txs, hide, onDelete, onUpdate }) {
             <div style={{ fontSize: 14, color: T.text }}>{describe(t)}</div>
             <div style={{ fontSize: 11, color: T.muted }}>
               {formatShortDate(t.date)} · {t.date.slice(0, 4)}{t.fee ? ` · fee ${money(t.fee, hide)}` : ''}
-              {t.type === 'buy' && (onUpdate ? (
+              {(() => {
+                const o = partner(t);
+                if (!o) return null;
+                return ` · ${t.type === 'buy' ? `paid with ${o.symbol}` : o.type === 'buy' ? `into ${o.symbol}` : `paid for ${o.symbol}`}`;
+              })()}
+              {t.type === 'buy' && !t.linkId && (onUpdate ? (
                 <>
                   {' · '}
                   <button
@@ -53,6 +62,25 @@ export function TxList({ txs, hide, onDelete, onUpdate }) {
                 </>
               ) : ` · ${t.fromCash === false ? 'already owned' : 'from cash'}`)}
             </div>
+            {showAccounts && (
+              onSetAccount ? (
+                <select
+                  value={t.account || ''}
+                  onChange={e => onSetAccount(t.id, e.target.value)}
+                  aria-label="Account"
+                  style={{
+                    marginTop: 3, fontSize: 11, color: t.account ? T.khaki : T.muted, background: T.bg, border: `1px solid ${T.cardBorder}`,
+                    borderRadius: 8, padding: '2px 6px', maxWidth: '100%', colorScheme: 'dark',
+                  }}
+                >
+                  <option value="">No account</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                  {t.account && !accounts.some(a => a.id === t.account) && <option value={t.account}>Deleted account</option>}
+                </select>
+              ) : (
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{accounts.find(a => a.id === t.account)?.name || 'No account'}</div>
+              )
+            )}
           </div>
           <span style={{ fontSize: 13, color: t.fromCash === false ? T.muted : amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
             {t.fromCash === false ? money(-amount(t), hide) : signedMoney(amount(t), hide)}
@@ -71,10 +99,14 @@ export function TxList({ txs, hide, onDelete, onUpdate }) {
 }
 
 export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
+  const { portfolio, assets, txs, accounts, setTxAccount, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
+  // Where it's held, when that's more than one account
+  const byAcct = accountGroups(myTx, assets, accounts)
+    .map(g => ({ ...g, pos: g.positions.find(p => p.symbol === symbol) }))
+    .filter(g => g.pos);
   const myAlerts = alerts.filter(a => a.symbol === symbol);
   const ext = asset.source === 'finnhub' ? extendedPrice(asset) : null;
   const held = h && h.qty > 0;
@@ -159,6 +191,20 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
             {stat('Today', pct(h.dayPct), gainColor(h.dayPct))}
             {stat('Realized (sells)', signedMoney(h.realized, hide), gainColor(h.realized))}
             {stat('Dividends', money(h.dividends, hide), h.dividends > 0 ? T.green : T.text)}
+          </div>
+        )}
+
+        {byAcct.length > 1 && (
+          <div>
+            <SectionTitle>By account</SectionTitle>
+            {byAcct.map(g => (
+              <div key={g.id || 'none'} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '5px 0', fontSize: 13 }}>
+                <span style={{ color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+                <span style={{ color: T.muted }}>{qtyFmt(g.pos.qty)} @ {money(g.pos.avgCost, hide)}</span>
+                <span style={{ color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(g.pos.value, hide)}</span>
+                <span style={{ color: gainColor(g.pos.unrealized), width: 58, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{pct(g.pos.unrealizedPct)}</span>
+              </div>
+            ))}
           </div>
         )}
 
@@ -299,7 +345,7 @@ export default function HoldingModal({ hook, symbol, hide, userId, onTrade, onCl
 
         <div>
           <SectionTitle>Transactions</SectionTitle>
-          <TxList txs={myTx} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} />
+          <TxList txs={myTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id))} onUpdate={(id, f) => run(() => updateTx(id, f))} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
         </div>
 
         {myTx.length > 0 && (

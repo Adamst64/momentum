@@ -12,14 +12,16 @@ import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 //                                   priceUpdatedAt, targetPct, watch }; doc 'cash' holds the cash target %
 // users/{uid}/invSnapshots/{date} — { date, value, cash, netDeposits } for the value chart and returns
 // users/{uid}/invAlerts/{id} — { symbol, direction: 'above'|'below', target, enabled, triggeredAt }
+// users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
 export function useInvesting(userId) {
   const [txs, setTxs]             = useState([]);
   const [assetDocs, setAssetDocs] = useState([]);
   const [snapshots, setSnapshots] = useState([]);
   const [alerts, setAlerts]       = useState([]);
+  const [accountDocs, setAccountDocs] = useState([]);
 
   useEffect(() => {
-    if (!userId) { setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); return; }
+    if (!userId) { setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); return; }
     const col = name => collection(db, 'users', userId, name);
     const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unsubs = [
@@ -27,6 +29,7 @@ export function useInvesting(userId) {
       onSnapshot(col('invAssets'),       s => setAssetDocs(rows(s))),
       onSnapshot(col('invSnapshots'),    s => setSnapshots(rows(s))),
       onSnapshot(col('invAlerts'),       s => setAlerts(rows(s))),
+      onSnapshot(col('invAccounts'),     s => setAccountDocs(rows(s))),
     ];
     return () => unsubs.forEach(u => u());
   }, [userId]);
@@ -36,6 +39,9 @@ export function useInvesting(userId) {
     [assetDocs]);
   const cashTarget = assetDocs.find(a => a.id === CASH_ID)?.targetPct ?? null;
   const portfolio  = useMemo(() => computePortfolio(txs, assets), [txs, assets]);
+  const accounts   = useMemo(
+    () => [...accountDocs].sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name)),
+    [accountDocs]);
 
   const ref = useCallback((name, id) => doc(db, 'users', userId, name, id), [userId]);
 
@@ -44,7 +50,48 @@ export function useInvesting(userId) {
     await setDoc(ref('invTransactions', id), { ...tx, createdAt: new Date().toISOString() });
   }, [ref]);
 
-  const deleteTx = useCallback(id => deleteDoc(ref('invTransactions', id)), [ref]);
+  // Several transactions saved together (a buy paid from a fund = its fund sale + the buy)
+  const addTxs = useCallback(async (list) => {
+    const batch = writeBatch(db);
+    const now = new Date().toISOString();
+    list.forEach(tx => batch.set(ref('invTransactions', genId()), { ...tx, createdAt: now }));
+    await batch.commit();
+  }, [ref]);
+
+  // Deleting one half of a linked pair deletes both
+  const deleteTx = useCallback(async (id) => {
+    const tx = txs.find(t => t.id === id);
+    const linked = tx?.linkId ? txs.filter(t => t.linkId === tx.linkId) : [tx].filter(Boolean);
+    if (linked.length <= 1) return deleteDoc(ref('invTransactions', id));
+    const batch = writeBatch(db);
+    linked.forEach(t => batch.delete(ref('invTransactions', t.id)));
+    await batch.commit();
+  }, [txs, ref]);
+
+  // Moving a transaction to another account moves its linked partner too
+  const setTxAccount = useCallback(async (id, account) => {
+    const tx = txs.find(t => t.id === id);
+    const list = tx?.linkId ? txs.filter(t => t.linkId === tx.linkId) : [tx].filter(Boolean);
+    const batch = writeBatch(db);
+    list.forEach(t => batch.update(ref('invTransactions', t.id), { account: account || null }));
+    await batch.commit();
+  }, [txs, ref]);
+
+  const addAccount = useCallback(async (name) => {
+    const id = genId();
+    await setDoc(ref('invAccounts', id), { name: name.trim(), order: accountDocs.length, createdAt: new Date().toISOString() });
+    return id;
+  }, [ref, accountDocs.length]);
+
+  const renameAccount = useCallback((id, name) => updateDoc(ref('invAccounts', id), { name: name.trim() }), [ref]);
+
+  // Its transactions stay, moved to "No account"
+  const deleteAccount = useCallback(async (id) => {
+    const batch = writeBatch(db);
+    txs.filter(t => t.account === id).forEach(t => batch.update(ref('invTransactions', t.id), { account: null }));
+    batch.delete(ref('invAccounts', id));
+    await batch.commit();
+  }, [txs, ref]);
 
   const updateTx = useCallback((id, fields) => updateDoc(ref('invTransactions', id), fields), [ref]);
 
@@ -126,15 +173,18 @@ export function useInvesting(userId) {
   // doc unless it's on the watchlist. One batch, so it never half-deletes.
   const deleteHolding = useCallback(async (symbol) => {
     const batch = writeBatch(db);
-    txs.filter(t => t.symbol === symbol).forEach(t => batch.delete(ref('invTransactions', t.id)));
+    // …plus the other half of any linked pair (the fund sale that paid for a buy)
+    const mine = txs.filter(t => t.symbol === symbol);
+    const links = new Set(mine.map(t => t.linkId).filter(Boolean));
+    txs.filter(t => t.symbol === symbol || (t.linkId && links.has(t.linkId))).forEach(t => batch.delete(ref('invTransactions', t.id)));
     alerts.filter(a => a.symbol === symbol).forEach(a => batch.delete(ref('invAlerts', a.id)));
     if (!assets[symbol]?.watch) batch.delete(ref('invAssets', symbol));
     await batch.commit();
   }, [txs, alerts, assets, ref]);
 
   return {
-    txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget,
-    addTx, deleteTx, updateTx, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget, accounts,
+    addTx, addTxs, deleteTx, updateTx, setTxAccount, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

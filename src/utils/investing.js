@@ -2,7 +2,10 @@ import { toDateStr, addDays } from './dateUtils';
 
 // Transactions (users/{uid}/invTransactions):
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
-//   buy / sell:         { type, date, symbol, quantity, price, fee?, fromCash? }
+// Every transaction may carry account: an invAccounts id ('' / missing = no account).
+// Paying for a buy from a fund (e.g. FDRXX) is saved as two linked transactions
+// sharing linkId: a sell of the fund, then the buy — so the math stays plain.
+//   buy / sell:         { type, date, symbol, quantity, price, fee?, fromCash?, account?, linkId? }
 //                       fromCash: false on a buy = shares already owned before using the app
 //                       (or moved in from elsewhere): cash isn't touched and the cost counts
 //                       as money brought in, like a deposit of shares
@@ -38,26 +41,38 @@ export function sortTx(txs) {
   return [...txs].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
 }
 
+export const acctOf = t => t.account || '';
+
 // Replays every transaction in date order. Average-cost method: a sell removes
 // cost at the current average, so the average itself doesn't change on sells.
-export function replay(txs) {
+// byAccount: positions are per account + symbol (the same stock in two accounts
+// is two positions, each with its own average cost); otherwise per symbol.
+// Cash is always tracked per account too (cashBy, minCashBy).
+export function replay(txs, { byAccount = false } = {}) {
   let cash = 0, netDeposits = 0, minCash = 0, interest = 0;
+  const cashBy = {}, minCashBy = {};
   const h = {};
-  const hold = sym => (h[sym] = h[sym] || { symbol: sym, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
+  const hold = sym => {
+    const k = byAccount ? `${curAcct}|${sym}` : sym;
+    return (h[k] = h[k] || { key: k, symbol: sym, account: byAccount ? curAcct : null, qty: 0, cost: 0, realized: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
+  };
+  let curAcct = '';
+  const addCash = n => { cash += n; cashBy[curAcct] = (cashBy[curAcct] || 0) + n; };
   // lot: the current position since it last opened from zero (cost basis in, sells out).
   // lastExit: that lot's summary once it's fully sold — for the "Sold" list.
   const problems = [];
 
   for (const t of sortTx(txs)) {
-    if (t.type === 'deposit')  { cash += t.amount; netDeposits += t.amount; }
-    if (t.type === 'withdraw') { cash -= t.amount; netDeposits -= t.amount; }
-    if (t.type === 'dividend') { cash += t.amount; hold(t.symbol).dividends += t.amount; }
-    if (t.type === 'interest') { cash += t.amount; interest += t.amount; }
+    curAcct = acctOf(t);
+    if (t.type === 'deposit')  { addCash(t.amount); netDeposits += t.amount; }
+    if (t.type === 'withdraw') { addCash(-t.amount); netDeposits -= t.amount; }
+    if (t.type === 'dividend') { addCash(t.amount); hold(t.symbol).dividends += t.amount; }
+    if (t.type === 'interest') { addCash(t.amount); interest += t.amount; }
     if (t.type === 'buy') {
       const x = hold(t.symbol);
       const total = t.quantity * t.price + (t.fee || 0);
       if (t.fromCash === false) netDeposits += total;
-      else cash -= total;
+      else addCash(-total);
       if (x.qty < 1e-9) x.lot = { start: t.date, cost: 0, sold: 0, proceeds: 0, realized: 0 };
       x.lot.cost += total;
       x.qty += t.quantity;
@@ -66,10 +81,10 @@ export function replay(txs) {
     }
     if (t.type === 'sell') {
       const x = hold(t.symbol);
-      if (t.quantity > x.qty + 1e-9) problems.push({ tx: t, msg: `Sells more ${t.symbol} than held on ${t.date}` });
+      if (t.quantity > x.qty + 1e-9) problems.push({ tx: t, msg: `Sells more ${t.symbol} than held${byAccount && curAcct ? ' in that account' : ''} on ${t.date}` });
       const avg = x.qty > 0 ? x.cost / x.qty : 0;
       const sold = Math.min(t.quantity, x.qty);
-      cash += t.quantity * t.price - (t.fee || 0);
+      addCash(t.quantity * t.price - (t.fee || 0));
       x.realized += sold * (t.price - avg) - (t.fee || 0);
       if (x.lot) {
         x.lot.sold += sold;
@@ -95,8 +110,54 @@ export function replay(txs) {
       }
     }
     minCash = Math.min(minCash, cash);
+    minCashBy[curAcct] = Math.min(minCashBy[curAcct] ?? 0, cashBy[curAcct] || 0);
   }
-  return { cash, netDeposits, minCash, interest, holdings: h, problems };
+  return { cash, cashBy, netDeposits, minCash, minCashBy, interest, holdings: h, problems };
+}
+
+// Current-price fields for one replayed holding or position
+function priced(x, assets) {
+  const a = assets[x.symbol] || {};
+  const price = a.price ?? null;
+  const value = price !== null ? x.qty * price : null;
+  const unrealized = value !== null ? value - x.cost : null;
+  return {
+    ...x,
+    name: a.name || null,
+    source: a.source || 'manual',
+    price, prevClose: a.prevClose ?? null, priceUpdatedAt: a.priceUpdatedAt || null,
+    avgCost: x.qty > 0 ? x.cost / x.qty : null,
+    value, unrealized,
+    unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
+    dayPct: price && a.prevClose ? (price - a.prevClose) / a.prevClose : null,
+    ext: extendedPrice(a),
+  };
+}
+
+// Open positions grouped by account, in your account order; '' (no account) last.
+// Each: { id, name, positions, cash, value } where value = positions + cash.
+export function accountGroups(txs, assets, accounts = []) {
+  const r = replay(txs, { byAccount: true });
+  const positions = Object.values(r.holdings).filter(x => x.qty > 0).map(x => priced(x, assets));
+  const ids = new Set([...positions.map(p => p.account), ...Object.keys(r.cashBy).filter(k => Math.abs(r.cashBy[k]) > 0.005)]);
+  const order = [...accounts.map(a => a.id), ''];
+  return [...ids]
+    .sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999))
+    .map(id => {
+      const ps = positions.filter(p => p.account === id).sort((a, b) => (b.value || 0) - (a.value || 0));
+      const cash = r.cashBy[id] || 0;
+      return {
+        id, name: id ? accounts.find(a => a.id === id)?.name || 'Deleted account' : 'No account',
+        positions: ps, cash,
+        value: cash + ps.reduce((t, p) => t + (p.value || 0), 0),
+      };
+    });
+}
+
+// Shares of each symbol held in one account right now (for "sell all" and fund pickers)
+export function accountHoldings(txs, account) {
+  const r = replay(txs, { byAccount: true });
+  return Object.values(r.holdings).filter(x => x.account === (account || '') && x.qty > 1e-9);
 }
 
 // Full picture with current prices. assets: { [symbol]: { price, prevClose, name, ... } }
@@ -106,29 +167,15 @@ export function computePortfolio(txs, assets) {
   let extChange = 0, extLabel = null;
 
   const rows = Object.values(holdings).map(x => {
-    const a = assets[x.symbol] || {};
-    const price = a.price ?? null;
-    const value = price !== null ? x.qty * price : null;
-    const unrealized = value !== null ? value - x.cost : null;
-    const ext = extendedPrice(a);
+    const row = priced(x, assets);
     realized += x.realized;
     dividends += x.dividends;
-    if (x.qty > 0 && value !== null) {
-      holdingsValue += value;
-      if (a.prevClose) dayChange += x.qty * (price - a.prevClose);
-      if (ext) { extChange += x.qty * ext.change; extLabel = ext.label; }
+    if (x.qty > 0 && row.value !== null) {
+      holdingsValue += row.value;
+      if (row.prevClose) dayChange += x.qty * (row.price - row.prevClose);
+      if (row.ext) { extChange += x.qty * row.ext.change; extLabel = row.ext.label; }
     }
-    return {
-      ...x,
-      name: a.name || null,
-      source: a.source || 'manual',
-      price, prevClose: a.prevClose ?? null, priceUpdatedAt: a.priceUpdatedAt || null,
-      avgCost: x.qty > 0 ? x.cost / x.qty : null,
-      value, unrealized,
-      unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
-      dayPct: price && a.prevClose ? (price - a.prevClose) / a.prevClose : null,
-      ext,
-    };
+    return row;
   });
 
   const open = rows.filter(r => r.qty > 0).sort((a, b) => (b.value || 0) - (a.value || 0));
@@ -198,12 +245,17 @@ export function soldPositions(closed, assets) {
 }
 
 // Checks a new/edited transaction against the rest before saving
+// tx can be one transaction or several saved together (a buy paid from a fund).
+// Checked per account: selling more than that account holds, or its cash going negative.
 export function validateTx(txs, tx) {
-  const before = replay(txs);
-  const after  = replay([...txs, tx]);
-  const errors = after.problems.filter(p => !before.problems.some(b => b.tx === p.tx)).map(p => p.msg);
-  const cashShort = after.minCash < -0.005 && after.minCash < before.minCash - 0.005;
-  return { errors, cashShort, cashAfter: after.cash };
+  const added = Array.isArray(tx) ? tx : [tx];
+  const before = replay(txs, { byAccount: true });
+  const after  = replay([...txs, ...added], { byAccount: true });
+  const errors = after.problems.filter(p => added.includes(p.tx)).map(p => p.msg);
+  const acct = acctOf(added[added.length - 1]);
+  const minAfter = after.minCashBy[acct] ?? 0, minBefore = before.minCashBy[acct] ?? 0;
+  const cashShort = minAfter < -0.005 && minAfter < minBefore - 0.005;
+  return { errors, cashShort, cashAfter: after.cashBy[acct] || 0 };
 }
 
 export const PERIODS = [

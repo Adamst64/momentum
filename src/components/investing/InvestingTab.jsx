@@ -3,7 +3,7 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -53,13 +53,16 @@ const earningsBadge = (date, today) => {
 };
 
 export default function InvestingTab({ hook, userId }) {
-  const { txs, portfolio, assets, snapshots, cashTarget, refreshPrices, deleteTx, updateTx, setAsset } = hook;
+  const { txs, portfolio, assets, snapshots, cashTarget, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset } = hook;
   const [view, setView]       = useState('portfolio');
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
   const [adding, setAdding]   = useState(false);
   const [open, setOpen]       = useState(null);  // symbol
+  const [byAccountPref, setByAccountPrefState] = useState(() => { try { return localStorage.getItem('momentum_by_account') !== '0'; } catch { return true; } });
+  const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
+  const [manageAccounts, setManageAccounts] = useState(false);
   const [targetFor, setTargetFor] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [updateErr, setUpdateErr] = useState(null);
@@ -152,8 +155,13 @@ export default function InvestingTab({ hook, userId }) {
     .sort((a, b) => b.under - a.under)[0] || null;
   const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
   const sold = soldPositions(portfolio.closed, assets);
+  // Holdings grouped by account (shown once you use accounts)
+  const groups = useMemo(() => accountGroups(txs, assets, accounts), [txs, assets, accounts]);
+  const groupMode = accounts.length > 0 || txs.some(t => t.account);
+  const byAccount = groupMode && byAccountPref;
   const soonDate = toDateStr(new Date(Date.now() + 7 * 864e5));
   const laterDate = toDateStr(new Date(Date.now() + 21 * 864e5));
+  const rowProps = { assets, today, soonDate, laterDate, hide, sliceColor, onOpen: setOpen };
 
   // Owned stocks don't belong on the watchlist (catches ones bought before this rule)
   const ownedWatched = portfolio.holdings.filter(h => assets[h.symbol]?.watch).map(h => h.symbol).join(',');
@@ -289,57 +297,35 @@ export default function InvestingTab({ hook, userId }) {
 
       {view === 'portfolio' && txs.length > 0 && (
         <>
-        <Card style={{ padding: '6px 16px' }}>
-          {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
-          {portfolio.holdings.map((h, i) => {
-            const next = assets[h.symbol]?.nextEarnings;
-            const showEarn = next && next.date >= today && next.date <= laterDate;
-            const share = slicePct[h.symbol];
-            return (
-              <button
-                key={h.symbol}
-                onClick={() => setOpen(h.symbol)}
-                style={{ width: '100%', padding: '12px 0 10px', borderTop: i ? `1px solid ${T.cardBorder}` : 'none', textAlign: 'left', display: 'block' }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
-                      {h.symbol}
-                      {showEarn && (
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
-                          color: next.date <= soonDate ? T.khaki : T.muted, background: next.date <= soonDate ? '#2A2616' : T.bg,
-                        }}>
-                          Earnings {earningsBadge(next.date, today)}
-                        </span>
-                      )}
-                      {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
-                    </div>
-                    <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
-                    </div>
-                    <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
-                  </div>
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
-                    <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
-                      {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
-                    </div>
-                    {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
-                  </div>
-                </div>
-                {share > 0 && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
-                    <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.bg }}>
-                      <div style={{ height: 4, borderRadius: 2, width: `${Math.max(1.5, share * 100)}%`, background: sliceColor[h.symbol] }} />
-                    </div>
-                    <span style={{ fontSize: 10, color: T.muted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{Math.round(share * 100)}%</span>
-                  </div>
-                )}
-              </button>
-            );
-          })}
-        </Card>
+        {groupMode && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Chips small options={[{ value: 'account', label: 'By account' }, { value: 'all', label: 'All' }]} value={byAccount ? 'account' : 'all'} onChange={v => setByAccountPref(v === 'account')} />
+            <span style={{ flex: 1 }} />
+            <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki }}>Accounts</button>
+          </div>
+        )}
+        {byAccount ? groups.map(g => (
+          <Card key={g.id || 'none'} style={{ padding: '10px 16px 6px' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, paddingBottom: 6 }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</span>
+            </div>
+            {Math.abs(g.cash) > 0.005 && (
+              <div style={{ fontSize: 12, color: g.cash < 0 ? T.red : T.muted, paddingBottom: 4 }}>Free cash {money(g.cash, hide)}</div>
+            )}
+            {g.positions.map(pos => (
+              <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />
+            ))}
+            {g.positions.length === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px' }}>Only cash in this account.</div>}
+          </Card>
+        )) : (
+          <Card style={{ padding: '6px 16px' }}>
+            {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
+            {portfolio.holdings.map((h, i) => (
+              <HoldingRow key={h.symbol} h={h} first={i === 0} {...rowProps} share={slicePct[h.symbol]} />
+            ))}
+          </Card>
+        )}
         {sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
         </>
       )}
@@ -430,7 +416,7 @@ export default function InvestingTab({ hook, userId }) {
 
           <Card>
             <SectionTitle>All transactions</SectionTitle>
-            <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} />
+            <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} accounts={accounts} onSetAccount={setTxAccount} />
           </Card>
         </>
       )}
@@ -454,11 +440,17 @@ export default function InvestingTab({ hook, userId }) {
           </div>
         </Modal>
       )}
-      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
+      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} initialAccount={trade.account} onClose={() => setTrade(null)} />}
+      {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
       {open && (
         <HoldingModal
           hook={hook} symbol={open} hide={hide} userId={userId}
-          onTrade={(type, symbol) => { setOpen(null); setTrade({ type, symbol }); }}
+          onTrade={(type, symbol) => {
+            // Held in exactly one account → trade there by default
+            const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
+            setOpen(null);
+            setTrade({ type, symbol, ...(where.length === 1 ? { account: where[0] } : {}) });
+          }}
           onClose={() => setOpen(null)}
         />
       )}
@@ -471,6 +463,105 @@ export default function InvestingTab({ hook, userId }) {
         />
       )}
     </div>
+  );
+}
+
+// One holding (or one account's position) in the Portfolio list
+function HoldingRow({ h, first, share, assets, today, soonDate, laterDate, hide, sliceColor, onOpen }) {
+  const next = assets[h.symbol]?.nextEarnings;
+  const showEarn = next && next.date >= today && next.date <= laterDate;
+  return (
+    <button
+      onClick={() => onOpen(h.symbol)}
+      style={{ width: '100%', padding: '12px 0 10px', borderTop: first ? 'none' : `1px solid ${T.cardBorder}`, textAlign: 'left', display: 'block' }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
+            {h.symbol}
+            {showEarn && (
+              <span style={{
+                fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
+                color: next.date <= soonDate ? T.khaki : T.muted, background: next.date <= soonDate ? '#2A2616' : T.bg,
+              }}>
+                Earnings {earningsBadge(next.date, today)}
+              </span>
+            )}
+            {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
+          </div>
+          <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
+        </div>
+        <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+          <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
+          <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
+            {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
+          </div>
+          {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
+        </div>
+      </div>
+      {share > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 7 }}>
+          <div style={{ flex: 1, height: 4, borderRadius: 2, background: T.bg }}>
+            <div style={{ height: 4, borderRadius: 2, width: `${Math.max(1.5, share * 100)}%`, background: sliceColor[h.symbol] || '#5A5A5E' }} />
+          </div>
+          <span style={{ fontSize: 10, color: T.muted, width: 30, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{Math.round(share * 100)}%</span>
+        </div>
+      )}
+    </button>
+  );
+}
+
+// Add, rename and delete accounts
+function AccountsModal({ hook, onClose }) {
+  const { accounts, txs, addAccount, renameAccount, deleteAccount } = hook;
+  const [names, setNames] = useState(() => Object.fromEntries(accounts.map(a => [a.id, a.name])));
+  const [newName, setNewName] = useState('');
+  const [confirm, setConfirm] = useState(null);
+  const [err, setErr] = useState(null);
+  const run = async fn => { setErr(null); try { await fn(); } catch (e) { setErr(e.message || 'Something went wrong'); } };
+  const unassigned = txs.filter(t => !t.account).length;
+  return (
+    <Modal title="Accounts" onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {accounts.map(a => {
+          const n = txs.filter(t => t.account === a.id).length;
+          return (
+            <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                value={names[a.id] ?? a.name}
+                onChange={e => setNames(m => ({ ...m, [a.id]: e.target.value }))}
+                onBlur={() => { const v = (names[a.id] || '').trim(); if (v && v !== a.name) run(() => renameAccount(a.id, v)); }}
+                style={{ ...inputStyle, flex: 1 }}
+              />
+              <span style={{ fontSize: 11, color: T.muted, width: 44, textAlign: 'right' }}>{n} tx</span>
+              <button
+                onClick={() => (confirm === a.id ? run(() => deleteAccount(a.id)).then(() => setConfirm(null)) : setConfirm(a.id))}
+                style={{ fontSize: confirm === a.id ? 11 : 16, color: confirm === a.id ? T.red : T.subtle, width: 50 }}
+                aria-label={`Delete ${a.name}`}
+              >{confirm === a.id ? 'Delete?' : '×'}</button>
+            </div>
+          );
+        })}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={newName} onChange={e => setNewName(e.target.value)} placeholder="New account, e.g. Vanguard 401k" style={{ ...inputStyle, flex: 1 }}
+            onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) run(async () => { await addAccount(newName); setNewName(''); }); }}
+          />
+          <button
+            onClick={() => newName.trim() && run(async () => { await addAccount(newName); setNewName(''); })}
+            style={{ padding: '0 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
+          >Add</button>
+        </div>
+        {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
+        <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
+          Deleting an account keeps its transactions; they move to “No account”.
+          {unassigned > 0 && ` ${unassigned} transaction${unassigned !== 1 ? 's have' : ' has'} no account yet — assign them in Insights → All transactions by tapping the account label.`}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
