@@ -254,6 +254,34 @@ export function soldPositions(closed, assets) {
     .sort((a, b) => b.date.localeCompare(a.date));
 }
 
+// What the transaction form needs to edit a saved transaction: which rows it
+// replaces (both halves of a linked pair) and the form's starting values.
+// null for older money-in/out rows, which the form no longer creates.
+export function txEditInit(tx, txs) {
+  const pair = tx.linkId ? txs.filter(t => t.linkId === tx.linkId) : [tx];
+  const ids = pair.map(t => t.id);
+  const base = { date: tx.date, account: tx.account || '' };
+  // The fund half of a buy/sell pair is marked fundLeg (older pairs: the $1 one,
+  // else the sell — a buy paid from a fund is the common case)
+  const fundLeg = pair.length > 1 && !pair.some(t => t.type === 'dividend')
+    ? pair.find(t => t.fundLeg) || pair.find(t => Math.abs(t.price - 1) < 0.005) || pair.find(t => t.type === 'sell')
+    : null;
+  const trade = pair.find(t => t.type === 'dividend') || pair.find(t => t !== fundLeg) || tx;
+  const other = pair.find(t => t !== trade) || null;
+  if (trade.type === 'dividend') {
+    const pay = !other ? null : other.type === 'withdraw' ? 'out' : other.symbol === trade.symbol ? 'reinvest' : `fund:${other.symbol}`;
+    return { ids, init: { ...base, type: 'dividend', symbol: trade.symbol, amount: trade.amount, pay, flowPrice: other?.price, fund: other?.symbol } };
+  }
+  if ((trade.type === 'buy' || trade.type === 'sell') && trade.deposit) {
+    return { ids, init: { ...base, type: trade.type === 'buy' ? 'deposit' : 'withdraw', amount: Math.round(trade.quantity * trade.price * 100) / 100, pay: `fund:${trade.symbol}`, fund: trade.symbol, flowPrice: trade.price } };
+  }
+  if (trade.type === 'buy' || trade.type === 'sell') {
+    const pay = other ? `fund:${other.symbol}` : trade.type === 'buy' && trade.fromCash === false ? 'owned' : trade.type === 'sell' && trade.toCash === false ? 'out' : null;
+    return { ids, init: { ...base, type: trade.type, symbol: trade.symbol, qty: trade.quantity, price: trade.price, fee: trade.fee, pay, fund: other?.symbol, flowPrice: other?.price } };
+  }
+  return null;
+}
+
 // Checks a new/edited transaction against the rest before saving
 // tx can be one transaction or several saved together (a buy paid from a fund).
 // Checked per account: selling more than that account holds, or its cash going negative.

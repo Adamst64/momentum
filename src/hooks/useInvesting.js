@@ -58,6 +58,20 @@ export function useInvesting(userId) {
     await batch.commit();
   }, [ref]);
 
+  // Editing: the old rows (both halves of a linked pair) are swapped for the new
+  // ones in one batch, keeping the original createdAt so same-day order holds
+  const replaceTxs = useCallback(async (oldIds, list) => {
+    const old = txs.filter(t => oldIds.includes(t.id));
+    const t0 = Math.min(...old.map(t => Date.parse(t.createdAt) || Date.now()), Date.now());
+    const batch = writeBatch(db);
+    old.forEach(t => batch.delete(ref('invTransactions', t.id)));
+    const linkId = list.length > 1 ? genId() : null;
+    list.forEach((tx, i) => batch.set(ref('invTransactions', genId()), {
+      ...tx, ...(linkId ? { linkId } : {}), createdAt: new Date(t0 + i).toISOString(),
+    }));
+    await batch.commit();
+  }, [txs, ref]);
+
   // Deleting one half of a linked pair deletes both
   const deleteTx = useCallback(async (id) => {
     const tx = txs.find(t => t.id === id);
@@ -202,7 +216,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, accounts,
-    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

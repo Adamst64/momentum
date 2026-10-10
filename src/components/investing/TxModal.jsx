@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatDateYear } from '../../utils/dateUtils';
@@ -25,25 +25,28 @@ const round6 = n => Math.round(n * 1e6) / 1e6;
 // Add any transaction. Past trades are fine: pick their real date.
 // There's no free cash: money sits in funds (FDRXX, VMFXX…), so every money
 // movement names a fund — or, for buys/sells, money from/to outside the app.
-export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', onClose }) {
-  const { txs, assets, accounts, addTx, addTxs, ensureAsset, setAsset, priceHistory } = hook;
-  // Account: the one passed in, else the last one used (if it still exists), else the first
+// editing: { ids, init } from txEditInit — the form starts with that transaction's
+// values and saving replaces it (both halves of a linked pair).
+export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', editing = null, onClose }) {
+  const { txs, assets, accounts, addTx, addTxs, replaceTxs, ensureAsset, setAsset, priceHistory } = hook;
+  const init = editing?.init || {};
+  const str = v => (v === null || v === undefined ? '' : String(v));
   // Nothing is picked for you: account and where the money comes from / goes
   // must be chosen each time, so nothing lands in the wrong place by accident.
   // null = not chosen yet; '' = "No account" (only offered before any account exists).
-  const [account, setAccountState] = useState(null);
+  const [account, setAccountState] = useState(editing ? init.account ?? '' : null);
   const setAccount = v => { setAccountState(v); setPayWith(null); };
-  const [type, setType]       = useState(initialType === 'interest' ? 'dividend' : initialType);
-  const [date, setDate]       = useState(toDateStr(new Date()));
-  const [symbol, setSymbol]   = useState(initialSymbol);
-  const [qty, setQty]         = useState('');
-  const [price, setPrice]     = useState('');
-  const [fee, setFee]         = useState('');
-  const [amount, setAmount]   = useState('');
+  const [type, setType]       = useState(editing ? init.type : initialType === 'interest' ? 'dividend' : initialType);
+  const [date, setDate]       = useState(editing ? init.date : toDateStr(new Date()));
+  const [symbol, setSymbol]   = useState(editing ? str(init.symbol) : initialSymbol);
+  const [qty, setQty]         = useState(str(init.qty));
+  const [price, setPrice]     = useState(str(init.price));
+  const [fee, setFee]         = useState(str(init.fee));
+  const [amount, setAmount]   = useState(str(init.amount));
   // Where money comes from / goes to: 'fund:SYM' (a fund in this account),
   // 'owned' (buy: shares you already had), 'out' (sell/dividend: money leaves
   // the account), 'reinvest' (dividend: buy more of the same). null = default.
-  const [payWith, setPayWith] = useState(null);
+  const [payWith, setPayWith] = useState(editing ? init.pay ?? null : null);
   const [newFund, setNewFund] = useState('');   // Add money into a fund not held yet
   const [newFundStatus, setNewFundStatus] = useState(null);
   // Is the symbol a real ticker? Unchecked ones (offline) need an explicit OK.
@@ -60,7 +63,9 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const acct = account ? { account } : {};
 
   // Holdings in this account right now: the funds money can come from / go to
-  const acctHold = useMemo(() => (account === null ? [] : accountHoldings(txs, account)), [txs, account]);
+  // When editing, everything is checked against the other transactions (without the old version)
+  const baseTxs = useMemo(() => (editing ? txs.filter(t => !editing.ids.includes(t.id)) : txs), [txs, editing]);
+  const acctHold = useMemo(() => (account === null ? [] : accountHoldings(baseTxs, account)), [baseTxs, account]);
   const funds = acctHold.filter(h => h.symbol !== sym || isMoney);
   const isMM = s => Math.abs((assets[s]?.price ?? 0) - 1) < 0.01; // $1 money market fund
 
@@ -70,12 +75,14 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
     : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);
+  // Editing: keep the fund it used selectable even if nothing else holds it now
+  if (editing && init.fund && init.pay === `fund:${init.fund}` && type === init.type && account === (init.account ?? '') && !options.includes(init.pay)) options.unshift(init.pay);
   const pay = payWith && options.includes(payWith) ? payWith : null; // no default — you pick
   const fundSym = pay === 'new' ? newFund.trim().toUpperCase() : pay?.startsWith('fund:') ? pay.slice(5) : pay === 'reinvest' ? sym : null;
   // Price the fund / reinvested stock traded at. $1 money market funds are always $1;
   // anything else is asked for, filled in with that day's close when known.
   const needsFlowPrice = !!fundSym && (pay === 'reinvest' || !isMM(fundSym));
-  const [flowPriceText, setFlowPriceText] = useState('');
+  const [flowPriceText, setFlowPriceText] = useState(editing && init.flowPrice && Math.abs(init.flowPrice - 1) > 0.005 ? String(init.flowPrice) : '');
   const [hist, setHist] = useState(null); // { key, price, date } close on/before the chosen date
   const histKey = needsFlowPrice ? `${fundSym}|${date}` : null;
   useEffect(() => {
@@ -99,7 +106,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     : needsFlowPrice ? (num(flowPriceText) > 0 ? num(flowPriceText) : suggested || null)
     : assets[fundSym]?.price || 1;
   const flowOk = !fundSym || fundPrice > 0;
-  useEffect(() => { setFlowPriceText(''); }, [fundSym]);
+  const lastFund = useRef(fundSym);
+  useEffect(() => { if (lastFund.current !== fundSym) { lastFund.current = fundSym; setFlowPriceText(''); } }, [fundSym]);
 
   // What gets saved: the transaction plus, when money moves through a fund, its linked fund trade
   let toSave = [];
@@ -109,7 +117,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     const main = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...acct,
       ...(type === 'buy' && pay === 'owned' ? { fromCash: false } : {}),
       ...(type === 'sell' && pay === 'out' ? { toCash: false } : {}) };
-    const fundTx = fundSym ? { type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym, quantity: round6(total / fundPrice), price: fundPrice, ...acct } : null;
+    const fundTx = fundSym ? { type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym, quantity: round6(total / fundPrice), price: fundPrice, fundLeg: true, ...acct } : null;
     toSave = fundTx ? (type === 'buy' ? [fundTx, main] : [main, fundTx]) : [main];
   }
   if (type === 'deposit' && a > 0 && fundSym && flowOk) {
@@ -129,7 +137,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   }
   const ready = toSave.length > 0;
 
-  const check = ready ? validateTx(txs, toSave) : null;
+  const check = ready ? validateTx(baseTxs, toSave) : null;
   const needsSym = isTrade || type === 'dividend';
   const symUnchecked = symStatus === 'offline' || symStatus === 'error';
   const symOk = !needsSym || symStatus === 'ok' || (symUnchecked && allowUnchecked);
@@ -145,7 +153,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     try {
       if (type === 'buy') await ensureAsset(sym, p);
       if (type === 'deposit' && pay === 'new') await ensureAsset(fundSym, 1);
-      if (toSave.length > 1) {
+      if (editing) await replaceTxs(editing.ids, toSave);
+      else if (toSave.length > 1) {
         const linkId = genId();
         await addTxs(toSave.map(t => ({ ...t, linkId })));
       } else await addTx(toSave[0]);
@@ -162,7 +171,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const flowLabel = { buy: 'Paid with', sell: 'Money goes to', dividend: 'Goes to', deposit: 'Into', withdraw: 'From' }[type];
 
   return (
-    <Modal title="New Transaction" onClose={onClose}>
+    <Modal title={editing ? 'Edit transaction' : 'New Transaction'} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Chips options={TYPES} value={type} onChange={t => { setType(t); setPayWith(null); }} />
 

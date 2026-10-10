@@ -3,8 +3,8 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
-import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect } from './ui';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
 import SymbolInput from './SymbolInput';
@@ -52,7 +52,7 @@ const earningsBadge = (date, today) => {
 };
 
 export default function InvestingTab({ hook, userId }) {
-  const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset } = hook;
+  const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setView]       = useState('portfolio');
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -63,6 +63,7 @@ export default function InvestingTab({ hook, userId }) {
   const [byAccountPref, setByAccountPrefState] = useState(() => { try { return localStorage.getItem('momentum_by_account') !== '0'; } catch { return true; } });
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
+  const [editing, setEditing] = useState(null); // transaction being edited from All transactions
   // Account cards start folded; the ones you open are remembered
   const [openAccounts, setOpenAccounts] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('momentum_open_accounts') || '[]')); } catch { return new Set(); }
@@ -410,7 +411,7 @@ export default function InvestingTab({ hook, userId }) {
 
           <Card>
             <SectionTitle>All transactions</SectionTitle>
-            <TxList txs={txs} hide={hide} onDelete={deleteTx} onUpdate={updateTx} accounts={accounts} onSetAccount={setTxAccount} />
+            <TxList txs={txs} hide={hide} onDelete={deleteTx} onEdit={t => { const e = txEditInit(t, txs); if (e) setEditing(e); }} accounts={accounts} onSetAccount={setTxAccount} />
           </Card>
         </>
       )}
@@ -436,6 +437,7 @@ export default function InvestingTab({ hook, userId }) {
       )}
       {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
       {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
+      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
       {open && (
         <HoldingModal
           key={openSym}
@@ -525,7 +527,7 @@ function AccountsModal({ hook, onClose }) {
   });
   const [names, setNames] = useState(() => Object.fromEntries(accounts.map(a => [a.id, a.name])));
   const [newName, setNewName] = useState('');
-  const [confirm, setConfirm] = useState(null);
+  const [asking, setAsking] = useState(null); // account waiting for "are you sure?"
   const [err, setErr] = useState(null);
   const run = async fn => { setErr(null); try { await fn(); } catch (e) { setErr(e.message || 'Something went wrong'); } };
   const unassigned = txs.filter(t => !t.account).length;
@@ -543,11 +545,7 @@ function AccountsModal({ hook, onClose }) {
                 style={{ ...inputStyle, flex: 1 }}
               />
               <span style={{ fontSize: 11, color: T.muted, width: 44, textAlign: 'right' }}>{n} tx</span>
-              <button
-                onClick={() => (confirm === a.id ? run(() => deleteAccount(a.id)).then(() => setConfirm(null)) : setConfirm(a.id))}
-                style={{ fontSize: confirm === a.id ? 11 : 16, color: confirm === a.id ? T.red : T.subtle, width: 50 }}
-                aria-label={`Delete ${a.name}`}
-              >{confirm === a.id ? 'Delete?' : '×'}</button>
+              <button onClick={() => setAsking(a)} style={{ fontSize: 16, color: T.subtle, width: 40 }} aria-label={`Delete ${a.name}`}>×</button>
             </div>
           );
         })}
@@ -595,6 +593,14 @@ function AccountsModal({ hook, onClose }) {
           account from the label under it (Insights → All transactions, or on the stock's screen).
         </div>
       </div>
+      {asking && (
+        <ConfirmDialog
+          title={`Delete ${asking.name}?`}
+          message={`The account is removed. Its ${txs.filter(t => t.account === asking.id).length} transaction(s) stay and move to “No account”, so your holdings don't change.`}
+          onConfirm={() => deleteAccount(asking.id)}
+          onClose={() => setAsking(null)}
+        />
+      )}
     </Modal>
   );
 }
@@ -762,6 +768,7 @@ function SoldRows({ items, hide, onOpen }) {
 
 function Watchlist({ hook, items, hide, onOpen }) {
   const { portfolio, setAsset, removeAsset, refreshPrices } = hook;
+  const [asking, setAsking] = useState(null); // symbol waiting for "are you sure?"
   const [sym, setSym] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
@@ -810,10 +817,19 @@ function Watchlist({ hook, items, hide, onOpen }) {
               <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
               {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
             </div>
-            <button onClick={() => removeAsset(a.symbol)} aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}>×</button>
+            <button onClick={() => setAsking(a.symbol)} aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}>×</button>
           </div>
         );
       })}
+      {asking && (
+        <ConfirmDialog
+          title={`Remove ${asking} from your watchlist?`}
+          message="It stops showing here. You can add it back any time."
+          confirmLabel="Remove"
+          onConfirm={() => removeAsset(asking)}
+          onClose={() => setAsking(null)}
+        />
+      )}
     </Card>
   );
 }

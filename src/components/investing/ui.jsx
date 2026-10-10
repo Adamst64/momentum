@@ -1,5 +1,6 @@
 import React from 'react';
 import { T } from '../../theme';
+import Modal from '../Modal';
 
 // Allocation colors: validated categorical palette for the dark card surface
 // (adjacent-pair CVD ΔE ≥ 8.4). Assigned by first-purchase order, never by rank.
@@ -83,5 +84,31 @@ export function PrimaryButton({ children, disabled, onClick, danger }) {
     >
       {children}
     </button>
+  );
+}
+
+// "Are you sure?" sheet for anything that deletes. Opens on top of other sheets.
+export function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfirm, onClose }) {
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+  const go = async () => {
+    setBusy(true);
+    setErr(null);
+    try { await onConfirm(); onClose(); }
+    catch (e) { setErr(e.message || 'Something went wrong. Try again.'); setBusy(false); }
+  };
+  return (
+    <Modal title={title} onClose={onClose}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {message && <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5 }}>{message}</div>}
+        {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={onClose} style={{ flex: 1, padding: 13, borderRadius: 12, background: T.subtle, color: T.text, fontSize: 15, fontWeight: 600 }}>Cancel</button>
+          <button onClick={go} disabled={busy} style={{ flex: 1, padding: 13, borderRadius: 12, background: T.red, color: '#fff', fontSize: 15, fontWeight: 700 }}>
+            {busy ? 'Deleting…' : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }

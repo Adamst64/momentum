@@ -2,11 +2,12 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups } from '../../utils/investing';
-import { Chips, inputStyle, gainColor, SectionTitle } from './ui';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups, txEditInit } from '../../utils/investing';
+import { Chips, inputStyle, gainColor, SectionTitle, ConfirmDialog } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
 import StockChart from './StockChart';
+import TxModal from './TxModal';
 
 const timeAgo = iso => {
   if (!iso) return 'never';
@@ -19,8 +20,9 @@ const timeAgo = iso => {
 
 // allTxs: every transaction, to name the other half of a linked pair when
 // txs is filtered to one symbol. accounts + onSetAccount: account label you can change.
-export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts = [], onSetAccount }) {
-  const [confirm, setConfirm] = useState(null);
+// onEdit(tx): shows an Edit button on rows the form can edit.
+export function TxList({ txs, allTxs = txs, hide, onDelete, onEdit, accounts = [], onSetAccount }) {
+  const [asking, setAsking] = useState(null); // transaction waiting for "are you sure?
   if (!txs.length) return <div style={{ fontSize: 13, color: T.muted }}>No transactions yet.</div>;
   const partner = t => (t.linkId ? allTxs.find(o => o.linkId === t.linkId && o.id !== t.id) : null);
   const showAccounts = accounts.length > 0 || txs.some(t => t.account);
@@ -77,26 +79,36 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
           <span style={{ fontSize: 13, color: t.fromCash === false || t.toCash === false ? T.muted : amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
             {t.fromCash === false || t.toCash === false ? money(Math.abs(amount(t)), hide) : signedMoney(amount(t), hide)}
           </span>
-          <button
-            onClick={() => confirm === t.id ? (onDelete(t.id), setConfirm(null)) : setConfirm(t.id)}
-            style={{
-              fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius: 8, flexShrink: 0,
-              color: confirm === t.id ? '#fff' : T.red, background: confirm === t.id ? T.red : 'transparent', border: `1px solid ${T.red}66`,
-            }}
-            aria-label="Delete transaction"
-          >
-            {confirm === t.id ? 'Confirm' : 'Delete'}
-          </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 5, flexShrink: 0 }}>
+            {onEdit && txEditInit(t, allTxs) && (
+              <button onClick={() => onEdit(t)} style={{ ...rowBtn, color: T.khaki, border: `1px solid ${T.khaki}55` }} aria-label="Edit transaction">Edit</button>
+            )}
+            <button onClick={() => setAsking(t)} style={{ ...rowBtn, color: T.red, border: `1px solid ${T.red}66` }} aria-label="Delete transaction">Delete</button>
+          </div>
         </div>
       ))}
+      {asking && (
+        <ConfirmDialog
+          title="Delete this transaction?"
+          message={<>
+            <b style={{ color: T.text }}>{describe(asking)}</b> on {formatShortDate(asking.date)}, {asking.date.slice(0, 4)} will be removed and your holdings recalculated.
+            {partner(asking) && <> Its linked {partner(asking).symbol ? `${partner(asking).symbol} ${partner(asking).type === 'buy' ? 'buy' : 'sale'}` : 'entry'} is deleted too.</>}
+            {' '}This can't be undone.
+          </>}
+          onConfirm={() => onDelete(asking.id)}
+          onClose={() => setAsking(null)}
+        />
+      )}
     </div>
   );
 }
 
+const rowBtn = { fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius: 8, background: 'transparent' };
+
 // account: opened from that account's row → starts showing just that account,
 // with a switch to all accounts. undefined → all accounts.
 export default function HoldingModal({ hook, symbol, account, hide, userId, onTrade, onClose }) {
-  const { portfolio, assets, txs, accounts, setTxAccount, alerts, setAsset, deleteTx, updateTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
+  const { portfolio, assets, txs, accounts, setTxAccount, alerts, setAsset, deleteTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
   const myTx = txs.filter(t => t.symbol === symbol);
@@ -123,22 +135,18 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
   const [alertDir, setAlertDir]   = useState('above');
   const [alertPrice, setAlertPrice] = useState('');
   const [msg, setMsg]             = useState(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting]   = useState(false);
+  const [ask, setAsk]             = useState(null); // { title, message, action } for "are you sure?"
+  const [editing, setEditing]     = useState(null); // { ids, init } of the transaction being edited
+  const editTx = t => { const e = txEditInit(t, txs); if (e) setEditing(e); };
 
-  const handleDeleteHolding = async () => {
-    if (!confirmDelete) { setConfirmDelete(true); return; }
-    setDeleting(true);
-    setMsg(null);
-    try {
-      await deleteHolding(symbol, scoped ? scope : undefined);
-      onClose();
-    } catch (e) {
-      setMsg({ ok: false, text: e.message || 'Could not delete. Try again.' });
-      setDeleting(false);
-      setConfirmDelete(false);
-    }
-  };
+  const where = scoped ? ` from ${scoped.name}` : multi ? ' from all accounts' : '';
+  const askDeleteHolding = () => setAsk({
+    title: `Delete ${symbol}${where}?`,
+    message: <>All {scopeTx.length} {symbol} transaction{scopeTx.length !== 1 ? 's' : ''}{scoped ? ` in ${scoped.name}` : ''}
+      {!scoped && myAlerts.length ? ' and its price alerts' : ''} will be removed, as if you never added {scoped ? 'them' : 'it'}.
+      To remove just one transaction, use its Delete button instead. This can't be undone.</>,
+    action: async () => { await deleteHolding(symbol, scoped ? scope : undefined); onClose(); },
+  });
 
   const run = async (fn, ok) => {
     setMsg(null);
@@ -180,7 +188,8 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
           ].filter(Boolean)}
           markers={[]}
           trades={tradeDetails(scoped ? scopeTx : txs, symbol, asset.price || null)}
-          onDeleteTrade={id => run(() => deleteTx(id), 'Transaction deleted')}
+          onDeleteTrade={id => deleteTx(id)}
+          onEditTrade={id => { const t = txs.find(x => x.id === id); if (t) editTx(t); }}
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 
@@ -237,7 +246,7 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
         {scopeTx.length > 0 && (
           <div>
             <SectionTitle>Transactions{scoped ? ` · ${scoped.name}` : ''}</SectionTitle>
-            <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => run(() => deleteTx(id), 'Transaction deleted')} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
+            <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => deleteTx(id)} onEdit={editTx} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
           </div>
         )}
 
@@ -338,7 +347,10 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
               <button onClick={() => run(() => toggleAlert(a.id, !a.enabled))} style={{ fontSize: 12, color: T.khaki }}>
                 {a.enabled ? 'Pause' : 'Re-arm'}
               </button>
-              <button onClick={() => run(() => deleteAlert(a.id))} style={{ fontSize: 16, color: T.subtle }} aria-label="Delete alert">×</button>
+              <button
+                onClick={() => setAsk({ title: 'Delete this price alert?', message: `${a.direction === 'above' ? 'Above' : 'Below'} ${money(a.target)} for ${symbol} will stop notifying you.`, action: () => deleteAlert(a.id) })}
+                style={{ fontSize: 16, color: T.subtle }} aria-label="Delete alert"
+              >×</button>
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
@@ -367,26 +379,16 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
         {myTx.length > 0 && (
           <div>
             <button
-              onClick={handleDeleteHolding}
-              disabled={deleting}
-              style={{
-                width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600,
-                background: confirmDelete ? T.red : 'transparent', border: `1px solid ${T.red}`,
-                color: confirmDelete ? '#fff' : T.red,
-              }}
+              onClick={askDeleteHolding}
+              style={{ width: '100%', padding: 12, borderRadius: 12, fontSize: 14, fontWeight: 600, background: 'transparent', border: `1px solid ${T.red}`, color: T.red }}
             >
-              {deleting ? 'Deleting…' : `${confirmDelete ? 'Tap again to delete' : 'Delete'} ${symbol}${scoped ? ` from ${scoped.name}` : multi ? ' from all accounts' : ''}`}
+              Delete {symbol}{where}
             </button>
-            {confirmDelete && !deleting && (
-              <div style={{ fontSize: 12, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-                Removes all {scopeTx.length} {symbol} transaction{scopeTx.length !== 1 ? 's' : ''}{scoped ? ` in ${scoped.name}` : ''}{!scoped && myAlerts.length ? ' and its price alerts' : ''}, as if you never added {scoped ? 'them' : 'it'}.
-                To remove just one, use Delete on that transaction above.
-                {' '}<button onClick={() => setConfirmDelete(false)} style={{ fontSize: 12, color: T.khaki, padding: 0 }}>Cancel</button>
-              </div>
-            )}
           </div>
         )}
       </div>
+      {ask && <ConfirmDialog title={ask.title} message={ask.message} onConfirm={ask.action} onClose={() => setAsk(null)} />}
+      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
     </Modal>
   );
 }
