@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Modal from '../Modal';
+import { useBackHandler } from '../../hooks/useBackHandler';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
@@ -54,7 +55,7 @@ const earningsBadge = (date, today) => {
 export default function InvestingTab({ hook, userId }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('portfolio');
-  const setView = v => { setViewState(v); setOpenAccounts(new Set()); };
+  const setView = v => { setViewState(v); setOpenAccountId(null); };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
@@ -65,14 +66,11 @@ export default function InvestingTab({ hook, userId }) {
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
   const [editing, setEditing] = useState(null); // transaction being edited from All transactions
-  // Account cards always start folded: leaving the Investing tab (or switching
-  // to Watchlist/Insights) folds them all again. Nothing is remembered.
-  const [openAccounts, setOpenAccounts] = useState(() => new Set());
-  const toggleAccount = id => setOpenAccounts(prev => {
-    const next = new Set(prev);
-    if (next.has(id)) next.delete(id); else next.add(id);
-    return next;
-  });
+  // Tapping an account opens its own page (null = the Portfolio list). Leaving
+  // the tab or switching views always comes back to the list.
+  const [openAccountId, setOpenAccountId] = useState(null);
+  useBackHandler(openAccountId !== null, () => setOpenAccountId(null));
+  useEffect(() => { if (openAccountId !== null) window.scrollTo(0, 0); }, [openAccountId]);
   const [targetFor, setTargetFor] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [updateErr, setUpdateErr] = useState(null);
@@ -215,6 +213,72 @@ export default function InvestingTab({ hook, userId }) {
   const scrubChange = scrub && first ? scrub.value - first.value : null;
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
 
+  // Sheets and pop-ups, shared by the main view and an opened account's page
+  const overlays = (
+    <>
+      {adding && (
+        <Modal title="Add" onClose={() => setAdding(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ADD_ACTIONS.map(a => (
+              <button
+                key={a.type}
+                onClick={() => { setAdding(false); setTrade({ type: a.type }); }}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', borderRadius: 12,
+                  background: a.type === 'buy' ? '#2A3A1A' : T.bg, border: `1px solid ${a.type === 'buy' ? T.olive : T.cardBorder}`, textAlign: 'left',
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.label}</span>
+                <span style={{ fontSize: 12, color: T.muted }}>{a.hint}</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
+      {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
+      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
+      {open && (
+        <HoldingModal
+          key={openSym}
+          hook={hook} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
+          onTrade={(type, symbol, acct) => {
+            // The account being viewed, or the only one holding it
+            const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
+            const account = acct !== undefined ? acct : where.length === 1 ? where[0] : undefined;
+            setOpen(null);
+            setTrade({ type, symbol, ...(account !== undefined ? { account } : {}) });
+          }}
+          onClose={() => setOpen(null)}
+        />
+      )}
+      {targetFor && (
+        <TargetModal
+          label={targetFor}
+          initial={assets[targetFor]?.targetPct}
+          onSave={v => setAsset(targetFor, { targetPct: v })}
+          onClose={() => setTargetFor(null)}
+        />
+      )}
+    </>
+  );
+
+  // An account opened from the Portfolio: its own page; swipe right (or ‹) to go back
+  const pageGroup = openAccountId !== null ? groups.find(g => g.id === openAccountId) || null : null;
+  if (pageGroup) {
+    return (
+      <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <AccountPage
+          g={pageGroup} hide={hide} onBack={() => setOpenAccountId(null)} onAdd={() => setAdding(true)}
+          onAssign={() => setManageAccounts(true)}
+          renderRow={(pos, i) => <HoldingRow key={pos.key} h={pos} first={i === 0} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />}
+          onOpenSold={sym => setOpen({ symbol: sym, account: pageGroup.id })}
+        />
+        {overlays}
+      </div>
+    );
+  }
+
   return (
     <div
       style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}
@@ -342,12 +406,7 @@ export default function InvestingTab({ hook, userId }) {
           </button>
         </div>
         {byAccount ? groups.map(g => (
-          <AccountCard
-            key={g.id || 'none'} g={g} hide={hide} open={openAccounts.has(g.id)} onToggle={() => toggleAccount(g.id)}
-            onAssign={() => setManageAccounts(true)}
-            renderRow={pos => <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />}
-            onOpenSold={sym => setOpen({ symbol: sym, account: g.id })}
-          />
+          <AccountCard key={g.id || 'none'} g={g} hide={hide} onOpen={() => setOpenAccountId(g.id)} />
         )) : (
           <Card style={{ padding: '6px 16px' }}>
             {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
@@ -441,50 +500,7 @@ export default function InvestingTab({ hook, userId }) {
         </>
       )}
 
-      {adding && (
-        <Modal title="Add" onClose={() => setAdding(false)}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {ADD_ACTIONS.map(a => (
-              <button
-                key={a.type}
-                onClick={() => { setAdding(false); setTrade({ type: a.type }); }}
-                style={{
-                  display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', borderRadius: 12,
-                  background: a.type === 'buy' ? '#2A3A1A' : T.bg, border: `1px solid ${a.type === 'buy' ? T.olive : T.cardBorder}`, textAlign: 'left',
-                }}
-              >
-                <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.label}</span>
-                <span style={{ fontSize: 12, color: T.muted }}>{a.hint}</span>
-              </button>
-            ))}
-          </div>
-        </Modal>
-      )}
-      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
-      {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
-      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
-      {open && (
-        <HoldingModal
-          key={openSym}
-          hook={hook} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
-          onTrade={(type, symbol, acct) => {
-            // The account being viewed, or the only one holding it
-            const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
-            const account = acct !== undefined ? acct : where.length === 1 ? where[0] : undefined;
-            setOpen(null);
-            setTrade({ type, symbol, ...(account !== undefined ? { account } : {}) });
-          }}
-          onClose={() => setOpen(null)}
-        />
-      )}
-      {targetFor && (
-        <TargetModal
-          label={targetFor}
-          initial={assets[targetFor]?.targetPct}
-          onSave={v => setAsset(targetFor, { targetPct: v })}
-          onClose={() => setTargetFor(null)}
-        />
-      )}
+      {overlays}
     </div>
   );
 }
@@ -719,13 +735,12 @@ function SoldList({ items, hide, onOpen }) {
   );
 }
 
-// One account in the Portfolio: tap the header to fold/unfold its holdings
-function AccountCard({ g, hide, open, onToggle, onAssign, renderRow, onOpenSold }) {
+// One account in the Portfolio list: tap to open its page
+function AccountCard({ g, hide, onOpen }) {
   const n = g.positions.length;
   return (
     <Card style={{ padding: '4px 16px' }}>
-      <button onClick={onToggle} aria-expanded={open} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', textAlign: 'left' }}>
-        <span style={{ fontSize: 12, color: T.muted, width: 12, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+      <button onClick={onOpen} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', textAlign: 'left' }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
           <span style={{ display: 'block', fontSize: 11, color: T.muted }}>
@@ -736,24 +751,57 @@ function AccountCard({ g, hide, open, onToggle, onAssign, renderRow, onOpenSold 
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text }}>{money(g.value, hide)}</span>
           {Math.abs(g.dayChange) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.dayChange) }}>{signedMoney(g.dayChange, hide)} today</span>}
         </span>
+        <span style={{ fontSize: 18, color: T.muted, marginLeft: 2 }}>›</span>
       </button>
-
-      {open && (
-        <div style={{ paddingBottom: 6 }}>
-          {g.id === '' && (
-            <button onClick={onAssign} style={{ fontSize: 12, color: T.khaki, padding: '0 0 6px', textAlign: 'left' }}>Assign these to accounts →</button>
-          )}
-          {g.positions.map(renderRow)}
-          {n === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px', borderTop: `1px solid ${T.cardBorder}` }}>Nothing held here right now.</div>}
-          {g.sold.length > 0 && (
-            <div style={{ borderTop: `1px solid ${T.cardBorder}`, paddingTop: 10, marginTop: 2 }}>
-              <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sold</div>
-              <SoldRows items={g.sold} hide={hide} onOpen={onOpenSold} />
-            </div>
-          )}
-        </div>
-      )}
     </Card>
+  );
+}
+
+// An account's own page: its holdings and what was sold from it
+function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold }) {
+  const n = g.positions.length;
+  const cost = g.positions.reduce((t, p) => t + (p.cost || 0), 0);
+  const unrealized = g.positions.reduce((t, p) => t + (p.unrealized || 0), 0);
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button onClick={onBack} style={{ fontSize: 15, color: T.khaki, padding: '6px 0', fontWeight: 600 }}>‹ Portfolio</button>
+        <span style={{ flex: 1 }} />
+        <button onClick={onAdd} aria-label="Add transaction" style={{ width: 32, height: 32, borderRadius: 16, background: T.olive, color: '#fff', fontSize: 22, lineHeight: '30px' }}>+</button>
+      </div>
+
+      <Card style={noSelect}>
+        <div style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{g.name}</div>
+        <div style={{ marginTop: 4, fontSize: 30, fontWeight: 800, color: T.text, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</div>
+        {Math.abs(g.dayChange) > 0.005 && (
+          <div style={{ fontSize: 13, color: gainColor(g.dayChange), marginTop: 2 }}>{signedMoney(g.dayChange, hide)} today</div>
+        )}
+        {cost > 0 && (
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 6 }}>
+            Unrealized <b style={{ color: gainColor(unrealized), fontWeight: 600 }}>{signedMoney(unrealized, hide)} ({pct(unrealized / cost)})</b>
+            {' · '}{n} holding{n !== 1 ? 's' : ''}
+          </div>
+        )}
+      </Card>
+
+      {g.id === '' && (
+        <button onClick={onAssign} style={{ fontSize: 13, color: T.khaki, textAlign: 'left' }}>Assign these to accounts →</button>
+      )}
+
+      <Card style={{ padding: '6px 16px' }}>
+        {g.positions.map(renderRow)}
+        {n === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>Nothing held here right now.</div>}
+      </Card>
+
+      {g.sold.length > 0 && (
+        <Card>
+          <SectionTitle>Sold</SectionTitle>
+          <SoldRows items={g.sold} hide={hide} onOpen={onOpenSold} />
+        </Card>
+      )}
+
+      <div style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>Swipe right from the left edge to go back</div>
+    </>
   );
 }
 
