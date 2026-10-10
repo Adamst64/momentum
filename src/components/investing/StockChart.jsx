@@ -19,9 +19,11 @@ const RANGES = [
 // (avg cost, sell price, your target) and markers (when you sold).
 // livePrice replaces the last close so the chart ends at the current quote.
 // notes: your own marks [{ id, date, label, auto? }] (auto = from a watch list, not deletable here)
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onDeleteNote, hide, initialRange = '6mo' }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = '6mo' }) {
   const [adding, setAdding] = useState(false);
   const [noteLabel, setNoteLabel] = useState('');
+  const [noteText, setNoteText] = useState('');
+  const [editingNote, setEditingNote] = useState(null); // { id, label, date, note } being edited
   const [noteDate, setNoteDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [askNote, setAskNote] = useState(null);
   const [askDelete, setAskDelete] = useState(null);
@@ -92,15 +94,40 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         <div key={trade.id} style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${NOTE_COLOR}55` }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: NOTE_COLOR, flex: 1, minWidth: 0 }}>★ {trade.label}</span>
-            <button onClick={() => setTradeId(null)} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
+            <button onClick={() => { setTradeId(null); setEditingNote(null); }} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
           </div>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
             {formatDateYear(trade.date)} · {money(trade.priceThen, hide)} then
             {trade.priceNow && trade.priceThen ? <span style={{ color: gainColor(trade.priceNow - trade.priceThen) }}> · {pct(trade.priceNow / trade.priceThen - 1)} since</span> : null}
           </div>
-          {trade.auto
-            ? <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Added automatically from your watch list.</div>
-            : onDeleteNote && <button onClick={() => setAskNote(trade)} style={{ marginTop: 8, fontSize: 12, fontWeight: 600, color: T.red, border: `1px solid ${T.red}66`, borderRadius: 8, padding: '5px 10px' }}>Delete mark</button>}
+          {editingNote?.id === trade.noteId ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+              <input value={editingNote.label} onChange={e => setEditingNote(n => ({ ...n, label: e.target.value }))} placeholder="Mark name" style={inputStyle} />
+              <input type="date" value={editingNote.date} max={new Date().toLocaleDateString('en-CA')} onChange={e => e.target.value && setEditingNote(n => ({ ...n, date: e.target.value }))} style={inputStyle} />
+              <textarea value={editingNote.note} onChange={e => setEditingNote(n => ({ ...n, note: e.target.value }))} placeholder="Note" rows={6} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.45, fontFamily: 'inherit' }} />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={async () => { if (!editingNote.label.trim()) return; await onUpdateNote(editingNote.id, { label: editingNote.label, date: editingNote.date, note: editingNote.note }); setEditingNote(null); }}
+                  style={{ flex: 1, padding: 10, borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}
+                >Save</button>
+                <button onClick={() => setEditingNote(null)} style={{ padding: '10px 14px', color: T.muted, fontSize: 14 }}>Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {trade.note && (
+                <div style={{ fontSize: 14, color: T.text, marginTop: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{trade.note}</div>
+              )}
+              {trade.auto
+                ? <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Added automatically from your watch list.</div>
+                : (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                    {onUpdateNote && <button onClick={() => setEditingNote({ id: trade.noteId, label: trade.label, date: trade.date, note: trade.note || '' })} style={{ fontSize: 12, fontWeight: 600, color: T.khaki, border: `1px solid ${T.khaki}55`, borderRadius: 8, padding: '5px 10px' }}>{trade.note ? 'Edit' : 'Edit / add a note'}</button>}
+                    {onDeleteNote && <button onClick={() => setAskNote(trade)} style={{ fontSize: 12, fontWeight: 600, color: T.red, border: `1px solid ${T.red}66`, borderRadius: 8, padding: '5px 10px' }}>Delete mark</button>}
+                  </div>
+                )}
+            </>
+          )}
         </div>
       )}
       {askNote && (
@@ -130,10 +157,11 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
       {onAddNote && (adding ? (
         <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input value={noteLabel} onChange={e => setNoteLabel(e.target.value)} placeholder="Mark name, e.g. Started watching, Pelosi bought" autoFocus style={inputStyle} />
+          <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Note (optional) — why it matters, what you read, what you expect…" rows={4} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.45, fontFamily: 'inherit' }} />
           <div style={{ display: 'flex', gap: 8 }}>
             <input type="date" value={noteDate} max={new Date().toLocaleDateString('en-CA')} onChange={e => e.target.value && setNoteDate(e.target.value)} style={{ ...inputStyle, flex: 1 }} />
             <button
-              onClick={async () => { if (!noteLabel.trim()) return; await onAddNote(noteDate, noteLabel); setNoteLabel(''); setAdding(false); }}
+              onClick={async () => { if (!noteLabel.trim()) return; await onAddNote(noteDate, noteLabel, noteText); setNoteLabel(''); setNoteText(''); setAdding(false); }}
               style={{ padding: '0 16px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
             >Add</button>
             <button onClick={() => setAdding(false)} style={{ padding: '0 8px', color: T.muted, fontSize: 14 }}>Cancel</button>

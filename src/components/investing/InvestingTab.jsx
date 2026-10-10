@@ -191,7 +191,8 @@ export default function InvestingTab({ hook, userId }) {
     .map(x => ({ symbol: x.key, target: x.target, under: x.target - x.pct * 100, amount: (x.target / 100) * allocTotal - x.value }))
     .filter(x => x.under >= 2 && x.amount >= 1)
     .sort((a, b) => b.under - a.under)[0] || null;
-  const watch = Object.values(assets).filter(a => a.watch && !portfolio.holdings.some(h => h.symbol === a.symbol));
+  // On the watchlist: watched, or in any list (owned stocks stay in their lists)
+  const watch = Object.values(assets).filter(a => a.watch || (a.lists || []).length > 0);
   const sold = soldPositions(portfolio.closed, assets);
   // Holdings grouped by account (shown once you use accounts)
   const groups = useMemo(() => accountGroups(txs, assets, accounts), [txs, assets, accounts]);
@@ -204,12 +205,6 @@ export default function InvestingTab({ hook, userId }) {
   const acctCount = {};
   groups.forEach(g => g.positions.forEach(p => { acctCount[p.symbol] = (acctCount[p.symbol] || 0) + 1; }));
 
-  // Owned stocks don't belong on the watchlist (catches ones bought before this rule)
-  const ownedWatched = portfolio.holdings.filter(h => assets[h.symbol]?.watch).map(h => h.symbol).join(',');
-  useEffect(() => {
-    if (!ownedWatched) return;
-    ownedWatched.split(',').forEach(s => setAsset(s, { watch: false }).catch(e => console.error('Unwatch failed:', e)));
-  }, [ownedWatched, setAsset]);
 
   // Headline: the touched chart point, else the current value
   const first = chartPoints[0];
@@ -961,10 +956,63 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
     return a.symbol.localeCompare(b.symbol);
   });
 
+  // Stocks you came to own stay in the list, below the ones you're only watching
+  const ownedSet = new Set(portfolio.holdings.map(h => h.symbol));
+  const soldSet = new Set(portfolio.closed.map(h => h.symbol));
+  const sections = [
+    { key: 'watching', title: 'Watching', items: sorted.filter(a => !ownedSet.has(a.symbol) && !soldSet.has(a.symbol)) },
+    { key: 'owned', title: 'Owned', items: sorted.filter(a => ownedSet.has(a.symbol)) },
+    { key: 'sold', title: 'Owned & sold', items: sorted.filter(a => !ownedSet.has(a.symbol) && soldSet.has(a.symbol)) },
+  ];
+  const renderRow = (a, i, sec) => {
+          const day = dayPct(a);
+          const ext = extendedPrice(a);
+          const s0 = since(a);
+          const added = a.listAdded?.[listId];
+          return (
+            <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i || rows.length > 1 ? `1px solid ${T.cardBorder}` : 'none', marginTop: i === 0 && rows.length > 1 ? 10 : 0, opacity: sec === 'sold' ? 0.85 : 1 }}>
+              <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
+                {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
+                {added && (
+                  <div style={{ fontSize: 11, color: T.muted }}>
+                    Added {formatDateYear(added)}{s0 !== null && <span style={{ color: gainColor(s0) }}> · {pct(s0)} since</span>}
+                  </div>
+                )}
+                {sec === 'owned' && (() => {
+                  const h = portfolio.holdings.find(x => x.symbol === a.symbol);
+                  return h ? <div style={{ fontSize: 11, color: T.khaki }}>You own {qtyFmt(h.qty)} · {pct(h.unrealizedPct)}</div> : null;
+                })()}
+                {sec === 'sold' && (() => {
+                  const c = portfolio.closed.find(x => x.symbol === a.symbol);
+                  return c?.lastExit ? <div style={{ fontSize: 11, color: T.muted }}>Sold {formatDateYear(c.lastExit.date)} @ {money(c.lastExit.avgSell, hide)}</div> : null;
+                })()}
+                <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
+              </button>
+              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
+                <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
+                {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
+              </div>
+              <button
+                onClick={() => setAsking({
+                  title: `Remove ${a.symbol} from ${isLoose ? 'your watchlist' : `“${title}”`}?`,
+                  message: (a.lists || []).filter(x => x !== listId).length
+                    ? 'It stays in your other lists.'
+                    : 'It isn\'t in any other list, so it leaves your watchlist. Its chart marks and targets are kept.',
+                  label: 'Remove',
+                  action: () => removeFromList(a.symbol, isLoose ? null : listId),
+                })}
+                aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}
+              >×</button>
+            </div>
+          );
+        
+  };
+
   const add = async () => {
     const s = sym.trim().toUpperCase();
     if (!s || busy) return;
-    if (portfolio.holdings.some(h => h.symbol === s)) { setMsg(`You already own ${s} — it's in your portfolio.`); return; }
     if (rows.some(a => a.symbol === s)) { setMsg(`${s} is already in this list.`); return; }
     setBusy(true);
     setMsg(null);
@@ -1022,42 +1070,16 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
       <Card style={{ padding: '10px 16px' }}>
         {rows.length > 1 && <Chips small options={LIST_SORTS.filter(o => !isLoose || (o.value !== 'since' && o.value !== 'added'))} value={sort} onChange={setSort} />}
         {rows.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '6px 0' }}>Nothing here yet — add a ticker above.</div>}
-        {sorted.map((a, i) => {
-          const day = dayPct(a);
-          const ext = extendedPrice(a);
-          const s0 = since(a);
-          const added = a.listAdded?.[listId];
-          return (
-            <div key={a.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0', borderTop: i || rows.length > 1 ? `1px solid ${T.cardBorder}` : 'none', marginTop: i === 0 && rows.length > 1 ? 10 : 0 }}>
-              <button onClick={() => onOpen(a.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{a.symbol}</div>
-                {a.name && <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>}
-                {added && (
-                  <div style={{ fontSize: 11, color: T.muted }}>
-                    Added {formatDateYear(added)}{s0 !== null && <span style={{ color: gainColor(s0) }}> · {pct(s0)} since</span>}
-                  </div>
-                )}
-                <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
-              </button>
-              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
-                <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
-                {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
+        {sections.map(sec => sec.items.length > 0 && (
+          <div key={sec.key}>
+            {sections.filter(x => x.items.length).length > 1 && (
+              <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 14 }}>
+                {sec.title} · {sec.items.length}
               </div>
-              <button
-                onClick={() => setAsking({
-                  title: `Remove ${a.symbol} from ${isLoose ? 'your watchlist' : `“${title}”`}?`,
-                  message: (a.lists || []).filter(x => x !== listId).length
-                    ? 'It stays in your other lists.'
-                    : 'It isn\'t in any other list, so it leaves your watchlist. Its chart marks and targets are kept.',
-                  label: 'Remove',
-                  action: () => removeFromList(a.symbol, isLoose ? null : listId),
-                })}
-                aria-label={`Remove ${a.symbol}`} style={{ fontSize: 16, color: T.subtle }}
-              >×</button>
-            </div>
-          );
-        })}
+            )}
+            {sec.items.map((a, i) => renderRow(a, i, sec.key))}
+          </div>
+        ))}
       </Card>
       <div style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>Swipe right from the left edge to go back</div>
       {asking && <ConfirmDialog title={asking.title} message={asking.message} confirmLabel={asking.label || 'Delete'} onConfirm={asking.action} onClose={() => setAsking(null)} />}

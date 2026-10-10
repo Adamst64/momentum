@@ -152,8 +152,17 @@ export function useInvesting(userId) {
   }, [assets, ref]);
 
   // ── Your own marks on a stock's chart ──
-  const addMark = useCallback((symbol, date, label) =>
-    setDoc(ref('invAssets', symbol), { symbol, marks: arrayUnion({ id: genId(), date, label: label.trim() }) }, { merge: true }), [ref]);
+  // A mark is { id, date, label, note? } — note can be as long as you like
+  const addMark = useCallback((symbol, date, label, note) =>
+    setDoc(ref('invAssets', symbol), {
+      symbol, marks: arrayUnion({ id: genId(), date, label: label.trim(), ...(note?.trim() ? { note: note.trim() } : {}) }),
+    }, { merge: true }), [ref]);
+  const updateMark = useCallback((symbol, id, fields) => {
+    const marks = (assets[symbol]?.marks || []).map(m => (m.id === id ? {
+      ...m, ...fields, label: (fields.label ?? m.label).trim(), note: (fields.note ?? m.note ?? '').trim(),
+    } : m));
+    return setDoc(ref('invAssets', symbol), { marks }, { merge: true });
+  }, [assets, ref]);
   const deleteMark = useCallback((symbol, mark) => updateDoc(ref('invAssets', symbol), { marks: arrayRemove(mark) }), [ref]);
 
   const addAccount = useCallback(async (name) => {
@@ -269,7 +278,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, accounts, watchLists,
-    addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, deleteMark,
+    addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark,
     addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };

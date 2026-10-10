@@ -28,7 +28,7 @@ const round6 = n => Math.round(n * 1e6) / 1e6;
 // editing: { ids, init } from txEditInit — the form starts with that transaction's
 // values and saving replaces it (both halves of a linked pair).
 export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', editing = null, onClose }) {
-  const { txs, assets, accounts, addTx, addTxs, replaceTxs, ensureAsset, setAsset, priceHistory } = hook;
+  const { txs, assets, accounts, addTx, addTxs, replaceTxs, ensureAsset, priceHistory } = hook;
   const init = editing?.init || {};
   const str = v => (v === null || v === undefined ? '' : String(v));
   // Nothing is picked for you: account and where the money comes from / goes
@@ -158,8 +158,6 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         const linkId = genId();
         await addTxs(toSave.map(t => ({ ...t, linkId })));
       } else await addTx(toSave[0]);
-      // Owned now, so it no longer belongs on the watchlist
-      if (type === 'buy' && assets[sym]?.watch) await setAsset(sym, { watch: false });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
