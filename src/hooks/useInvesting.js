@@ -5,6 +5,7 @@ import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { priceDate, easternDate } from '../utils/marketCalendar';
+import { toDateStr } from '../utils/dateUtils';
 import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
@@ -89,6 +90,13 @@ export function useInvesting(userId) {
       await batch.commit();
     }
   }, [txs, ref]);
+
+  // Cash left in an account from older entries (before money lived in funds):
+  // zero it with a one-off withdrawal (or deposit, if it's negative) dated today
+  const clearCash = useCallback((account, amount) => addTx({
+    type: amount > 0 ? 'withdraw' : 'deposit', date: toDateStr(new Date()), amount: Math.round(Math.abs(amount) * 100) / 100,
+    note: 'Cleared leftover cash', ...(account ? { account } : {}),
+  }), [addTx]);
 
   const addAccount = useCallback(async (name) => {
     const id = genId();
@@ -197,7 +205,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget, accounts,
-    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, clearCash, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

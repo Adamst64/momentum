@@ -52,7 +52,7 @@ const earningsBadge = (date, today) => {
 };
 
 export default function InvestingTab({ hook, userId }) {
-  const { txs, portfolio, assets, snapshots, cashTarget, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset } = hook;
+  const { txs, portfolio, assets, snapshots, cashTarget, accounts, refreshPrices, deleteTx, updateTx, setTxAccount, setAsset, clearCash } = hook;
   const [view, setView]       = useState('portfolio');
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -63,6 +63,16 @@ export default function InvestingTab({ hook, userId }) {
   const [byAccountPref, setByAccountPrefState] = useState(() => { try { return localStorage.getItem('momentum_by_account') !== '0'; } catch { return true; } });
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
+  // Account cards start folded; the ones you open are remembered
+  const [openAccounts, setOpenAccounts] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('momentum_open_accounts') || '[]')); } catch { return new Set(); }
+  });
+  const toggleAccount = id => setOpenAccounts(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem('momentum_open_accounts', JSON.stringify([...next])); } catch { /* storage unavailable */ }
+    return next;
+  });
   const [targetFor, setTargetFor] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [updateErr, setUpdateErr] = useState(null);
@@ -306,21 +316,12 @@ export default function InvestingTab({ hook, userId }) {
           </button>
         </div>
         {byAccount ? groups.map(g => (
-          <Card key={g.id || 'none'} style={{ padding: '10px 16px 6px' }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, paddingBottom: 6 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
-              <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</span>
-            </div>
-            {g.id === '' && (
-              <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki, padding: '0 0 6px', textAlign: 'left' }}>
-                Assign these to accounts →
-              </button>
-            )}
-            {g.positions.map(pos => (
-              <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />
-            ))}
-            {g.positions.length === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px' }}>Nothing held here right now.</div>}
-          </Card>
+          <AccountCard
+            key={g.id || 'none'} g={g} hide={hide} open={openAccounts.has(g.id)} onToggle={() => toggleAccount(g.id)}
+            onAssign={() => setManageAccounts(true)} onClearCash={() => clearCash(g.id, g.cash)}
+            renderRow={pos => <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />}
+            onOpenSold={sym => setOpen({ symbol: sym, account: g.id })}
+          />
         )) : (
           <Card style={{ padding: '6px 16px' }}>
             {portfolio.holdings.length === 0 && <div style={{ fontSize: 13, color: T.muted, padding: '10px 0' }}>No holdings yet.</div>}
@@ -329,7 +330,7 @@ export default function InvestingTab({ hook, userId }) {
             ))}
           </Card>
         )}
-        {sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
+        {!byAccount && sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
         </>
       )}
 
@@ -680,6 +681,69 @@ function SoldList({ items, hide, onOpen }) {
           Stocks you sell completely show up here, with your gain or loss and how the price moved after you sold.
         </div>
       )}
+      <SoldRows items={items} hide={hide} onOpen={onOpen} />
+      {items.length > 0 && (
+        <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
+          Gain/loss is what you sold for minus what you paid (fees included). “Since sold” compares today's price with your sell price; prices refresh automatically, or pull down to update.
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// One account in the Portfolio: tap the header to fold/unfold its holdings
+function AccountCard({ g, hide, open, onToggle, onAssign, onClearCash, renderRow, onOpenSold }) {
+  const [confirmClear, setConfirmClear] = useState(false);
+  const n = g.positions.length;
+  return (
+    <Card style={{ padding: '4px 16px' }}>
+      <button onClick={onToggle} aria-expanded={open} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 0', textAlign: 'left' }}>
+        <span style={{ fontSize: 12, color: T.muted, width: 12, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s' }}>▶</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
+          <span style={{ display: 'block', fontSize: 11, color: T.muted }}>
+            {n} holding{n !== 1 ? 's' : ''}{g.sold.length ? ` · ${g.sold.length} sold` : ''}
+          </span>
+        </span>
+        <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text }}>{money(g.value, hide)}</span>
+          {Math.abs(g.dayChange) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.dayChange) }}>{signedMoney(g.dayChange, hide)} today</span>}
+        </span>
+      </button>
+
+      {Math.abs(g.cash) > 0.005 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: T.muted, padding: '0 0 10px' }}>
+          <span style={{ flex: 1 }}>Leftover cash from older entries: <b style={{ color: g.cash < 0 ? T.red : T.text }}>{money(g.cash, hide)}</b></span>
+          <button
+            onClick={() => (confirmClear ? (onClearCash(), setConfirmClear(false)) : setConfirmClear(true))}
+            style={{ fontSize: 12, fontWeight: 600, color: confirmClear ? T.red : T.khaki }}
+          >{confirmClear ? 'Tap to confirm' : 'Clear'}</button>
+        </div>
+      )}
+
+      {open && (
+        <div style={{ paddingBottom: 6 }}>
+          {g.id === '' && (
+            <button onClick={onAssign} style={{ fontSize: 12, color: T.khaki, padding: '0 0 6px', textAlign: 'left' }}>Assign these to accounts →</button>
+          )}
+          {g.positions.map(renderRow)}
+          {n === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px', borderTop: `1px solid ${T.cardBorder}` }}>Nothing held here right now.</div>}
+          {g.sold.length > 0 && (
+            <div style={{ borderTop: `1px solid ${T.cardBorder}`, paddingTop: 10, marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Sold</div>
+              <SoldRows items={g.sold} hide={hide} onOpen={onOpenSold} />
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// Fully sold positions: what you made, and how the price moved after
+function SoldRows({ items, hide, onOpen }) {
+  return (
+    <>
       {items.map((s, i) => (
         <button
           key={s.symbol}
@@ -707,12 +771,7 @@ function SoldList({ items, hide, onOpen }) {
           </div>
         </button>
       ))}
-      {items.length > 0 && (
-        <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-          Gain/loss is what you sold for minus what you paid (fees included). “Since sold” compares today's price with your sell price; prices refresh automatically, or pull down to update.
-        </div>
-      )}
-    </Card>
+    </>
   );
 }
 

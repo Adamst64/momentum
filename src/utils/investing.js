@@ -141,11 +141,13 @@ function priced(x, assets) {
 }
 
 // Open positions grouped by account, in your account order; '' (no account) last.
-// Each: { id, name, positions, cash, value } where value = positions + cash.
+// Each: { id, name, positions, sold, cash, value, dayChange } where value = positions + cash
+// (cash only exists from older entries now) and sold = positions fully sold in that account.
 export function accountGroups(txs, assets, accounts = []) {
   const r = replay(txs, { byAccount: true });
   const positions = Object.values(r.holdings).filter(x => x.qty > 0).map(x => priced(x, assets));
-  const ids = new Set([...positions.map(p => p.account), ...Object.keys(r.cashBy).filter(k => Math.abs(r.cashBy[k]) > 0.005)]);
+  const closed = Object.values(r.holdings).filter(x => x.qty === 0 && x.lastExit).map(x => priced(x, assets));
+  const ids = new Set([...positions.map(p => p.account), ...closed.map(p => p.account), ...Object.keys(r.cashBy).filter(k => Math.abs(r.cashBy[k]) > 0.005)]);
   const order = [...accounts.map(a => a.id), ''];
   return [...ids]
     .sort((a, b) => (order.indexOf(a) + 1 || 999) - (order.indexOf(b) + 1 || 999))
@@ -155,7 +157,9 @@ export function accountGroups(txs, assets, accounts = []) {
       return {
         id, name: id ? accounts.find(a => a.id === id)?.name || 'Deleted account' : 'No account',
         positions: ps, cash,
+        sold: soldPositions(closed.filter(p => p.account === id), assets),
         value: cash + ps.reduce((t, p) => t + (p.value || 0), 0),
+        dayChange: ps.reduce((t, p) => t + (p.prevClose && p.price ? p.qty * (p.price - p.prevClose) : 0), 0),
       };
     });
 }
