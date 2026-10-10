@@ -163,7 +163,8 @@ export default function InvestingTab({ hook, userId }) {
   const onTouchMove = e => {
     const s = pullStart.current;
     if (s === null) return;
-    if (e.touches.length > 1) { pullStart.current = null; setPull(0); return; }
+    // The chart claimed this finger (scrubbing): it's not a pull
+    if (e.touches.length > 1 || e.defaultPrevented) { pullStart.current = null; setPull(0); return; }
     const dx = e.touches[0].clientX - s.x, dy = e.touches[0].clientY - s.y;
     if (!s.decided && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
       if (Math.abs(dx) > Math.abs(dy)) { pullStart.current = null; setPull(0); return; }

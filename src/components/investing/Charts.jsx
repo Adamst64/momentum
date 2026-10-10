@@ -35,10 +35,27 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   useEffect(() => {
     const el = ref.current;
     if (!el) return undefined;
-    const stop = e => { if (e.touches.length > 1) e.preventDefault(); };
-    el.addEventListener('touchstart', stop, { passive: false });
-    el.addEventListener('touchmove', stop, { passive: false });
-    return () => { el.removeEventListener('touchstart', stop); el.removeEventListener('touchmove', stop); };
+    // Once a sideways scrub (or a hold) has started, the chart keeps the finger
+    // until it lifts: drifting down keeps moving the line instead of handing the
+    // gesture to the page (scroll / pull to refresh). While still undecided, a
+    // mostly-sideways move is claimed too, so the page can't grab it first.
+    let start = null;
+    const onStart = e => {
+      if (e.touches.length > 1) { e.preventDefault(); return; }
+      start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    };
+    const onMove = e => {
+      if (e.touches.length > 1 || pinching.current) { e.preventDefault(); return; }
+      const g = gesture.current;
+      if (g?.mode === 'scrub') { e.preventDefault(); return; }
+      if (g?.mode === 'pending' && start) {
+        const dx = Math.abs(e.touches[0].clientX - start.x), dy = Math.abs(e.touches[0].clientY - start.y);
+        if (dx >= dy && dx > 2) e.preventDefault();
+      }
+    };
+    el.addEventListener('touchstart', onStart, { passive: false });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    return () => { el.removeEventListener('touchstart', onStart); el.removeEventListener('touchmove', onMove); };
   }, [hasChart]);
   if (points.length < 2) {
     return (
@@ -116,7 +133,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     if (!g) { if (e.pointerType === 'mouse') pick(e.clientX); return; }
     if (g.mode === 'pending') {
       const dx = Math.abs(e.clientX - g.x0), dy = Math.abs(e.clientY - g.y0);
-      if (dx > 6 && dx >= dy) startScrub(e.currentTarget, e.pointerId, e.clientX);
+      if (dx > 5 && dx >= dy * 0.8) startScrub(e.currentTarget, e.pointerId, e.clientX); // a little diagonal is fine
       else if (dy > 6) { endGesture(); downAt.current = null; } // vertical: the page scrolls / pulls
       return;
     }
