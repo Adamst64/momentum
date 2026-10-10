@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
-import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups, txEditInit } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups, txEditInit, isLegacyCash } from '../../utils/investing';
 import { Chips, inputStyle, gainColor, SectionTitle, ConfirmDialog } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
@@ -22,7 +22,8 @@ const timeAgo = iso => {
 // txs is filtered to one symbol. accounts + onSetAccount: account label you can change.
 // onEdit(tx): shows an Edit button on rows the form can edit.
 export function TxList({ txs, allTxs = txs, hide, onDelete, onEdit, accounts = [], onSetAccount }) {
-  const [asking, setAsking] = useState(null); // transaction waiting for "are you sure?
+  const [asking, setAsking] = useState(null); // transaction waiting for "are you sure?"
+  txs = txs.filter(t => !isLegacyCash(t));
   if (!txs.length) return <div style={{ fontSize: 13, color: T.muted }}>No transactions yet.</div>;
   const partner = t => (t.linkId ? allTxs.find(o => o.linkId === t.linkId && o.id !== t.id) : null);
   const showAccounts = accounts.length > 0 || txs.some(t => t.account);

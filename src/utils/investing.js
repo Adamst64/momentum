@@ -47,6 +47,12 @@ export function sortTx(txs) {
 
 export const acctOf = t => t.account || '';
 
+// Money in/out rows from before money lived in funds (old deposits, withdrawals,
+// interest and the "Cleared leftover cash" adjustment). They stay in the data so
+// the math balances — removing them would bring the old cash back — but the app
+// never shows them. A dividend's linked "paid out" row is not one of them.
+export const isLegacyCash = t => (t.type === 'deposit' || t.type === 'withdraw' || t.type === 'interest') && !t.linkId;
+
 // Replays every transaction in date order. Average-cost method: a sell removes
 // cost at the current average, so the average itself doesn't change on sells.
 // byAccount: positions are per account + symbol (the same stock in two accounts

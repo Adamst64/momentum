@@ -3,7 +3,7 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -398,7 +398,7 @@ export default function InvestingTab({ hook, userId }) {
 
           <Card>
             <SectionTitle>Monthly: deposited vs invested</SectionTitle>
-            <MonthlyFlows months={monthlyFlows(txs)} hide={hide} />
+            <MonthlyFlows months={monthlyFlows(txs.filter(t => t.note !== 'Cleared leftover cash'))} hide={hide} />
           </Card>
 
           <Card>
@@ -516,10 +516,11 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
 // Add, rename and delete accounts
 function AccountsModal({ hook, onClose }) {
   const { accounts, txs, addAccount, renameAccount, deleteAccount, assignTxs } = hook;
-  // Unassigned transactions grouped by stock; older money in/out entries as "Money in/out"
+  // Unassigned transactions grouped by stock (old cash rows are hidden; "Move all"
+  // still moves them along so each account's math stays balanced)
   const loose = {};
-  txs.filter(t => !t.account).forEach(t => { const k = t.symbol || 'Money in/out'; (loose[k] = loose[k] || []).push(t.id); });
-  const looseKeys = Object.keys(loose).sort((a, b) => (a === 'Money in/out') - (b === 'Money in/out') || a.localeCompare(b));
+  txs.filter(t => !t.account && !isLegacyCash(t)).forEach(t => { const k = t.symbol || 'Other'; (loose[k] = loose[k] || []).push(t.id); });
+  const looseKeys = Object.keys(loose).sort((a, b) => (a === 'Other') - (b === 'Other') || a.localeCompare(b));
   const [moved, setMoved] = useState(null);
   const assign = (key, ids, acc) => run(async () => {
     await assignTxs(ids, acc);
@@ -530,12 +531,12 @@ function AccountsModal({ hook, onClose }) {
   const [asking, setAsking] = useState(null); // account waiting for "are you sure?"
   const [err, setErr] = useState(null);
   const run = async fn => { setErr(null); try { await fn(); } catch (e) { setErr(e.message || 'Something went wrong'); } };
-  const unassigned = txs.filter(t => !t.account).length;
+  const unassigned = txs.filter(t => !t.account && !isLegacyCash(t)).length;
   return (
     <Modal title="Accounts" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {accounts.map(a => {
-          const n = txs.filter(t => t.account === a.id).length;
+          const n = txs.filter(t => t.account === a.id && !isLegacyCash(t)).length;
           return (
             <div key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input
@@ -596,7 +597,7 @@ function AccountsModal({ hook, onClose }) {
       {asking && (
         <ConfirmDialog
           title={`Delete ${asking.name}?`}
-          message={`The account is removed. Its ${txs.filter(t => t.account === asking.id).length} transaction(s) stay and move to “No account”, so your holdings don't change.`}
+          message={`The account is removed. Its ${txs.filter(t => t.account === asking.id && !isLegacyCash(t)).length} transaction(s) stay and move to “No account”, so your holdings don't change.`}
           onConfirm={() => deleteAccount(asking.id)}
           onClose={() => setAsking(null)}
         />
