@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { toDateStr } from '../../utils/dateUtils';
+import { toDateStr, formatDateYear } from '../../utils/dateUtils';
 import { validateTx, money, qtyFmt, accountHoldings } from '../../utils/investing';
 import { genId } from '../../utils/id';
 import { Field, Chips, PrimaryButton, inputStyle } from './ui';
@@ -29,7 +29,7 @@ const round6 = n => Math.round(n * 1e6) / 1e6;
 // There's no free cash: money sits in funds (FDRXX, VMFXX…), so every money
 // movement names a fund — or, for buys/sells, money from/to outside the app.
 export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', initialAccount, onClose }) {
-  const { txs, assets, accounts, addTx, addTxs, ensureAsset, setAsset } = hook;
+  const { txs, assets, accounts, addTx, addTxs, ensureAsset, setAsset, priceHistory } = hook;
   // Account: the one passed in, else the last one used (if it still exists), else the first
   const [account, setAccountState] = useState(() => {
     if (initialAccount !== undefined) return initialAccount || '';
@@ -68,24 +68,52 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const funds = acctHold.filter(h => h.symbol !== sym || isMoney);
   const isMM = s => Math.abs((assets[s]?.price ?? 0) - 1) < 0.01; // $1 money market fund
   const mmFund = funds.find(h => isMM(h.symbol));
-  const reinvestPrice = assets[sym]?.price || null;
 
   const options = type === 'buy'
     ? [...funds.map(h => `fund:${h.symbol}`), 'owned']
     : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), 'out']
-    : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(reinvestPrice ? ['reinvest'] : []), 'out']
+    : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
     : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);
   const preferred = mmFund ? `fund:${mmFund.symbol}` : null;
   const fallback = type === 'buy' ? 'owned' : type === 'sell' || type === 'dividend' ? (preferred || options[0]) : type === 'deposit' ? (preferred || (acctHold.length ? options[0] : 'new')) : options[0];
-  const pay = payWith && options.includes(payWith) ? payWith : (preferred && options.includes(preferred) ? preferred : fallback);
+  // Dividends from a stock you hold here are usually reinvested in it (DRIP)
+  const dripDefault = type === 'dividend' && sym && acctHold.some(h => h.symbol === sym) && !isMM(sym) ? 'reinvest' : null;
+  const pay = payWith && options.includes(payWith) ? payWith : dripDefault || (preferred && options.includes(preferred) ? preferred : fallback);
   const fundSym = pay === 'new' ? newFund.trim().toUpperCase() : pay?.startsWith('fund:') ? pay.slice(5) : pay === 'reinvest' ? sym : null;
-  const fundPrice = fundSym ? assets[fundSym]?.price || 1 : null;
+  // Price the fund / reinvested stock traded at. $1 money market funds are always $1;
+  // anything else is asked for, filled in with that day's close when known.
+  const needsFlowPrice = !!fundSym && (pay === 'reinvest' || !isMM(fundSym));
+  const [flowPriceText, setFlowPriceText] = useState('');
+  const [hist, setHist] = useState(null); // { key, price, date } close on/before the chosen date
+  const histKey = needsFlowPrice ? `${fundSym}|${date}` : null;
+  useEffect(() => {
+    if (!histKey || !priceHistory) return undefined;
+    if (hist?.key === histKey) return undefined;
+    let live = true;
+    const days = (Date.now() - new Date(date + 'T12:00:00')) / 864e5;
+    const range = days <= 25 ? '1mo' : days <= 85 ? '3mo' : days <= 175 ? '6mo' : days <= 360 ? '1y' : days <= 1800 ? '5y' : 'max';
+    priceHistory(fundSym, range)
+      .then(pts => {
+        const pt = [...pts].reverse().find(x => x.date <= date);
+        if (live) setHist({ key: histKey, price: pt ? Math.round(pt.value * 100) / 100 : null, date: pt?.date || null });
+      })
+      .catch(() => { if (live) setHist({ key: histKey, price: null, date: null }); });
+    return () => { live = false; };
+  }, [histKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const histPrice = hist?.key === histKey ? hist.price : null;
+  const isToday = date === toDateStr(new Date());
+  const suggested = isToday ? assets[fundSym]?.price || histPrice : histPrice || assets[fundSym]?.price;
+  const fundPrice = !fundSym ? null
+    : needsFlowPrice ? (num(flowPriceText) > 0 ? num(flowPriceText) : suggested || null)
+    : assets[fundSym]?.price || 1;
+  const flowOk = !fundSym || fundPrice > 0;
+  useEffect(() => { setFlowPriceText(''); }, [fundSym]);
 
   // What gets saved: the transaction plus, when money moves through a fund, its linked fund trade
   let toSave = [];
   let total = 0;
-  if (isTrade && sym && q > 0 && p > 0) {
+  if (isTrade && sym && q > 0 && p > 0 && flowOk) {
     total = q * p + (type === 'buy' ? f : -f);
     const main = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...acct,
       ...(type === 'buy' && pay === 'owned' ? { fromCash: false } : {}),
@@ -93,15 +121,15 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     const fundTx = fundSym ? { type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym, quantity: round6(total / fundPrice), price: fundPrice, ...acct } : null;
     toSave = fundTx ? (type === 'buy' ? [fundTx, main] : [main, fundTx]) : [main];
   }
-  if (type === 'deposit' && a > 0 && fundSym) {
+  if (type === 'deposit' && a > 0 && fundSym && flowOk) {
     total = a;
     toSave = [{ type: 'buy', date, symbol: fundSym, quantity: round6(a / fundPrice), price: fundPrice, fromCash: false, deposit: true, ...acct }];
   }
-  if (type === 'withdraw' && a > 0 && fundSym) {
+  if (type === 'withdraw' && a > 0 && fundSym && flowOk) {
     total = a;
     toSave = [{ type: 'sell', date, symbol: fundSym, quantity: round6(a / fundPrice), price: fundPrice, toCash: false, deposit: true, ...acct }];
   }
-  if (type === 'dividend' && sym && a > 0) {
+  if (type === 'dividend' && sym && a > 0 && flowOk) {
     total = a;
     const div = { type: 'dividend', date, symbol: sym, amount: a, ...acct };
     toSave = pay === 'out'
@@ -218,6 +246,20 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         {options.length > 0 && (
           <Field label={flowLabel}>
             <Chips small options={options.map(o => ({ value: o, label: label(o) }))} value={pay} onChange={setPayWith} />
+          </Field>
+        )}
+        {needsFlowPrice && (
+          <Field label={pay === 'reinvest' ? `Reinvest price (${fundSym} per share)` : `${fundSym} price that day`}>
+            <input
+              value={flowPriceText} onChange={e => setFlowPriceText(e.target.value)} inputMode="decimal"
+              placeholder={suggested ? `$${suggested.toFixed(2)}` : '$0.00'} style={inputStyle}
+            />
+            <span style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+              {num(flowPriceText) > 0 ? 'Your price.'
+                : histPrice && !isToday && hist?.date ? `Using the ${hist.date === date ? '' : 'last '}close on ${formatDateYear(hist.date)}: $${histPrice.toFixed(2)} — type the exact price from your statement if it differs.`
+                : suggested ? `Using today's price $${suggested.toFixed(2)}.`
+                : hist?.key === histKey ? 'No price found for that day — type it in.' : 'Looking up that day\'s price…'}
+            </span>
           </Field>
         )}
         {type === 'deposit' && pay === 'new' && (
