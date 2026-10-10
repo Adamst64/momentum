@@ -77,6 +77,18 @@ export function useInvesting(userId) {
     await batch.commit();
   }, [txs, ref]);
 
+  // Many transactions to one account at once (linked partners follow)
+  const assignTxs = useCallback(async (ids, account) => {
+    const picked = txs.filter(t => ids.includes(t.id));
+    const links = new Set(picked.map(t => t.linkId).filter(Boolean));
+    const all = txs.filter(t => ids.includes(t.id) || (t.linkId && links.has(t.linkId)));
+    for (let i = 0; i < all.length; i += 450) { // batches top out at 500 writes
+      const batch = writeBatch(db);
+      all.slice(i, i + 450).forEach(t => batch.update(ref('invTransactions', t.id), { account: account || null }));
+      await batch.commit();
+    }
+  }, [txs, ref]);
+
   const addAccount = useCallback(async (name) => {
     const id = genId();
     await setDoc(ref('invAccounts', id), { name: name.trim(), order: accountDocs.length, createdAt: new Date().toISOString() });
@@ -184,7 +196,7 @@ export function useInvesting(userId) {
 
   return {
     txs, assets, assetDocs, snapshots, alerts, portfolio, cashTarget, accounts,
-    addTx, addTxs, deleteTx, updateTx, setTxAccount, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    addTx, addTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }

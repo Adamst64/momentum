@@ -301,19 +301,24 @@ export default function InvestingTab({ hook, userId }) {
 
       {view === 'portfolio' && txs.length > 0 && (
         <>
-        {groupMode && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Chips small options={[{ value: 'account', label: 'By account' }, { value: 'all', label: 'All' }]} value={byAccount ? 'account' : 'all'} onChange={v => setByAccountPref(v === 'account')} />
-            <span style={{ flex: 1 }} />
-            <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki }}>Accounts</button>
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {groupMode && <Chips small options={[{ value: 'account', label: 'By account' }, { value: 'all', label: 'All' }]} value={byAccount ? 'account' : 'all'} onChange={v => setByAccountPref(v === 'account')} />}
+          <span style={{ flex: 1 }} />
+          <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki, padding: '4px 0' }}>
+            {accounts.length ? 'Accounts' : '+ Set up accounts'}
+          </button>
+        </div>
         {byAccount ? groups.map(g => (
           <Card key={g.id || 'none'} style={{ padding: '10px 16px 6px' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, paddingBottom: 6 }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.name}</span>
               <span style={{ fontSize: 14, fontWeight: 700, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</span>
             </div>
+            {g.id === '' && (
+              <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki, padding: '0 0 6px', textAlign: 'left' }}>
+                Assign these to accounts →
+              </button>
+            )}
             {Math.abs(g.cash) > 0.005 && (
               <div style={{ fontSize: 12, color: g.cash < 0 ? T.red : T.muted, paddingBottom: 4 }}>Free cash {money(g.cash, hide)}</div>
             )}
@@ -523,7 +528,16 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
 
 // Add, rename and delete accounts
 function AccountsModal({ hook, onClose }) {
-  const { accounts, txs, addAccount, renameAccount, deleteAccount } = hook;
+  const { accounts, txs, addAccount, renameAccount, deleteAccount, assignTxs } = hook;
+  // Unassigned transactions grouped by stock; deposits/withdrawals/interest as "Cash"
+  const loose = {};
+  txs.filter(t => !t.account).forEach(t => { const k = t.symbol || 'Cash'; (loose[k] = loose[k] || []).push(t.id); });
+  const looseKeys = Object.keys(loose).sort((a, b) => (a === 'Cash') - (b === 'Cash') || a.localeCompare(b));
+  const [moved, setMoved] = useState(null);
+  const assign = (key, ids, acc) => run(async () => {
+    await assignTxs(ids, acc);
+    setMoved(`${key === '*' ? 'Everything' : key} → ${accounts.find(a => a.id === acc)?.name}`);
+  });
   const [names, setNames] = useState(() => Object.fromEntries(accounts.map(a => [a.id, a.name])));
   const [newName, setNewName] = useState('');
   const [confirm, setConfirm] = useState(null);
@@ -563,12 +577,54 @@ function AccountsModal({ hook, onClose }) {
           >Add</button>
         </div>
         {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
+
+        {unassigned > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <SectionTitle>Not in an account yet</SectionTitle>
+            {accounts.length === 0 ? (
+              <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>Add an account above first, then pick where each of these belongs.</div>
+            ) : (
+              <>
+                {looseKeys.map(k => (
+                  <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0' }}>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1 }}>
+                      {k}<span style={{ fontSize: 11, color: T.muted, fontWeight: 400 }}> · {loose[k].length} transaction{loose[k].length !== 1 ? 's' : ''}</span>
+                    </span>
+                    <AccountSelect accounts={accounts} onPick={acc => assign(k, loose[k], acc)} />
+                  </div>
+                ))}
+                {looseKeys.length > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0 0', borderTop: `1px solid ${T.cardBorder}`, marginTop: 4 }}>
+                    <span style={{ fontSize: 13, color: T.muted, flex: 1 }}>Move all {unassigned} to</span>
+                    <AccountSelect accounts={accounts} onPick={acc => assign('*', txs.filter(t => !t.account).map(t => t.id), acc)} />
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {moved && <div style={{ fontSize: 13, color: T.green }}>Moved: {moved}</div>}
+
         <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
-          Deleting an account keeps its transactions; they move to “No account”.
-          {unassigned > 0 && ` ${unassigned} transaction${unassigned !== 1 ? 's have' : ' has'} no account yet — assign them in Insights → All transactions by tapping the account label.`}
+          Deleting an account keeps its transactions; they move to “No account”. You can also change a single transaction's
+          account from the label under it (Insights → All transactions, or on the stock's screen).
         </div>
       </div>
     </Modal>
+  );
+}
+
+// "Choose…" dropdown that fires once per pick
+function AccountSelect({ accounts, onPick }) {
+  return (
+    <select
+      value=""
+      onChange={e => { if (e.target.value) onPick(e.target.value); }}
+      style={{ fontSize: 13, color: T.khaki, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 8, padding: '6px 8px', maxWidth: 170, colorScheme: 'dark' }}
+    >
+      <option value="">Choose account…</option>
+      {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+    </select>
   );
 }
 
