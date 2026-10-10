@@ -115,13 +115,21 @@ export default function InvestingTab({ hook, userId }) {
   }, [hasAuto, lastUpdate, status.session, update]);
 
   // Pull down from the top of the page to refresh
+  // Works from anywhere at the top, the chart included: a gesture that turns
+  // out sideways (chart scrubbing) or uses two fingers is dropped.
   const onTouchStart = e => {
-    const busy = updating || adding || trade || open || targetFor || e.target.closest?.('[data-nopull]');
-    pullStart.current = window.scrollY <= 0 && !busy ? e.touches[0].clientY : null;
+    const busy = updating || adding || trade || open || targetFor || e.touches.length > 1;
+    pullStart.current = window.scrollY <= 0 && !busy ? { x: e.touches[0].clientX, y: e.touches[0].clientY, decided: false } : null;
   };
   const onTouchMove = e => {
-    if (pullStart.current === null) return;
-    const dy = e.touches[0].clientY - pullStart.current;
+    const s = pullStart.current;
+    if (s === null) return;
+    if (e.touches.length > 1) { pullStart.current = null; setPull(0); return; }
+    const dx = e.touches[0].clientX - s.x, dy = e.touches[0].clientY - s.y;
+    if (!s.decided && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+      if (Math.abs(dx) > Math.abs(dy)) { pullStart.current = null; setPull(0); return; }
+      s.decided = true;
+    }
     setPull(dy > 0 ? Math.min(dy * 0.5, PULL_TRIGGER + 20) : 0);
   };
   const onTouchEnd = () => {
@@ -241,7 +249,7 @@ export default function InvestingTab({ hook, userId }) {
 
         {txs.length > 0 && (
           <>
-            <div style={{ marginTop: 12 }} data-nopull>
+            <div style={{ marginTop: 12 }}>
               <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} onRange={setSpan} />
             </div>
             <div style={{ marginTop: 10 }}>

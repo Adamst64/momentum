@@ -25,6 +25,9 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const downAt = useRef(null);
   const fingers = useRef(new Map()); // pointerId → clientX
   const pinching = useRef(false);
+  // One finger: 'pending' until it moves sideways (scrub) or vertically (left to
+  // the page: scroll / pull to refresh), or rests 200 ms (scrub in place)
+  const gesture = useRef(null); // { mode, x0, y0, timer }
   if (points.length < 2) {
     return (
       <div style={{ fontSize: 13, color: T.muted, textAlign: 'center', padding: '24px 8px', lineHeight: 1.5 }}>
@@ -67,10 +70,21 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     const [a, b] = [...fingers.current.values()].slice(0, 2).map(indexAt).sort((m, n) => m - n);
     if (a !== b) setRange([a, b]);
   };
+  const endGesture = () => {
+    if (gesture.current?.timer) clearTimeout(gesture.current.timer);
+    gesture.current = null;
+  };
+  const startScrub = (el, pointerId, clientX) => {
+    if (!gesture.current) return;
+    clearTimeout(gesture.current.timer);
+    gesture.current.mode = 'scrub';
+    try { el.setPointerCapture(pointerId); } catch { /* not supported */ }
+    pick(clientX);
+  };
   const onDown = e => {
     fingers.current.set(e.pointerId, e.clientX);
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch { /* not supported */ }
     if (fingers.current.size >= 2) {
+      endGesture();
       pinching.current = true;
       downAt.current = null; // a pinch is never a tap
       setHover(null);
@@ -78,14 +92,26 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
       return;
     }
     downAt.current = { x: e.clientX, y: e.clientY };
-    pick(e.clientX);
+    if (e.pointerType === 'mouse') { pick(e.clientX); return; }
+    const el = e.currentTarget, id = e.pointerId, cx = e.clientX;
+    gesture.current = { mode: 'pending', x0: e.clientX, y0: e.clientY, timer: setTimeout(() => startScrub(el, id, cx), 200) };
   };
   const onMove = e => {
     if (fingers.current.has(e.pointerId)) fingers.current.set(e.pointerId, e.clientX);
-    if (fingers.current.size >= 2) updateRange();
-    else if (!pinching.current) pick(e.clientX);
+    if (fingers.current.size >= 2) { updateRange(); return; }
+    if (pinching.current) return;
+    const g = gesture.current;
+    if (!g) { if (e.pointerType === 'mouse') pick(e.clientX); return; }
+    if (g.mode === 'pending') {
+      const dx = Math.abs(e.clientX - g.x0), dy = Math.abs(e.clientY - g.y0);
+      if (dx > 6 && dx >= dy) startScrub(e.currentTarget, e.pointerId, e.clientX);
+      else if (dy > 6) { endGesture(); downAt.current = null; } // vertical: the page scrolls / pulls
+      return;
+    }
+    if (g.mode === 'scrub') pick(e.clientX);
   };
   const onUp = e => {
+    endGesture();
     fingers.current.delete(e.pointerId);
     if (pinching.current) {
       // Lifting either finger ends the selection (like Robinhood)
@@ -133,12 +159,14 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
       <svg
         ref={ref}
         viewBox={`0 0 ${W} ${H}`}
-        style={{ width: '100%', height: H, display: 'block', touchAction: 'none' }}
+        // pan-y: vertical swipes stay with the page (scroll, pull to refresh);
+        // sideways drags and two fingers are handled here
+        style={{ width: '100%', height: H, display: 'block', touchAction: 'pan-y' }}
         onPointerMove={onMove}
         onPointerDown={onDown}
         onPointerLeave={() => { if (!fingers.current.size) setHover(null); }}
         onPointerUp={onUp}
-        onPointerCancel={e => { fingers.current.delete(e.pointerId); pinching.current = fingers.current.size > 0 && pinching.current; setRange(null); setHover(null); }}
+        onPointerCancel={e => { endGesture(); fingers.current.delete(e.pointerId); pinching.current = fingers.current.size > 0 && pinching.current; setRange(null); setHover(null); }}
         role="img"
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >
