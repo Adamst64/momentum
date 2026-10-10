@@ -25,6 +25,8 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
   const partner = t => (t.linkId ? allTxs.find(o => o.linkId === t.linkId && o.id !== t.id) : null);
   const showAccounts = accounts.length > 0 || txs.some(t => t.account);
   const describe = t => {
+    if (t.deposit && t.type === 'buy') return `Added ${money(t.quantity * t.price, hide)} to ${t.symbol}`;
+    if (t.deposit && t.type === 'sell') return `Withdrew ${money(t.quantity * t.price, hide)} from ${t.symbol}`;
     if (t.type === 'buy' && t.fromCash === false) return `Added ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'buy' || t.type === 'sell') return `${t.type === 'buy' ? 'Bought' : 'Sold'} ${qtyFmt(t.quantity)} ${t.symbol} @ ${money(t.price, hide)}`;
     if (t.type === 'dividend') return `${t.symbol} dividend`;
@@ -49,18 +51,8 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
                 if (!o) return null;
                 return ` · ${t.type === 'buy' ? `paid with ${o.symbol}` : o.type === 'buy' ? `into ${o.symbol}` : `paid for ${o.symbol}`}`;
               })()}
-              {t.type === 'buy' && !t.linkId && (onUpdate ? (
-                <>
-                  {' · '}
-                  <button
-                    onClick={() => onUpdate(t.id, { fromCash: t.fromCash === false })}
-                    style={{ fontSize: 11, color: T.khaki, padding: 0 }}
-                    aria-label={t.fromCash === false ? 'Switch to paid from free cash' : 'Switch to already owned'}
-                  >
-                    {t.fromCash === false ? 'already owned' : 'from cash'} ⇄
-                  </button>
-                </>
-              ) : ` · ${t.fromCash === false ? 'already owned' : 'from cash'}`)}
+              {t.type === 'buy' && !t.linkId && !t.deposit && t.fromCash === false && ' · already owned'}
+              {t.type === 'sell' && !t.linkId && !t.deposit && t.toCash === false && ' · money taken out'}
             </div>
             {showAccounts && (
               onSetAccount ? (
@@ -82,8 +74,8 @@ export function TxList({ txs, allTxs = txs, hide, onDelete, onUpdate, accounts =
               )
             )}
           </div>
-          <span style={{ fontSize: 13, color: t.fromCash === false ? T.muted : amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
-            {t.fromCash === false ? money(-amount(t), hide) : signedMoney(amount(t), hide)}
+          <span style={{ fontSize: 13, color: t.fromCash === false || t.toCash === false ? T.muted : amount(t) >= 0 ? T.green : T.text, fontVariantNumeric: 'tabular-nums' }}>
+            {t.fromCash === false || t.toCash === false ? money(Math.abs(amount(t)), hide) : signedMoney(amount(t), hide)}
           </span>
           <button
             onClick={() => confirm === t.id ? (onDelete(t.id), setConfirm(null)) : setConfirm(t.id)}

@@ -53,8 +53,9 @@ export function useInvesting(userId) {
   // Several transactions saved together (a buy paid from a fund = its fund sale + the buy)
   const addTxs = useCallback(async (list) => {
     const batch = writeBatch(db);
-    const now = new Date().toISOString();
-    list.forEach(tx => batch.set(ref('invTransactions', genId()), { ...tx, createdAt: now }));
+    // createdAt a millisecond apart keeps their order (fund sale before the buy it pays for)
+    const t0 = Date.now();
+    list.forEach((tx, i) => batch.set(ref('invTransactions', genId()), { ...tx, createdAt: new Date(t0 + i).toISOString() }));
     await batch.commit();
   }, [ref]);
 

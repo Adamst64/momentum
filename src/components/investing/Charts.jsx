@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
-import { SERIES, CASH_COLOR, OTHER_COLOR, gainColor, noSelect } from './ui';
+import { SERIES, OTHER_COLOR, gainColor, noSelect } from './ui';
 
 // ── Portfolio value over time (single series, touch/hover crosshair) ────────
 
@@ -271,9 +271,8 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
 export function allocationSlices(portfolio, assets, cashTarget) {
   const byFirst = [...portfolio.holdings].sort((a, b) => (a.firstDate || '').localeCompare(b.firstDate || ''));
   const colorOf = Object.fromEntries(byFirst.map((h, i) => [h.symbol, SERIES[i] || OTHER_COLOR]));
-  // Share of what's actually there: holdings plus cash on hand. Using total value
-  // breaks when cash is negative (buys recorded without a matching deposit).
-  const total = portfolio.holdings.reduce((a, h) => a + Math.max(0, h.value || 0), 0) + Math.max(0, portfolio.cash) || 1;
+  // Share of what you hold (cash isn't tracked: money sits in funds, which are holdings)
+  const total = portfolio.holdings.reduce((a, h) => a + Math.max(0, h.value || 0), 0) || 1;
 
   const slices = portfolio.holdings.map(h => ({
     key: h.symbol, label: h.symbol, value: h.value || 0, color: colorOf[h.symbol],
@@ -284,7 +283,6 @@ export function allocationSlices(portfolio, assets, cashTarget) {
   const other = slices.filter(s => s.color === OTHER_COLOR);
   const out = [...named];
   if (other.length) out.push({ key: 'other', label: `Other (${other.length})`, value: other.reduce((a, s) => a + s.value, 0), color: OTHER_COLOR, target: null });
-  if (portfolio.cash > 0.005) out.push({ key: 'cash', label: 'Cash', value: portfolio.cash, color: CASH_COLOR, target: cashTarget });
   return out.map(s => ({ ...s, pct: s.value / total }));
 }
 

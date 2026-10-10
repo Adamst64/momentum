@@ -5,8 +5,12 @@ import { toDateStr, addDays } from './dateUtils';
 // Every transaction may carry account: an invAccounts id ('' / missing = no account).
 // Paying for a buy from a fund (e.g. FDRXX) is saved as two linked transactions
 // sharing linkId: a sell of the fund, then the buy — so the math stays plain.
-//   buy / sell:         { type, date, symbol, quantity, price, fee?, fromCash?, account?, linkId? }
+// There's no "free cash" in the app anymore: money sits in funds (FDRXX, VMFXX…).
+// Adding money is a fromCash:false buy of a fund (deposit:true), withdrawing a
+// toCash:false sell of one; old deposit/withdraw/interest rows still count.
+//   buy / sell:         { type, date, symbol, quantity, price, fee?, fromCash?, toCash?, deposit?, account?, linkId? }
 //                       fromCash: false on a buy = shares already owned before using the app
+//                       toCash: false on a sell = the money left the account (withdrawn)
 //                       (or moved in from elsewhere): cash isn't touched and the cost counts
 //                       as money brought in, like a deposit of shares
 //   dividend:           { type, date, symbol, amount }       — paid into cash
@@ -84,7 +88,9 @@ export function replay(txs, { byAccount = false } = {}) {
       if (t.quantity > x.qty + 1e-9) problems.push({ tx: t, msg: `Sells more ${t.symbol} than held${byAccount && curAcct ? ' in that account' : ''} on ${t.date}` });
       const avg = x.qty > 0 ? x.cost / x.qty : 0;
       const sold = Math.min(t.quantity, x.qty);
-      addCash(t.quantity * t.price - (t.fee || 0));
+      const proceeds = t.quantity * t.price - (t.fee || 0);
+      if (t.toCash === false) netDeposits -= proceeds;
+      else addCash(proceeds);
       x.realized += sold * (t.price - avg) - (t.fee || 0);
       if (x.lot) {
         x.lot.sold += sold;
@@ -317,6 +323,7 @@ export function externalFlow(t) {
   if (t.type === 'deposit')  return t.amount;
   if (t.type === 'withdraw') return -t.amount;
   if (t.type === 'buy' && t.fromCash === false) return t.quantity * t.price + (t.fee || 0);
+  if (t.type === 'sell' && t.toCash === false) return -(t.quantity * t.price - (t.fee || 0));
   return 0;
 }
 

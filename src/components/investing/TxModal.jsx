@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr } from '../../utils/dateUtils';
-import { validateTx, money, qtyFmt, replay, accountHoldings } from '../../utils/investing';
+import { validateTx, money, qtyFmt, accountHoldings } from '../../utils/investing';
 import { genId } from '../../utils/id';
 import { Field, Chips, PrimaryButton, inputStyle } from './ui';
 import SymbolInput from './SymbolInput';
@@ -10,10 +10,9 @@ import SymbolInput from './SymbolInput';
 const TYPES = [
   { value: 'buy',      label: 'Buy' },
   { value: 'sell',     label: 'Sell' },
-  { value: 'deposit',  label: 'Add cash' },
+  { value: 'deposit',  label: 'Add money' },
   { value: 'withdraw', label: 'Withdraw' },
   { value: 'dividend', label: 'Dividend' },
-  { value: 'interest', label: 'Cash interest' },
 ];
 
 const LAST_ACCOUNT_KEY = 'momentum_last_account';
@@ -24,8 +23,11 @@ const num = v => {
   const n = parseFloat(String(v).replace(/[$,\s]/g, ''));
   return Number.isFinite(n) ? n : null;
 };
+const round6 = n => Math.round(n * 1e6) / 1e6;
 
 // Add any transaction. Past trades are fine: pick their real date.
+// There's no free cash: money sits in funds (FDRXX, VMFXX…), so every money
+// movement names a fund — or, for buys/sells, money from/to outside the app.
 export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', initialAccount, onClose }) {
   const { txs, assets, accounts, addTx, addTxs, ensureAsset, setAsset } = hook;
   // Account: the one passed in, else the last one used (if it still exists), else the first
@@ -35,19 +37,19 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     return accounts.some(x => x.id === last) ? last : accounts[0]?.id || '';
   });
   const setAccount = v => { setAccountState(v); writeLastAccount(v); setPayWith(null); };
-  const [type, setType]       = useState(initialType);
+  const [type, setType]       = useState(initialType === 'interest' ? 'dividend' : initialType);
   const [date, setDate]       = useState(toDateStr(new Date()));
   const [symbol, setSymbol]   = useState(initialSymbol);
   const [qty, setQty]         = useState('');
   const [price, setPrice]     = useState('');
   const [fee, setFee]         = useState('');
   const [amount, setAmount]   = useState('');
-  const [note, setNote]       = useState('');
-  // Buys: 'cash' (this account's free cash), 'owned' (shares you already had —
-  // cash untouched) or 'fund:SYM' (sell that fund, e.g. FDRXX, to pay).
-  // Sells: 'cash' or 'fund:SYM' (proceeds buy that fund). null = pick a default.
+  // Where money comes from / goes to: 'fund:SYM' (a fund in this account),
+  // 'owned' (buy: shares you already had), 'out' (sell/dividend: money leaves
+  // the account), 'reinvest' (dividend: buy more of the same). null = default.
   const [payWith, setPayWith] = useState(null);
-  const [allowShort, setAllowShort] = useState(false);
+  const [newFund, setNewFund] = useState('');   // Add money into a fund not held yet
+  const [newFundStatus, setNewFundStatus] = useState(null);
   // Is the symbol a real ticker? Unchecked ones (offline) need an explicit OK.
   const [symStatus, setSymStatus] = useState(null);
   const [allowUnchecked, setAllowUnchecked] = useState(false);
@@ -56,44 +58,64 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const [error, setError]     = useState(null);
 
   const isTrade = type === 'buy' || type === 'sell';
+  const isMoney = type === 'deposit' || type === 'withdraw';
   const sym = symbol.trim().toUpperCase();
   const q = num(qty), p = num(price), f = num(fee) || 0, a = num(amount);
-
-  // This account's cash and holdings right now (funds you can pay from)
-  const acctCash = useMemo(() => replay(txs, { byAccount: true }).cashBy[account] || 0, [txs, account]);
-  const acctHold = useMemo(() => accountHoldings(txs, account), [txs, account]);
-  const funds = acctHold.filter(h => h.symbol !== sym);
-  // Default for buys: cash if there is some, else a $1 fund you hold (FDRXX…), else "already owned"
-  const mmFund = funds.find(h => Math.abs((assets[h.symbol]?.price ?? 0) - 1) < 0.01);
-  const pay = payWith && (payWith === 'cash' || payWith === 'owned' || funds.some(h => `fund:${h.symbol}` === payWith))
-    ? payWith
-    : type === 'buy' ? (acctCash > 0.005 ? 'cash' : mmFund ? `fund:${mmFund.symbol}` : 'owned') : 'cash';
-  const fundSym = pay.startsWith('fund:') ? pay.slice(5) : null;
-  const fundPrice = fundSym ? assets[fundSym]?.price || 1 : null;
-  const fromCash = pay !== 'owned';
   const acct = account ? { account } : {};
 
-  let tx = null;
+  // Holdings in this account right now: the funds money can come from / go to
+  const acctHold = useMemo(() => accountHoldings(txs, account), [txs, account]);
+  const funds = acctHold.filter(h => h.symbol !== sym || isMoney);
+  const isMM = s => Math.abs((assets[s]?.price ?? 0) - 1) < 0.01; // $1 money market fund
+  const mmFund = funds.find(h => isMM(h.symbol));
+  const reinvestPrice = assets[sym]?.price || null;
+
+  const options = type === 'buy'
+    ? [...funds.map(h => `fund:${h.symbol}`), 'owned']
+    : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), 'out']
+    : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(reinvestPrice ? ['reinvest'] : []), 'out']
+    : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
+    : acctHold.map(h => `fund:${h.symbol}`);
+  const preferred = mmFund ? `fund:${mmFund.symbol}` : null;
+  const fallback = type === 'buy' ? 'owned' : type === 'sell' || type === 'dividend' ? (preferred || options[0]) : type === 'deposit' ? (preferred || (acctHold.length ? options[0] : 'new')) : options[0];
+  const pay = payWith && options.includes(payWith) ? payWith : (preferred && options.includes(preferred) ? preferred : fallback);
+  const fundSym = pay === 'new' ? newFund.trim().toUpperCase() : pay?.startsWith('fund:') ? pay.slice(5) : pay === 'reinvest' ? sym : null;
+  const fundPrice = fundSym ? assets[fundSym]?.price || 1 : null;
+
+  // What gets saved: the transaction plus, when money moves through a fund, its linked fund trade
+  let toSave = [];
+  let total = 0;
   if (isTrade && sym && q > 0 && p > 0) {
-    tx = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...(type === 'buy' && pay === 'owned' ? { fromCash: false } : {}), ...acct };
+    total = q * p + (type === 'buy' ? f : -f);
+    const main = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...acct,
+      ...(type === 'buy' && pay === 'owned' ? { fromCash: false } : {}),
+      ...(type === 'sell' && pay === 'out' ? { toCash: false } : {}) };
+    const fundTx = fundSym ? { type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym, quantity: round6(total / fundPrice), price: fundPrice, ...acct } : null;
+    toSave = fundTx ? (type === 'buy' ? [fundTx, main] : [main, fundTx]) : [main];
   }
-  if ((type === 'deposit' || type === 'withdraw') && a > 0) tx = { type, date, amount: a, ...(note.trim() ? { note: note.trim() } : {}), ...acct };
-  if (type === 'dividend' && sym && a > 0) tx = { type, date, symbol: sym, amount: a, ...acct };
-  if (type === 'interest' && a > 0) tx = { type, date, amount: a, ...acct };
+  if (type === 'deposit' && a > 0 && fundSym) {
+    total = a;
+    toSave = [{ type: 'buy', date, symbol: fundSym, quantity: round6(a / fundPrice), price: fundPrice, fromCash: false, deposit: true, ...acct }];
+  }
+  if (type === 'withdraw' && a > 0 && fundSym) {
+    total = a;
+    toSave = [{ type: 'sell', date, symbol: fundSym, quantity: round6(a / fundPrice), price: fundPrice, toCash: false, deposit: true, ...acct }];
+  }
+  if (type === 'dividend' && sym && a > 0) {
+    total = a;
+    const div = { type: 'dividend', date, symbol: sym, amount: a, ...acct };
+    toSave = pay === 'out'
+      ? [div, { type: 'withdraw', date, amount: a, note: `${sym} dividend paid out`, ...acct }]
+      : fundSym ? [div, { type: 'buy', date, symbol: fundSym, quantity: round6(a / fundPrice), price: fundPrice, ...acct }] : [];
+  }
+  const ready = toSave.length > 0;
 
-  // Paying from / into a fund: the matching fund trade is saved with it, linked
-  const tradeTotal = tx && isTrade ? q * p + (type === 'buy' ? f : -f) : 0;
-  const fundTx = tx && isTrade && fundSym ? {
-    type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym,
-    quantity: Math.round((tradeTotal / fundPrice) * 1e6) / 1e6, price: fundPrice, ...acct,
-  } : null;
-  const toSave = !tx ? [] : fundTx ? (type === 'buy' ? [fundTx, tx] : [tx, fundTx]) : [tx];
-
-  const check = tx ? validateTx(txs, toSave) : null;
+  const check = ready ? validateTx(txs, toSave) : null;
   const needsSym = isTrade || type === 'dividend';
   const symUnchecked = symStatus === 'offline' || symStatus === 'error';
   const symOk = !needsSym || symStatus === 'ok' || (symUnchecked && allowUnchecked);
-  const blocked = !tx || !symOk || check.errors.length > 0 || (check.cashShort && !allowShort);
+  const newFundOk = pay !== 'new' || type !== 'deposit' || newFundStatus === 'ok';
+  const blocked = !ready || !symOk || !newFundOk || check.errors.length > 0;
   const held = acctHold.find(h => h.symbol === sym);
   const acctName = account ? accounts.find(x => x.id === account)?.name : null;
 
@@ -103,10 +125,11 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     setError(null);
     try {
       if (type === 'buy') await ensureAsset(sym, p);
+      if (type === 'deposit' && pay === 'new') await ensureAsset(fundSym, 1);
       if (toSave.length > 1) {
         const linkId = genId();
         await addTxs(toSave.map(t => ({ ...t, linkId })));
-      } else await addTx(tx);
+      } else await addTx(toSave[0]);
       // Owned now, so it no longer belongs on the watchlist
       if (type === 'buy' && assets[sym]?.watch) await setAsset(sym, { watch: false });
       onClose();
@@ -116,10 +139,13 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     }
   };
 
+  const label = o => o === 'owned' ? 'Already owned' : o === 'out' ? (type === 'dividend' ? 'Paid out' : 'Taken out') : o === 'reinvest' ? `Reinvest in ${sym}` : o === 'new' ? 'Another fund…' : o.slice(5);
+  const flowLabel = { buy: 'Paid with', sell: 'Money goes to', dividend: 'Goes to', deposit: 'Into', withdraw: 'From' }[type];
+
   return (
     <Modal title="New Transaction" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Chips options={TYPES} value={type} onChange={t => { setType(t); setAllowShort(false); setPayWith(null); }} />
+        <Chips options={TYPES} value={type} onChange={t => { setType(t); setPayWith(null); }} />
 
         <AccountPicker hook={hook} value={account} onChange={setAccount} />
 
@@ -127,7 +153,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
           <input type="date" value={date} max={toDateStr(new Date())} onChange={e => e.target.value && setDate(e.target.value)} style={inputStyle} />
         </Field>
 
-        {(isTrade || type === 'dividend') && (
+        {needsSym && (
           <Field label="Symbol">
             <SymbolInput
               hook={hook}
@@ -175,79 +201,50 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
             <Field label="Fee (optional)">
               <input value={fee} onChange={e => setFee(e.target.value)} inputMode="decimal" placeholder="$0.00" style={inputStyle} />
             </Field>
-            <Field label={type === 'buy' ? 'Paid with' : 'Money goes to'}>
-              <Chips
-                small
-                options={[
-                  { value: 'cash', label: `Free cash${account || accounts.length ? ` (${money(acctCash)})` : ''}` },
-                  ...funds.map(h => ({ value: `fund:${h.symbol}`, label: h.symbol })),
-                  ...(type === 'buy' ? [{ value: 'owned', label: 'Already owned' }] : []),
-                ]}
-                value={pay}
-                onChange={v => { setPayWith(v); setAllowShort(false); }}
-              />
-            </Field>
             {type === 'sell' && held && (
               <button type="button" onClick={() => setQty(String(held.qty))} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.khaki }}>
-                You hold {qtyFmt(held.qty)} — sell all
+                You hold {qtyFmt(held.qty)}{acctName ? ` in ${acctName}` : ''} — sell all
               </button>
             )}
           </>
         )}
 
         {!isTrade && (
-          <Field label={type === 'dividend' || type === 'interest' ? 'Amount received' : 'Amount'}>
+          <Field label={type === 'dividend' ? 'Amount received' : 'Amount'}>
             <input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="$0.00" style={inputStyle} />
           </Field>
         )}
 
-        {type === 'interest' && (
-          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
-            For what your cash earns on its own — like the monthly dividend from Vanguard's settlement fund (VMFXX).
-            It's added to free cash and counts as return, unlike salary deposits.
-          </div>
-        )}
-
-        {(type === 'deposit' || type === 'withdraw') && (
-          <Field label="Note (optional)">
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder={type === 'deposit' ? 'e.g. Salary' : ''} style={inputStyle} />
+        {options.length > 0 && (
+          <Field label={flowLabel}>
+            <Chips small options={options.map(o => ({ value: o, label: label(o) }))} value={pay} onChange={setPayWith} />
           </Field>
         )}
-
-        {tx && type === 'buy' && !fromCash && (
-          <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
-            Free cash stays at {money(acctCash)}. The <b style={{ color: T.text }}>{money(q * p + f)}</b> cost counts as money you brought in
-            (like a deposit), so it isn't counted as a gain.
-          </div>
+        {type === 'deposit' && pay === 'new' && (
+          <Field label="Fund">
+            <SymbolInput hook={hook} value={newFund} onChange={setNewFund} onStatus={setNewFundStatus} placeholder="e.g. FDRXX, SPAXX, VMFXX" />
+          </Field>
+        )}
+        {type === 'withdraw' && options.length === 0 && (
+          <div style={{ fontSize: 13, color: T.muted }}>Nothing in {acctName || 'this account'} to withdraw from yet.</div>
         )}
 
-        {tx && fundTx && (
+        {/* What will happen, in words */}
+        {ready && (
           <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
-            {type === 'buy' ? 'Sells' : 'Buys'} <b style={{ color: T.text }}>{qtyFmt(fundTx.quantity)} {fundSym}</b> at {money(fundPrice)}
-            {' '}({money(tradeTotal)}) {type === 'buy' ? 'to pay for it' : 'with the money'}. Both are saved together; deleting one deletes both.
-          </div>
-        )}
-
-        {tx && isTrade && pay === 'cash' && (
-          <div style={{ fontSize: 13, color: T.muted }}>
-            {type === 'buy' ? 'Takes' : 'Adds'} <b style={{ color: T.text }}>{money(tradeTotal)}</b> {type === 'buy' ? 'from' : 'to'} free cash
-            {acctName ? ` in ${acctName}` : ''} ({money(acctCash)} now).
+            {type === 'buy' && pay === 'owned' && <>The <b style={{ color: T.text }}>{money(total)}</b> cost counts as money you brought in (like a deposit), so it isn't counted as a gain.</>}
+            {type === 'buy' && fundSym && <>Sells <b style={{ color: T.text }}>{qtyFmt(toSave[0].quantity)} {fundSym}</b> at {money(fundPrice)} ({money(total)}) to pay for it.</>}
+            {type === 'sell' && fundSym && <>Buys <b style={{ color: T.text }}>{qtyFmt(toSave[1].quantity)} {fundSym}</b> at {money(fundPrice)} with the {money(total)}.</>}
+            {type === 'sell' && pay === 'out' && <>The <b style={{ color: T.text }}>{money(total)}</b> leaves the account (like a withdrawal); your gain on the sale still counts.</>}
+            {type === 'deposit' && <>Adds <b style={{ color: T.text }}>{qtyFmt(toSave[0].quantity)} {fundSym}</b> at {money(fundPrice)}. Money you put in isn't counted as a gain.</>}
+            {type === 'withdraw' && <>Sells <b style={{ color: T.text }}>{qtyFmt(toSave[0].quantity)} {fundSym}</b> at {money(fundPrice)} and takes the money out.</>}
+            {type === 'dividend' && fundSym && <>Buys <b style={{ color: T.text }}>{qtyFmt(toSave[1].quantity)} {fundSym}</b> at {money(fundPrice)} with it. Counts as return.</>}
+            {type === 'dividend' && pay === 'out' && <>Counts as return, then leaves the account (e.g. paid to your bank).</>}
+            {toSave.length > 1 && ' Saved together — deleting one deletes both.'}
           </div>
         )}
 
         {check?.errors.map(msg => <div key={msg} style={{ fontSize: 13, color: T.red }}>{msg}</div>)}
-
-        {check?.cashShort && check.errors.length === 0 && (
-          <div style={{ background: '#3A1C1C', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 13, color: T.text }}>
-              Not enough {fundSym ? fundSym : 'free cash'}{acctName ? ` in ${acctName}` : ''} for this at that date. {type === 'buy' ? 'If you owned these shares before, pick “Already owned” above. Otherwise add' : 'Add'} the deposit that paid for it first, or record it anyway.
-            </div>
-            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: T.muted }}>
-              <input type="checkbox" checked={allowShort} onChange={e => setAllowShort(e.target.checked)} />
-              Record anyway (cash goes negative)
-            </label>
-          </div>
-        )}
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
 

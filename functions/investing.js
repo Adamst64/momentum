@@ -111,7 +111,13 @@ function summarize(txs, prices) {
       else cash -= total;
       qty[t.symbol] = (qty[t.symbol] || 0) + t.quantity;
     }
-    if (t.type === 'sell')     { cash += t.quantity * t.price - (t.fee || 0); qty[t.symbol] = (qty[t.symbol] || 0) - t.quantity; }
+    if (t.type === 'sell') {
+      const proceeds = t.quantity * t.price - (t.fee || 0);
+      // toCash: false = the money was withdrawn from the account
+      if (t.toCash === false) netDeposits -= proceeds;
+      else cash += proceeds;
+      qty[t.symbol] = (qty[t.symbol] || 0) - t.quantity;
+    }
     if (t.type === 'dividend' || t.type === 'interest') { cash += t.amount; }
   }
   let holdingsValue = 0;

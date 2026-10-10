@@ -3,7 +3,7 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, cashInterestYear, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, CASH_ID, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -24,10 +24,9 @@ const VIEWS = [
 const ADD_ACTIONS = [
   { type: 'buy',      label: 'Buy',           hint: 'Record a purchase, or add shares you already own' },
   { type: 'sell',     label: 'Sell',          hint: 'Record a sale' },
-  { type: 'deposit',  label: 'Add cash',      hint: 'Money in, like a paycheck' },
-  { type: 'withdraw', label: 'Withdraw cash', hint: 'Money out of the account' },
-  { type: 'dividend', label: 'Dividend',      hint: 'Paid by a stock you hold' },
-  { type: 'interest', label: 'Cash interest', hint: 'Earned by your cash itself' },
+  { type: 'deposit',  label: 'Add money',     hint: 'Money in, straight into a fund like FDRXX or VMFXX' },
+  { type: 'withdraw', label: 'Withdraw',      hint: 'Money out of a fund and the account' },
+  { type: 'dividend', label: 'Dividend',      hint: 'Paid by a stock or fund — into a fund, or reinvested' },
 ];
 
 const STALE_OPEN_MS = 15 * 60 * 1000;      // during pre-market, the session and after hours
@@ -179,7 +178,6 @@ export default function InvestingTab({ hook, userId }) {
   const headValue = span ? span.to.value : scrub ? scrub.value : portfolio.value;
   const scrubChange = scrub && first ? scrub.value - first.value : null;
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
-  const showCash = Math.abs(portfolio.cash) > 0.005;
 
   return (
     <div
@@ -277,7 +275,6 @@ export default function InvestingTab({ hook, userId }) {
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, fontSize: 12, color: T.muted }}>
               <span>Invested <b style={{ color: T.text, fontWeight: 600 }}>{money(portfolio.holdingsValue, hide)}</b></span>
-              {showCash && <span>Cash <b style={{ color: portfolio.cash < 0 ? T.red : T.text, fontWeight: 600 }}>{money(portfolio.cash, hide)}</b></span>}
               <span>All-time <b style={{ color: gainColor(portfolio.totalGain), fontWeight: 600 }}>{signedMoney(portfolio.totalGain, hide)}</b></span>
             </div>
           </>
@@ -294,8 +291,8 @@ export default function InvestingTab({ hook, userId }) {
 
       {txs.length === 0 && view !== 'watchlist' && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
-          Tap <b style={{ color: T.text }}>+</b> to get started. Already own some stocks? Choose <b style={{ color: T.text }}>Buy</b> and pick <b style={{ color: T.text }}>Already owned</b> — free cash isn't touched.
-          For new money (like a paycheck) use <b style={{ color: T.text }}>Add cash</b>, then <b style={{ color: T.text }}>Buy</b> from free cash. Past trades are fine — just pick their real date.
+          Tap <b style={{ color: T.text }}>+</b> to get started. For what you already own, choose <b style={{ color: T.text }}>Buy</b> → <b style={{ color: T.text }}>Already owned</b> — that includes
+          money market funds like FDRXX. New money goes in with <b style={{ color: T.text }}>Add money</b> (into a fund), and buys are paid from that fund. Past trades are fine — just pick their real date.
         </div>
       )}
 
@@ -319,13 +316,10 @@ export default function InvestingTab({ hook, userId }) {
                 Assign these to accounts →
               </button>
             )}
-            {Math.abs(g.cash) > 0.005 && (
-              <div style={{ fontSize: 12, color: g.cash < 0 ? T.red : T.muted, paddingBottom: 4 }}>Free cash {money(g.cash, hide)}</div>
-            )}
             {g.positions.map(pos => (
               <HoldingRow key={pos.key} h={pos} first={false} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />
             ))}
-            {g.positions.length === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px' }}>Only cash in this account.</div>}
+            {g.positions.length === 0 && <div style={{ fontSize: 12, color: T.muted, padding: '6px 0 8px' }}>Nothing held here right now.</div>}
           </Card>
         )) : (
           <Card style={{ padding: '6px 16px' }}>
@@ -408,18 +402,12 @@ export default function InvestingTab({ hook, userId }) {
           <Card>
             <SectionTitle>Totals</SectionTitle>
             <TotalRow label="Money added (net)" value={money(portfolio.netDeposits, hide)} />
-            <TotalRow label="Free cash" value={money(portfolio.cash, hide)} color={portfolio.cash < -0.005 ? T.red : T.text} />
+            {Math.abs(portfolio.cash) > 0.005 && (
+              <TotalRow label="Cash from older entries" value={money(portfolio.cash, hide)} color={portfolio.cash < -0.005 ? T.red : T.text} />
+            )}
             <TotalRow label="Realized gains (sells)" value={signedMoney(portfolio.realized, hide)} color={gainColor(portfolio.realized)} />
             <TotalRow label="Dividends received" value={money(portfolio.dividends, hide)} />
-            <TotalRow label="Interest on cash" value={money(portfolio.interest, hide)} />
-            {(() => {
-              const y = cashInterestYear(txs, portfolio.cash);
-              return y.total > 0 && (
-                <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
-                  {money(y.total, hide)} in the last 12 months{y.approxYield !== null ? ` · roughly ${(y.approxYield * 100).toFixed(1)}% a year on today's cash` : ''}
-                </div>
-              );
-            })()}
+            {portfolio.interest > 0 && <TotalRow label="Interest (older entries)" value={money(portfolio.interest, hide)} />}
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
 
