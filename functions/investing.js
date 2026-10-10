@@ -19,7 +19,13 @@ async function finnhub(path, key) {
 // Finnhub first; anything it doesn't price (mutual funds like FXAIX, many
 // non-US listings) falls back to Yahoo's daily chart data.
 async function quote(symbol, key) {
-  const q = await finnhub(`quote?symbol=${encodeURIComponent(symbol)}`, key);
+  let q = null;
+  try { q = await finnhub(`quote?symbol=${encodeURIComponent(symbol)}`, key); }
+  catch (e) {
+    // The free plan answers 403 for symbols it doesn't cover (mutual funds);
+    // only the rate limit should stop us — everything else tries Yahoo
+    if (e instanceof HttpsError) throw e;
+  }
   if (q && q.c > 0) return { price: q.c, prevClose: q.pc || null };
   try { return await yahooQuote(symbol); }
   catch (e) { console.warn(`Yahoo quote for ${symbol} failed:`, e.message); return null; }
@@ -641,12 +647,12 @@ async function searchSymbols(db, request) {
   const seen = new Set();
   const merged = [...fromFinnhub, ...yh].filter(r => !seen.has(r.symbol) && seen.add(r.symbol));
 
-  // A listed match is real only if it can be priced; otherwise check the typed ticker directly
+  // Listed by either search → real. Otherwise a live price settles it.
   let exact = merged.some(r => r.symbol === upper);
   let found = null;
-  if (/^[A-Z][A-Z0-9.-]{0,6}$/.test(upper) && (!exact || !fromFinnhub.some(r => r.symbol === upper))) {
+  if (!exact && /^[A-Z][A-Z0-9.-]{0,6}$/.test(upper)) {
     found = await quote(upper, key).catch(() => null);
-    exact = !!found || (exact && fromFinnhub.some(r => r.symbol === upper));
+    exact = !!found;
   }
   if (found && !merged.some(r => r.symbol === upper)) merged.unshift({ symbol: upper, name: found.name || '' });
 

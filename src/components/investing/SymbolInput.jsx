@@ -75,7 +75,7 @@ export default function SymbolInput({ hook, value, onChange, onPick, onStatus, o
     : known.has(q) ? 'ok'
     : !current ? 'checking'
     : current.failed ? current.failed
-    : current.exact ? 'ok' : 'invalid';
+    : current.exact || current.results?.some(r => r.symbol === q) ? 'ok' : 'invalid'; // a suggested ticker is real
 
   useEffect(() => { onStatus?.(status); }, [status, onStatus]);
 
