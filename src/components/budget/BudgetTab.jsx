@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown } from '../../utils/budget';
+import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary } from '../../utils/budget';
 import { Card, SectionTitle } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
@@ -71,7 +71,9 @@ export default function BudgetTab({ hook }) {
   } = hook;
   const [receiptFile, setReceiptFile] = useState(null);
   const [openGroup, setOpenGroup] = useState(null);
-  const fileRef = useRef(null);
+  const [scanMenu, setScanMenu] = useState(false);
+  const cameraRef = useRef(null);
+  const libraryRef = useRef(null);
   const [month, setMonth]           = useState(todayYM);
   const [accountFilter, setAccountFilter] = useState(null);
   const [catFilter, setCatFilter]   = useState(null);
@@ -87,6 +89,9 @@ export default function BudgetTab({ hook }) {
     && (!accountFilter || t.accountId === accountFilter || t.toAccountId === accountFilter)
   ), [txs, month, accountFilter]);
   const summary = useMemo(() => monthSummary(monthTxs, categories), [monthTxs, categories]);
+  const perAccount = useMemo(
+    () => accountMonthSummary(accounts, txs.filter(t => t.date.startsWith(month))),
+    [accounts, txs, month]);
   const receipts = useMemo(() => groceryBreakdown(monthTxs), [monthTxs]);
   const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
 
@@ -189,14 +194,19 @@ export default function BudgetTab({ hook }) {
           + Add transaction
         </button>
         <button
-          onClick={() => fileRef.current?.click()}
+          onClick={() => setScanMenu(v => !v)}
           aria-label="Scan a receipt"
-          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${scanMenu ? T.olive : T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
         >
           📷
         </button>
+        {/* Two inputs: one opens the camera, the other the photo library */}
         <input
-          ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+          ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
+        />
+        <input
+          ref={libraryRef} type="file" accept="image/*" style={{ display: 'none' }}
           onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
         />
         <button
@@ -206,6 +216,19 @@ export default function BudgetTab({ hook }) {
           Categories
         </button>
       </div>
+
+      {scanMenu && (
+        <div style={{ display: 'flex', gap: 8, marginTop: -6 }}>
+          <button
+            onClick={() => { setScanMenu(false); cameraRef.current?.click(); }}
+            style={{ flex: 1, padding: 12, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 14, fontWeight: 600 }}
+          >📷 Take a photo</button>
+          <button
+            onClick={() => { setScanMenu(false); libraryRef.current?.click(); }}
+            style={{ flex: 1, padding: 12, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 14, fontWeight: 600 }}
+          >🖼️ Choose from photos</button>
+        </div>
+      )}
 
       {/* Month */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -227,6 +250,38 @@ export default function BudgetTab({ hook }) {
         <Stat label="Net" value={(summary.net > 0 ? '+' : '') + money(summary.net)}
           color={summary.net < 0 ? T.red : summary.net > 0 ? T.green : T.text} />
       </Card>
+
+      {/* Each account this month (all-accounts view only) */}
+      {!accountFilter && accounts.length > 1 && (
+        <Card>
+          <SectionTitle>By account</SectionTitle>
+          {perAccount.map(({ account: a, spent, income }) => (
+            <button
+              key={a.id}
+              onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: spent ? T.text : T.muted }}>{spent ? '−' + money(spent) : money(0)}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
+                <span style={{ flex: 1 }}>{typeLabel(a.type)} · balance {money(balances[a.id] || 0)}</span>
+                {income > 0 && <span style={{ color: T.green }}>+{money(income)} in</span>}
+              </div>
+              {summary.spent > 0 && spent > 0 && (
+                <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
+                  <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
+                </div>
+              )}
+            </button>
+          ))}
+          <div style={{ display: 'flex', fontSize: 13, fontWeight: 700, color: T.text, paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>
+            <span style={{ flex: 1 }}>All accounts</span>
+            <span>−{money(summary.spent)}{summary.income ? <span style={{ color: T.green, fontWeight: 600 }}> · +{money(summary.income)}</span> : null}</span>
+          </div>
+        </Card>
+      )}
 
       {/* Where it went */}
       {summary.categories.length > 0 && (

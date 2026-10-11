@@ -103,6 +103,18 @@ export function monthSummary(txs, categories) {
   return { spent, income, net: income - spent, categories: byCategory };
 }
 
+// Spent and income per account for one month's transactions, in account order
+export function accountMonthSummary(accounts, txs) {
+  const by = Object.fromEntries(accounts.map(a => [a.id, { spent: 0, income: 0 }]));
+  for (const t of txs) {
+    const row = by[t.accountId];
+    if (!row) continue;
+    if (t.type === 'expense') row.spent += t.amount;
+    if (t.type === 'income' && t.category !== BALANCE_CATEGORY.id) row.income += t.amount;
+  }
+  return accounts.map(a => ({ account: a, ...by[a.id] }));
+}
+
 export function shiftMonth(ym, n) {
   const [y, m] = ym.split('-').map(Number);
   const d = new Date(y, m - 1 + n, 1);
