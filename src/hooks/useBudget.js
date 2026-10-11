@@ -95,16 +95,30 @@ export function useBudget(userId) {
     await setDoc(ref('budgetCategories', id), { label: label.trim(), emoji, color, hidden: false }, { merge: true });
   }, [ref]);
 
-  // Built-ins can only be hidden. A custom one in use is hidden too, so its
-  // transactions keep their name and emoji; an unused one is deleted outright.
-  const removeCategory = useCallback(async (id) => {
+  // moveTo: another category id — its entries (and repeating incomes) move there first,
+  // then the category goes away for good (built-ins can only be hidden).
+  // No moveTo: an unused custom category is deleted; a used one (or a built-in) is
+  // hidden, so its entries keep their name and emoji.
+  const removeCategory = useCallback(async (id, moveTo = null) => {
     const cat = categories.find(c => c.id === id);
-    if (cat?.builtIn || txDocs.some(t => t.category === id)) {
-      await setDoc(ref('budgetCategories', id), { hidden: true }, { merge: true });
-    } else {
-      await deleteDoc(ref('budgetCategories', id));
+    const used = txDocs.filter(t => t.category === id);
+    // Firestore takes up to 500 writes per batch: move entries 400 at a time
+    if (moveTo) {
+      for (let i = 0; i < used.length; i += 400) {
+        const b = writeBatch(db);
+        used.slice(i, i + 400).forEach(t => b.update(ref('budgetTxs', t.id), { category: moveTo }));
+        await b.commit();
+      }
     }
-  }, [ref, categories, txDocs]);
+    const batch = writeBatch(db);
+    if (moveTo) {
+      accountDocs.filter(a => (a.recurring || []).some(r => r.category === id)).forEach(a =>
+        batch.update(ref('budgetAccounts', a.id), { recurring: a.recurring.map(r => (r.category === id ? { ...r, category: moveTo } : r)) }));
+    }
+    if (cat?.builtIn || (!moveTo && used.length)) batch.set(ref('budgetCategories', id), { hidden: true }, { merge: true });
+    else batch.delete(ref('budgetCategories', id));
+    await batch.commit();
+  }, [ref, categories, txDocs, accountDocs]);
 
   // Removes the account and every transaction that touches it
   const deleteAccount = useCallback(async (id) => {

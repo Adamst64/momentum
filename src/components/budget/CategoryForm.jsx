@@ -2,13 +2,15 @@ import React, { Suspense, lazy, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { CATEGORY_COLORS } from '../../utils/budget';
-import { inputStyle, Field, PrimaryButton, ConfirmDialog } from '../investing/ui';
+import { inputStyle, Field, PrimaryButton } from '../investing/ui';
+import DeleteCategoryDialog from './DeleteCategoryDialog';
 
 // The full emoji set is large, so it only loads once someone opens the picker
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
 
 // Add or edit a category. `initial` is an existing category, or null for a new one of `kind`.
-export default function CategoryForm({ initial, kind, onSave, onRemove, onClose }) {
+// onRemove(moveTo | null); categories and txs let the delete step offer where entries go
+export default function CategoryForm({ initial, kind, categories = [], txs = [], onSave, onRemove, onClose }) {
   const [label, setLabel]   = useState(initial?.label || '');
   const [emoji, setEmoji]   = useState(initial?.emoji || '🏷️');
   const [color, setColor]   = useState(initial?.color || CATEGORY_COLORS[0]);
@@ -106,11 +108,12 @@ export default function CategoryForm({ initial, kind, onSave, onRemove, onClose 
       </div>
 
       {confirmRemove && (
-        <ConfirmDialog
-          title={`Delete ${initial.label}?`}
-          message="It won't be offered for new transactions. Ones already logged keep it."
-          onConfirm={async () => { await onRemove(); onClose(); }}
-          onClose={() => setConfirmRemove(false)}
+        <DeleteCategoryDialog
+          category={initial}
+          categories={categories}
+          txs={txs}
+          onDelete={onRemove}
+          onClose={done => { setConfirmRemove(false); if (done) onClose(); }}
         />
       )}
     </Modal>

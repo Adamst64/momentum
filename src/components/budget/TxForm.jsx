@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLongPress } from '../../hooks/useLongPress';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
@@ -13,27 +14,31 @@ const TYPES = [
   { value: 'transfer', label: 'Transfer' },
 ];
 
-function CategoryGrid({ options, value, onChange, onNew }) {
+// One category button; press and hold (or right-click) to edit or delete it
+function CategoryTile({ c, on, onChange, onHold }) {
+  const ref = useLongPress(() => onHold?.(c));
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={() => onChange(c.id)}
+      onContextMenu={e => { if (onHold) { e.preventDefault(); onHold(c); } }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10,
+        background: on ? c.color + '2E' : T.bg, border: `1px solid ${on ? c.color : T.cardBorder}`,
+        color: on ? T.text : T.muted, fontSize: 12.5, fontWeight: on ? 600 : 400, textAlign: 'left', minWidth: 0,
+      }}
+    >
+      <span aria-hidden="true">{c.emoji}</span>
+      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
+    </button>
+  );
+}
+
+function CategoryGrid({ options, value, onChange, onNew, onHold }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
-      {options.map(c => {
-        const on = c.id === value;
-        return (
-          <button
-            key={c.id}
-            type="button"
-            onClick={() => onChange(c.id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 9px', borderRadius: 10,
-              background: on ? c.color + '2E' : T.bg, border: `1px solid ${on ? c.color : T.cardBorder}`,
-              color: on ? T.text : T.muted, fontSize: 12.5, fontWeight: on ? 600 : 400, textAlign: 'left', minWidth: 0,
-            }}
-          >
-            <span aria-hidden="true">{c.emoji}</span>
-            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
-          </button>
-        );
-      })}
+      {options.map(c => <CategoryTile key={c.id} c={c} on={c.id === value} onChange={onChange} onHold={onHold} />)}
       <button
         type="button"
         onClick={onNew}
@@ -49,7 +54,7 @@ function CategoryGrid({ options, value, onChange, onNew }) {
 }
 
 // Add or edit one transaction. `initial` is an existing transaction, or null for a new one.
-export default function TxForm({ initial, preset, accounts, categories, defaultAccountId, onSave, onAddCategory, onDelete, onClose }) {
+export default function TxForm({ initial, preset, accounts, categories, defaultAccountId, onSave, onAddCategory, onUpdateCategory, onRemoveCategory, allTxs = [], onDelete, onClose }) {
   const start = initial || preset; // preset: a new transaction with some fields filled in
   const firstAccount = start?.accountId || defaultAccountId || accounts[0]?.id || '';
   const [type, setType]           = useState(start?.type || 'expense');
@@ -64,6 +69,7 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
   const [error, setError]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newCategory, setNewCategory] = useState(false);
+  const [editCat, setEditCat] = useState(null); // category held down in the grid
   const [rows, setRows] = useState(() => itemsToRows(initial?.items)); // scanned receipt lines
   const [showItems, setShowItems] = useState(false);
 
@@ -117,7 +123,9 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
 
         {type !== 'transfer' && (
           <Field label="Category">
-            <CategoryGrid options={cats} value={category} onChange={setCategory} onNew={() => setNewCategory(true)} />
+            <CategoryGrid options={cats} value={category} onChange={setCategory} onNew={() => setNewCategory(true)}
+              onHold={onUpdateCategory && (c => !c.fixed && setEditCat(c))} />
+            {onUpdateCategory && <span style={{ fontSize: 11, color: T.muted }}>Press and hold a category to edit or delete it.</span>}
           </Field>
         )}
 
@@ -176,6 +184,21 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
           kind={kind}
           onSave={async data => setCategory(await onAddCategory(data))}
           onClose={() => setNewCategory(false)}
+        />
+      )}
+
+      {editCat && (
+        <CategoryForm
+          initial={editCat}
+          kind={kind}
+          categories={categories}
+          txs={allTxs}
+          onSave={data => onUpdateCategory(editCat.id, data)}
+          onRemove={async moveTo => {
+            await onRemoveCategory(editCat.id, moveTo);
+            if (category === editCat.id) setCategory(moveTo);
+          }}
+          onClose={() => setEditCat(null)}
         />
       )}
 

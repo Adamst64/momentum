@@ -462,6 +462,9 @@ export default function BudgetTab({ hook, workEnabled }) {
             defaultAccountId={accountFilter}
             onSave={data => isNew ? addTx(data) : updateTx(editingTx.id, data)}
             onAddCategory={addCategory}
+            onUpdateCategory={updateCategory}
+            onRemoveCategory={removeCategory}
+            allTxs={txs}
             onDelete={isNew ? null : () => deleteTx(editingTx.id)}
             onClose={() => setEditingTx(null)}
           />
@@ -496,6 +499,7 @@ export default function BudgetTab({ hook, workEnabled }) {
       {showCategories && (
         <CategoriesSheet
           categories={categories}
+          txs={txs}
           onAdd={addCategory}
           onUpdate={updateCategory}
           onRemove={removeCategory}

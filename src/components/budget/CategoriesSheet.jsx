@@ -10,7 +10,7 @@ const KINDS = [
 ];
 
 // Every category, to rename, re-emoji, recolor, delete or add to
-export default function CategoriesSheet({ categories, onAdd, onUpdate, onRemove, onClose }) {
+export default function CategoriesSheet({ categories, txs, onAdd, onUpdate, onRemove, onClose }) {
   const [kind, setKind]       = useState('expense');
   const [editing, setEditing] = useState(null); // null | 'new' | category
 
@@ -55,8 +55,10 @@ export default function CategoriesSheet({ categories, onAdd, onUpdate, onRemove,
         <CategoryForm
           initial={editing === 'new' ? null : editing}
           kind={kind}
+          categories={categories}
+          txs={txs}
           onSave={data => editing === 'new' ? onAdd(data) : onUpdate(editing.id, data)}
-          onRemove={editing === 'new' ? null : () => onRemove(editing.id)}
+          onRemove={editing === 'new' ? null : moveTo => onRemove(editing.id, moveTo)}
           onClose={() => setEditing(null)}
         />
       )}
