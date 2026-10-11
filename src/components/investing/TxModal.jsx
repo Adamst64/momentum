@@ -39,7 +39,8 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
   const [account, setAccountState] = useState(editing ? init.account ?? '' : null);
   // Picking an account (or switching type) starts with its cash fund chosen, when it has one
   const coreOf = id => (id ? accounts.find(x => x.id === id)?.coreFund || null : null);
-  const corePay = id => (coreOf(id) ? `fund:${coreOf(id)}` : null);
+  // Dividends aren't pre-picked: reinvested or kept as cash is chosen each time
+  const corePay = (id, t) => (coreOf(id) && t !== 'dividend' ? `fund:${coreOf(id)}` : null);
   const setAccount = v => { setAccountState(v); setPayWith(corePay(v, type)); };
   const [type, setType]       = useState(editing ? init.type : initialType === 'interest' ? 'dividend' : initialType);
   const [date, setDate]       = useState(editing ? init.date : toDateStr(new Date()));
@@ -87,7 +88,8 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
   const options = type === 'buy'
     ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'owned']
     : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'out']
-    : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
+    // Reinvest first, then the cash fund, then other funds, then paid out
+    : type === 'dividend' ? [...(sym ? ['reinvest'] : []), ...funds.map(h => `fund:${h.symbol}`).sort((x, y) => (y === `fund:${coreOf(account)}`) - (x === `fund:${coreOf(account)}`)), 'out']
     : type === 'deposit' ? [...new Set([...(coreOf(account) ? [`fund:${coreOf(account)}`] : []), ...acctHold.map(h => `fund:${h.symbol}`)]), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);
   // Editing: keep the fund it used selectable even if nothing else holds it now
