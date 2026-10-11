@@ -1,11 +1,12 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle } from '../../utils/budget';
+import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown } from '../../utils/budget';
 import { Card, SectionTitle } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
+import ReceiptModal from './ReceiptModal';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -66,8 +67,11 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
 export default function BudgetTab({ hook }) {
   const {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
-    addCategory, updateCategory, removeCategory,
+    addCategory, updateCategory, removeCategory, scanReceipt,
   } = hook;
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [openGroup, setOpenGroup] = useState(null);
+  const fileRef = useRef(null);
   const [month, setMonth]           = useState(todayYM);
   const [accountFilter, setAccountFilter] = useState(null);
   const [catFilter, setCatFilter]   = useState(null);
@@ -83,6 +87,7 @@ export default function BudgetTab({ hook }) {
     && (!accountFilter || t.accountId === accountFilter || t.toAccountId === accountFilter)
   ), [txs, month, accountFilter]);
   const summary = useMemo(() => monthSummary(monthTxs, categories), [monthTxs, categories]);
+  const receipts = useMemo(() => groceryBreakdown(monthTxs), [monthTxs]);
   const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
 
   const groups = [];
@@ -184,6 +189,17 @@ export default function BudgetTab({ hook }) {
           + Add transaction
         </button>
         <button
+          onClick={() => fileRef.current?.click()}
+          aria-label="Scan a receipt"
+          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+        >
+          📷
+        </button>
+        <input
+          ref={fileRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
+        />
+        <button
           onClick={() => setShowCategories(true)}
           style={{ padding: '14px 16px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
         >
@@ -249,6 +265,45 @@ export default function BudgetTab({ hook }) {
         </Card>
       )}
 
+      {/* Scanned receipts, by food group */}
+      {receipts.groups.length > 0 && (
+        <Card>
+          <SectionTitle right={<span style={{ fontSize: 12, color: T.muted }}>{receipts.receipts} receipt{receipts.receipts === 1 ? '' : 's'}</span>}>
+            Groceries by type
+          </SectionTitle>
+          <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 12, gap: 2 }}>
+            {receipts.groups.filter(g => g.total > 0).map(g => <div key={g.id} style={{ flex: g.total, background: g.color }} />)}
+          </div>
+          {receipts.groups.map(g => {
+            const on = openGroup === g.id;
+            return (
+              <div key={g.id}>
+                <button
+                  onClick={() => setOpenGroup(on ? null : g.id)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', width: '100%', textAlign: 'left' }}
+                >
+                  <span style={{ width: 22, textAlign: 'center' }} aria-hidden="true">{g.emoji}</span>
+                  <span style={{ flex: 1, fontSize: 14, color: T.text, fontWeight: on ? 700 : 400 }}>{g.label}</span>
+                  <span style={{ fontSize: 12, color: T.muted }}>{receipts.total ? Math.round((g.total / receipts.total) * 100) : 0}%</span>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text, minWidth: 80, textAlign: 'right' }}>{money(g.total)}</span>
+                </button>
+                {on && (
+                  <div style={{ padding: '0 0 8px 32px' }}>
+                    {g.items.map((i, k) => (
+                      <div key={k} style={{ display: 'flex', gap: 8, fontSize: 13, padding: '3px 0' }}>
+                        <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
+                        <span style={{ color: T.muted, fontSize: 12 }}>{dayLabel(i.date).replace(/^\w+, /, '')}</span>
+                        <span style={{ color: T.text, minWidth: 64, textAlign: 'right' }}>{money(i.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </Card>
+      )}
+
       {/* Transactions */}
       {monthTxs.length === 0 ? (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
@@ -285,6 +340,18 @@ export default function BudgetTab({ hook }) {
           />
         );
       })()}
+
+      {receiptFile && (
+        <ReceiptModal
+          file={receiptFile}
+          accounts={accounts}
+          categories={categories}
+          defaultAccountId={accountFilter}
+          scanReceipt={scanReceipt}
+          onSave={addTx}
+          onClose={() => setReceiptFile(null)}
+        />
+      )}
 
       {showCategories && (
         <CategoriesSheet

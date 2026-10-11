@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
 import { accountBalances, mergeCategories } from '../utils/budget';
@@ -7,7 +9,8 @@ import { accountBalances, mergeCategories } from '../utils/budget';
 // users/{uid}/budgetAccounts/{id}   — { name, type: 'cash'|'debit'|'credit'|'savings', order }
 // users/{uid}/budgetCategories/{id} — edits to a built-in category, or a custom one (see mergeCategories)
 // users/{uid}/budgetTxs/{id}      — { type: 'expense'|'income'|'transfer', amount (cents), date: 'YYYY-MM-DD',
-//                                    accountId, toAccountId (transfers), category, note, createdAt }
+//                                    accountId, toAccountId (transfers), category, note, createdAt,
+//                                    items?: [{ name, amount (cents), group }] from a scanned receipt }
 export function useBudget(userId) {
   const [accountDocs, setAccountDocs] = useState([]);
   const [txDocs, setTxDocs]           = useState([]);
@@ -82,6 +85,7 @@ export function useBudget(userId) {
     toAccountId: t.type === 'transfer' ? t.toAccountId : null,
     category: t.type === 'transfer' ? null : t.category,
     note: (t.note || '').trim(),
+    ...(t.items ? { items: t.type === 'expense' ? t.items : [] } : {}),
   });
 
   const addTx = useCallback(async (t) => {
@@ -96,7 +100,14 @@ export function useBudget(userId) {
     await deleteDoc(ref('budgetTxs', id));
   }, [ref]);
 
+  // Photo of a receipt (base64, no data: prefix) → { store, date, total, tax, items: [{ name, price, group }] } in dollars
+  const scanReceipt = useCallback(async (image, mediaType) => {
+    const fn = httpsCallable(getFunctions(getApp()), 'scanReceipt', { timeout: 180000 });
+    return (await fn({ image, mediaType })).data;
+  }, []);
+
   return {
+    scanReceipt,
     accounts, txs, balances, categories,
     addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
     addCategory, updateCategory, removeCategory,

@@ -113,3 +113,50 @@ export const monthTitle = ym => {
   const [y, m] = ym.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 };
+
+// Food groups for scanned receipt items. Keep ids in sync with GROUPS in functions/receipts.js
+export const GROCERY_GROUPS = [
+  { id: 'fruits',     label: 'Fruits',              emoji: '🍎', color: '#FF6B6B' },
+  { id: 'vegetables', label: 'Vegetables',          emoji: '🥦', color: '#4FCB66' },
+  { id: 'meat',       label: 'Meat, fish & protein', emoji: '🥩', color: '#d55181' },
+  { id: 'dairy',      label: 'Dairy & eggs',        emoji: '🧀', color: '#F2D16B' },
+  { id: 'bakery',     label: 'Bread & bakery',      emoji: '🥖', color: '#D9A35F' },
+  { id: 'pantry',     label: 'Pantry',              emoji: '🥫', color: '#B98A5E' },
+  { id: 'snacks',     label: 'Snacks & sweets',     emoji: '🍫', color: '#B79CF0' },
+  { id: 'drinks',     label: 'Drinks',              emoji: '🥤', color: '#3987e5' },
+  { id: 'frozen',     label: 'Frozen',              emoji: '🧊', color: '#5BA4E6' },
+  { id: 'prepared',   label: 'Deli & ready meals',  emoji: '🍱', color: '#E5A44B' },
+  { id: 'household',  label: 'Household',           emoji: '🧻', color: '#9085e9' },
+  { id: 'personal',   label: 'Personal care',       emoji: '🧴', color: '#5EC4A8' },
+  { id: 'other',      label: 'Other',               emoji: '📦', color: '#8E8E93' },
+];
+export const TAX_GROUP = { id: 'tax', label: 'Tax & fees', emoji: '🧾', color: '#5A5A5E' };
+export const lookupGroup = id => GROCERY_GROUPS.find(g => g.id === id) || (id === 'tax' ? TAX_GROUP : GROCERY_GROUPS[GROCERY_GROUPS.length - 1]);
+
+// Spending by food group across expenses that carry receipt items
+// ({ items: [{ name, amount (cents), group }] }). Whatever the items don't cover
+// (tax, bag fees, rounding) counts as "Tax & fees".
+// → { total, receipts, groups: [{ ...group, total, items: [{ name, amount, date }] }] } biggest first
+export function groceryBreakdown(txs) {
+  const by = {};
+  let total = 0, receipts = 0;
+  const add = (gid, item) => {
+    const g = by[gid] || (by[gid] = { ...lookupGroup(gid), total: 0, items: [] });
+    g.total += item.amount;
+    g.items.push(item);
+  };
+  for (const t of txs) {
+    if (t.type !== 'expense' || !t.items?.length) continue;
+    receipts++;
+    total += t.amount;
+    let covered = 0;
+    for (const i of t.items) {
+      add(i.group, { name: i.name, amount: i.amount, date: t.date });
+      covered += i.amount;
+    }
+    if (t.amount - covered) add('tax', { name: t.note || 'Receipt', amount: t.amount - covered, date: t.date });
+  }
+  const groups = Object.values(by).filter(g => g.total).sort((a, b) => b.total - a.total);
+  groups.forEach(g => g.items.sort((a, b) => b.amount - a.amount));
+  return { total, receipts, groups };
+}

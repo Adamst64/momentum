@@ -4,6 +4,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const investing = require('./investing');
+const receipts = require('./receipts');
 
 initializeApp();
 
@@ -40,6 +41,10 @@ exports.refreshPrices = onCall(request => investing.refreshPrices(getFirestore()
 exports.stockInfo     = onCall(request => investing.stockInfo(getFirestore(), request));
 exports.searchSymbols = onCall(request => investing.searchSymbols(getFirestore(), request));
 exports.priceHistory  = onCall(request => investing.priceHistory(getFirestore(), request));
+
+// ── Budget: read a receipt photo into categorized items ─────────────────────
+
+exports.scanReceipt = onCall({ timeoutSeconds: 180, memory: '512MiB' }, request => receipts.scanReceipt(getFirestore(), request));
 
 // ── Birthday push notifications ──────────────────────────────────────────────
 

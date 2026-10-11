@@ -5,6 +5,7 @@ import { todayStr } from '../../utils/dateUtils';
 import { parseAmount, centsToInput } from '../../utils/budget';
 import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog } from '../investing/ui';
 import CategoryForm from './CategoryForm';
+import ReceiptItems, { itemsToRows, rowsToItems } from './ReceiptItems';
 
 const TYPES = [
   { value: 'expense',  label: 'Expense' },
@@ -63,6 +64,8 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
   const [error, setError]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newCategory, setNewCategory] = useState(false);
+  const [rows, setRows] = useState(() => itemsToRows(initial?.items)); // scanned receipt lines
+  const [showItems, setShowItems] = useState(false);
 
   const cents = parseAmount(amount);
   // Deleted categories aren't offered, unless this transaction already uses one
@@ -83,7 +86,7 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
     setSaving(true);
     setError(null);
     try {
-      await onSave({ type, amount: cents, category, accountId, toAccountId, date, note });
+      await onSave({ type, amount: cents, category, accountId, toAccountId, date, note, ...(initial?.items ? { items: rowsToItems(rows) } : {}) });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -140,6 +143,15 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
             style={inputStyle}
           />
         </Field>
+
+        {initial?.items?.length > 0 && type === 'expense' && (
+          <div>
+            <button onClick={() => setShowItems(v => !v)} style={{ fontSize: 13, fontWeight: 600, color: T.khaki }}>
+              🧾 Receipt items ({rows.length}) {showItems ? '▴' : '▾'}
+            </button>
+            {showItems && <div style={{ marginTop: 10 }}><ReceiptItems rows={rows} onChange={setRows} /></div>}
+          </div>
+        )}
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
 
