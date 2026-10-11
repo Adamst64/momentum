@@ -9,6 +9,7 @@ const RANGES = [
   { value: '1mo', label: '1M' },
   { value: '3mo', label: '3M' },
   { value: '6mo', label: '6M' },
+  { value: 'ytd', label: 'YTD' },
   { value: '1y',  label: '1Y' },
   { value: '5y',  label: '5Y' },
   { value: '10y', label: '10Y' },
@@ -37,8 +38,16 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
     let live = true;
     setPoints(null);
     setError(null);
-    priceHistory(symbol, range)
-      .then(p => live && setPoints(p))
+    // YTD = the 1Y daily history from the last close of last year on (so the change is vs Dec 31)
+    const ytd = range === 'ytd';
+    priceHistory(symbol, ytd ? '1y' : range)
+      .then(p => {
+        if (!live) return;
+        if (!ytd) return setPoints(p);
+        const jan1 = `${new Date().getFullYear()}-01-01`;
+        const i = p.findIndex(x => x.date >= jan1);
+        setPoints(i < 0 ? p.slice(-1) : p.slice(Math.max(0, i - 1)));
+      })
       .catch(e => live && setError(e.message || 'Could not load the chart'));
     return () => { live = false; };
   }, [symbol, range, priceHistory]);
