@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
-import { parseAmount, money, BALANCE_CATEGORY } from '../../utils/budget';
+import { parseAmount, money, centsToInput, BALANCE_CATEGORY } from '../../utils/budget';
 import { inputStyle, Field, PrimaryButton } from '../investing/ui';
 
 function Option({ on, emoji, label, sub, onClick }) {
@@ -32,6 +32,7 @@ const acctEmoji = { cash: '💵', debit: '💳', credit: '💳', savings: '🏦'
 // was already there (not income). Out to spending → hands off to the expense form.
 export default function MoneySheet({ account, mode, accounts, balances, categories, onSave, onSpend, onClose }) {
   const credit = account.type === 'credit';
+  const owed = credit ? Math.max(0, -(balances[account.id] || 0)) : 0;
   const others = accounts.filter(a => a.id !== account.id);
   const incomeCats = categories.filter(c => c.kind === 'income' && !c.hidden && c.id !== BALANCE_CATEGORY.id);
   const [source, setSource] = useState(null); // 'acct:<id>' | 'cat:<id>'
@@ -86,7 +87,17 @@ export default function MoneySheet({ account, mode, accounts, balances, categori
           style={{ ...inputStyle, fontSize: 28, fontWeight: 700, padding: '12px 14px', color: mode === 'in' ? T.green : T.text }}
         />
 
-        <Field label={mode === 'in' ? 'Where is it coming from?' : 'Where is it going?'}>
+        {credit && mode === 'in' && owed > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: -6 }}>
+            <button type="button" onClick={() => setAmount(centsToInput(owed))}
+              style={{ padding: '6px 12px', borderRadius: 16, fontSize: 12, fontWeight: 600, color: T.khaki, background: T.bg, border: `1px solid ${T.cardBorder}` }}>
+              Full balance {money(owed)}
+            </button>
+            <span style={{ fontSize: 12, color: T.muted }}>or type the amount paid</span>
+          </div>
+        )}
+
+        <Field label={mode === 'in' ? (credit ? 'Paid from' : 'Where is it coming from?') : 'Where is it going?'}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
             {/* Other accounts: a transfer */}
             {others

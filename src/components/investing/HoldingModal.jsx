@@ -108,7 +108,7 @@ const rowBtn = { fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius
 
 // account: opened from that account's row → starts showing just that account,
 // with a switch to all accounts. undefined → all accounts.
-export default function HoldingModal({ hook, symbol, account, hide, userId, onTrade, onClose }) {
+export default function HoldingModal({ hook, budget, symbol, account, hide, userId, onTrade, onClose }) {
   const { portfolio, assets, txs, accounts, watchLists = [], addMark, updateMark, deleteMark, setTxAccount, alerts, setAsset, deleteTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
@@ -399,7 +399,7 @@ export default function HoldingModal({ hook, symbol, account, hide, userId, onTr
         )}
       </div>
       {ask && <ConfirmDialog title={ask.title} message={ask.message} onConfirm={ask.action} onClose={() => setAsk(null)} />}
-      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
+      {editing && <TxModal hook={hook} budget={budget} editing={editing} onClose={() => setEditing(null)} />}
     </Modal>
   );
 }

@@ -27,7 +27,9 @@ const round6 = n => Math.round(n * 1e6) / 1e6;
 // movement names a fund — or, for buys/sells, money from/to outside the app.
 // editing: { ids, init } from txEditInit — the form starts with that transaction's
 // values and saving replaces it (both halves of a linked pair).
-export default function TxModal({ hook, initialType = 'buy', initialSymbol = '', editing = null, onClose }) {
+// budget (optional): the Budget tab's hook. Money can come from / go to one of its
+// bank accounts; the matching transfer is saved there too (bankRef links the two).
+export default function TxModal({ hook, budget, initialType = 'buy', initialSymbol = '', editing = null, onClose }) {
   const { txs, assets, accounts, addTx, addTxs, replaceTxs, ensureAsset, priceHistory } = hook;
   const init = editing?.init || {};
   const str = v => (v === null || v === undefined ? '' : String(v));
@@ -46,13 +48,19 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   // Where money comes from / goes to: 'fund:SYM' (a fund in this account),
   // 'owned' (buy: shares you already had), 'out' (sell/dividend: money leaves
   // the account), 'reinvest' (dividend: buy more of the same). null = default.
-  const [payWith, setPayWith] = useState(editing ? init.pay ?? null : null);
+  // Budget account the money comes from / goes to ('' = not tracked)
+  const bankAccounts = (budget?.accounts || []).filter(x => x.type !== 'credit');
+  const editRef = editing ? txs.find(t => editing.ids.includes(t.id) && t.bankRef)?.bankRef : null;
+  const editBank = editRef ? budget?.txDocs?.find(t => t.id === `inv-${editRef}`) : null;
+  // An edited buy/sell that went through a bank account shows as "bank", not owned / taken out
+  const [payWith, setPayWith] = useState(editing ? (editRef && (init.pay === 'owned' || init.pay === 'out') ? 'bank' : init.pay ?? null) : null);
   const [newFund, setNewFund] = useState('');   // Add money into a fund not held yet
   const [newFundStatus, setNewFundStatus] = useState(null);
   // Is the symbol a real ticker? Unchecked ones (offline) need an explicit OK.
   const [symStatus, setSymStatus] = useState(null);
   const [allowUnchecked, setAllowUnchecked] = useState(false);
   const [symListOpen, setSymListOpen] = useState(false);
+  const [bank, setBank] = useState(editBank ? (editBank.accountId || editBank.toAccountId || '') : '');
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState(null);
 
@@ -69,15 +77,20 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const funds = acctHold.filter(h => h.symbol !== sym || isMoney);
   const isMM = s => Math.abs((assets[s]?.price ?? 0) - 1) < 0.01; // $1 money market fund
 
+  const hasBank = bankAccounts.length > 0;
   const options = type === 'buy'
-    ? [...funds.map(h => `fund:${h.symbol}`), 'owned']
-    : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), 'out']
+    ? [...funds.map(h => `fund:${h.symbol}`), ...(hasBank ? ['bank'] : []), 'owned']
+    : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), ...(hasBank ? ['bank'] : []), 'out']
     : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
     : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);
   // Editing: keep the fund it used selectable even if nothing else holds it now
   if (editing && init.fund && init.pay === `fund:${init.fund}` && type === init.type && account === (init.account ?? '') && !options.includes(init.pay)) options.unshift(init.pay);
   const pay = payWith && options.includes(payWith) ? payWith : null; // no default — you pick
+  // Where a bank account can be named: buys/sells paid from or to a bank, money in/out, dividends paid out
+  const bankFlow = pay === 'bank' || type === 'deposit' || type === 'withdraw' || (type === 'dividend' && pay === 'out');
+  const bankIn = type === 'buy' || type === 'deposit'; // money leaves the bank into investing
+  const bankId = bankFlow && bankAccounts.some(x => x.id === bank) ? bank : '';
   const fundSym = pay === 'new' ? newFund.trim().toUpperCase() : pay?.startsWith('fund:') ? pay.slice(5) : pay === 'reinvest' ? sym : null;
   // Price the fund / reinvested stock traded at. $1 money market funds are always $1;
   // anything else is asked for, filled in with that day's close when known.
@@ -115,8 +128,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   if (isTrade && sym && q > 0 && p > 0 && pay && flowOk) {
     total = q * p + (type === 'buy' ? f : -f);
     const main = { type, date, symbol: sym, quantity: q, price: p, ...(f ? { fee: f } : {}), ...acct,
-      ...(type === 'buy' && pay === 'owned' ? { fromCash: false } : {}),
-      ...(type === 'sell' && pay === 'out' ? { toCash: false } : {}) };
+      ...(type === 'buy' && (pay === 'owned' || pay === 'bank') ? { fromCash: false } : {}),
+      ...(type === 'sell' && (pay === 'out' || pay === 'bank') ? { toCash: false } : {}) };
     const fundTx = fundSym ? { type: type === 'buy' ? 'sell' : 'buy', date, symbol: fundSym, quantity: round6(total / fundPrice), price: fundPrice, fundLeg: true, ...acct } : null;
     toSave = fundTx ? (type === 'buy' ? [fundTx, main] : [main, fundTx]) : [main];
   }
@@ -142,7 +155,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
   const symUnchecked = symStatus === 'offline' || symStatus === 'error';
   const symOk = !needsSym || symStatus === 'ok' || (symUnchecked && allowUnchecked);
   const newFundOk = pay !== 'new' || type !== 'deposit' || newFundStatus === 'ok';
-  const blocked = account === null || !ready || !symOk || !newFundOk || check.errors.length > 0;
+  const bankMissing = pay === 'bank' && !bankId;
+  const blocked = account === null || !ready || !symOk || !newFundOk || bankMissing || check.errors.length > 0;
   const held = acctHold.find(h => h.symbol === sym);
   const acctName = account ? accounts.find(x => x.id === account)?.name : null;
 
@@ -153,11 +167,23 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     try {
       if (type === 'buy') await ensureAsset(sym, p);
       if (type === 'deposit' && pay === 'new') await ensureAsset(fundSym, 1);
-      if (editing) await replaceTxs(editing.ids, toSave);
-      else if (toSave.length > 1) {
+      // Linked to a bank account: every saved half carries bankRef, and the budget gets the transfer
+      const bankRef = bankId ? editRef || genId() : null;
+      const out = bankRef ? toSave.map(t => ({ ...t, bankRef })) : toSave;
+      if (editing) await replaceTxs(editing.ids, out);
+      else if (out.length > 1) {
         const linkId = genId();
-        await addTxs(toSave.map(t => ({ ...t, linkId })));
-      } else await addTx(toSave[0]);
+        await addTxs(out.map(t => ({ ...t, linkId })));
+      } else await addTx(out[0]);
+      if (bankRef && budget) {
+        const what = type === 'buy' ? `Bought ${sym}` : type === 'sell' ? `Sold ${sym}` : type === 'dividend' ? `${sym} dividend` : type === 'deposit' ? 'Added to investing' : 'Withdrew from investing';
+        await budget.putSynced(`inv-${bankRef}`, {
+          type: 'transfer', amount: Math.round(Math.abs(total) * 100), date,
+          accountId: bankIn ? bankId : null, toAccountId: bankIn ? null : bankId, category: null,
+          note: what, source: 'investing', bankRef, invAccountName: acctName || '',
+          createdAt: editBank?.createdAt || new Date().toISOString(),
+        });
+      }
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -165,7 +191,7 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
     }
   };
 
-  const label = o => o === 'owned' ? 'Already owned' : o === 'out' ? (type === 'dividend' ? 'Paid out' : 'Taken out') : o === 'reinvest' ? `Reinvest in ${sym}` : o === 'new' ? 'Another fund…' : o.slice(5);
+  const label = o => o === 'bank' ? (type === 'buy' ? 'From a bank account' : 'To a bank account') : o === 'owned' ? 'Already owned' : o === 'out' ? (type === 'dividend' ? 'Paid out' : 'Taken out') : o === 'reinvest' ? `Reinvest in ${sym}` : o === 'new' ? 'Another fund…' : o.slice(5);
   const flowLabel = { buy: 'Paid with', sell: 'Money goes to', dividend: 'Goes to', deposit: 'Into', withdraw: 'From' }[type];
 
   return (
@@ -249,6 +275,22 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         {account === null && (
           <div style={{ fontSize: 13, color: T.khaki }}>Choose the account first.</div>
         )}
+        {account !== null && bankFlow && hasBank && (
+          <Field label={bankIn ? 'From bank account (Budget)' : 'To bank account (Budget)'}>
+            <Chips
+              small
+              options={[
+                ...bankAccounts.map(x => ({ value: x.id, label: x.name })),
+                ...(pay === 'bank' ? [] : [{ value: '', label: 'Not tracked' }]),
+              ]}
+              value={pay === 'bank' && !bankId ? null : bankId}
+              onChange={setBank}
+            />
+            <span style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+              {bankId ? `Also saved in Budget as a transfer ${bankIn ? 'out of' : 'into'} ${bankAccounts.find(x => x.id === bankId)?.name}.` : 'Pick a Budget account to move the money there too.'}
+            </span>
+          </Field>
+        )}
         {account !== null && options.length > 0 && !pay && (isTrade ? sym && q > 0 && p > 0 : a > 0) && (
           <div style={{ fontSize: 13, color: T.khaki }}>Choose {type === 'buy' ? 'what pays for it' : type === 'withdraw' ? 'which fund it comes from' : 'where the money goes'}.</div>
         )}
@@ -278,6 +320,8 @@ export default function TxModal({ hook, initialType = 'buy', initialSymbol = '',
         {/* What will happen, in words */}
         {ready && (
           <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
+            {type === 'buy' && pay === 'bank' && <>The <b style={{ color: T.text }}>{money(total)}</b> comes from your bank account, so it counts as money you put in, not a gain.</>}
+            {type === 'sell' && pay === 'bank' && <>The <b style={{ color: T.text }}>{money(total)}</b> goes to your bank account (like a withdrawal); your gain on the sale still counts.</>}
             {type === 'buy' && pay === 'owned' && <>The <b style={{ color: T.text }}>{money(total)}</b> cost counts as money you brought in (like a deposit), so it isn't counted as a gain.</>}
             {type === 'buy' && fundSym && <>Sells <b style={{ color: T.text }}>{qtyFmt(toSave[0].quantity)} {fundSym}</b> at {money(fundPrice)} ({money(total)}) to pay for it.</>}
             {type === 'sell' && fundSym && <>Buys <b style={{ color: T.text }}>{qtyFmt(toSave[1].quantity)} {fundSym}</b> at {money(fundPrice)} with the {money(total)}.</>}

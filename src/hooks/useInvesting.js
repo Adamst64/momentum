@@ -3,6 +3,10 @@ import { collection, doc, onSnapshot, setDoc, deleteDoc, updateDoc, writeBatch, 
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 import { db } from '../firebase';
+
+// Also told when data that came from the local cache is confirmed by the server,
+// so "loaded" (used before anything is synced or cleaned up) can wait for that
+const META = { includeMetadataChanges: true };
 import { genId } from '../utils/id';
 import { priceDate, easternDate } from '../utils/marketCalendar';
 import { toDateStr } from '../utils/dateUtils';
@@ -24,13 +28,14 @@ export function useInvesting(userId) {
   const [alerts, setAlerts]       = useState([]);
   const [accountDocs, setAccountDocs] = useState([]);
   const [listDocs, setListDocs] = useState([]);
+  const [txsLoaded, setTxsLoaded] = useState(false);
 
   useEffect(() => {
-    if (!userId) { setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); setListDocs([]); return; }
+    if (!userId) { setTxsLoaded(false); setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); setListDocs([]); return; }
     const col = name => collection(db, 'users', userId, name);
     const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unsubs = [
-      onSnapshot(col('invTransactions'), s => setTxs(rows(s))),
+      onSnapshot(col('invTransactions'), META, s => { setTxs(rows(s)); if (!s.metadata.fromCache) setTxsLoaded(true); }),
       onSnapshot(col('invAssets'),       s => setAssetDocs(rows(s))),
       onSnapshot(col('invSnapshots'),    s => setSnapshots(rows(s))),
       onSnapshot(col('invAlerts'),       s => setAlerts(rows(s))),
@@ -277,6 +282,7 @@ export function useInvesting(userId) {
   }, [txs, alerts, assets, ref]);
 
   return {
+    txsLoaded,
     txs, assets, assetDocs, snapshots, alerts, portfolio, accounts, watchLists,
     addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark,
     addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,

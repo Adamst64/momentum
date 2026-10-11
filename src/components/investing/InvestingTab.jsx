@@ -52,7 +52,7 @@ const earningsBadge = (date, today) => {
   return d.toLocaleDateString('en-US', days < 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
 };
 
-export default function InvestingTab({ hook, userId }) {
+export default function InvestingTab({ hook, userId, budget }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('portfolio');
   const setView = v => { setViewState(v); setOpenAccountId(null); setOpenListId(null); };
@@ -234,13 +234,13 @@ export default function InvestingTab({ hook, userId }) {
           </div>
         </Modal>
       )}
-      {trade && <TxModal hook={hook} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
+      {trade && <TxModal hook={hook} budget={budget} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
       {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
-      {editing && <TxModal hook={hook} editing={editing} onClose={() => setEditing(null)} />}
+      {editing && <TxModal hook={hook} budget={budget} editing={editing} onClose={() => setEditing(null)} />}
       {open && (
         <HoldingModal
           key={openSym}
-          hook={hook} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
+          hook={hook} budget={budget} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
           onTrade={(type, symbol, acct) => {
             // The account being viewed, or the only one holding it
             const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
@@ -424,6 +424,10 @@ export default function InvestingTab({ hook, userId }) {
         )}
         {!byAccount && sold.length > 0 && <SoldList items={sold} hide={hide} onOpen={setOpen} />}
         </>
+      )}
+
+      {view === 'portfolio' && budget?.accounts?.length > 0 && (
+        <BudgetCashCard budget={budget} invested={portfolio.value} hide={hide} onMove={type => setTrade({ type })} />
       )}
 
       {view === 'watchlist' && (
@@ -1085,5 +1089,43 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
       <div style={{ fontSize: 11, color: T.muted, textAlign: 'center' }}>Swipe right from the left edge to go back</div>
       {asking && <ConfirmDialog title={asking.title} message={asking.message} confirmLabel={asking.label || 'Delete'} onConfirm={asking.action} onClose={() => setAsking(null)} />}
     </>
+  );
+}
+
+// Cash: every Budget account, credit cards as what's owed, with the total and
+// net worth (investments + cash). Money moves either way through Add money / Withdraw.
+function BudgetCashCard({ budget, invested, hide, onMove }) {
+  const { accounts, balances } = budget;
+  const cash = accounts.reduce((s, a) => s + (balances[a.id] || 0), 0) / 100;
+  const fmt = c => money(c / 100, hide);
+  const pill = { flex: 1, padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: `1px solid ${T.cardBorder}`, background: T.bg, color: T.khaki };
+  return (
+    <Card>
+      <SectionTitle right={<span style={{ fontSize: 15, fontWeight: 700, color: cash < 0 ? T.red : T.text }}>{money(cash, hide)}</span>}>
+        Cash · from Budget
+      </SectionTitle>
+      {accounts.map(a => {
+        const b = balances[a.id] || 0;
+        const credit = a.type === 'credit';
+        return (
+          <div key={a.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', borderTop: `1px solid ${T.cardBorder}`, fontSize: 14 }}>
+            <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+            <span style={{ fontSize: 11, color: T.muted }}>{credit ? (b < 0 ? 'owed' : 'credit card') : a.type === 'savings' ? 'savings' : a.type === 'cash' ? 'cash' : 'debit'}</span>
+            <span style={{ minWidth: 86, textAlign: 'right', fontWeight: 600, color: b < 0 ? T.red : T.text }}>{b < 0 ? '−' : ''}{fmt(Math.abs(b))}</span>
+          </div>
+        );
+      })}
+      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', borderTop: `1px solid ${T.cardBorder}`, fontSize: 13 }}>
+        <span style={{ color: T.muted }}>Net worth (investments + cash)</span>
+        <span style={{ fontWeight: 700, color: T.text }}>{money(invested + cash, hide)}</span>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+        <button onClick={() => onMove('deposit')} style={pill}>Bank → investing</button>
+        <button onClick={() => onMove('withdraw')} style={pill}>Investing → bank</button>
+      </div>
+      <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
+        To buy a stock straight from a bank account, use Buy → From a bank account.
+      </div>
+    </Card>
   );
 }

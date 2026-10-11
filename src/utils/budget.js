@@ -172,3 +172,27 @@ export function groceryBreakdown(txs) {
   groups.forEach(g => g.items.sort((a, b) => b.amount - a.amount));
   return { total, receipts, groups };
 }
+
+// Every date a repeating income was due, from its first date up to `today`.
+// rule: { start: 'YYYY-MM-DD', months: 1 (monthly) | 3 (every 3 months) }. Keeps the
+// start's day of month, moved to the month's last day when it doesn't exist (31st → 30th).
+export function recurringDates(rule, today) {
+  const out = [];
+  if (!rule?.start || !(rule.months > 0)) return out;
+  const [y, m, d] = rule.start.split('-').map(Number);
+  for (let i = 0; i < 600; i++) {
+    const mm = m - 1 + i * rule.months;
+    const yy = y + Math.floor(mm / 12), mo = ((mm % 12) + 12) % 12;
+    const last = new Date(yy, mo + 1, 0).getDate();
+    const ds = `${yy}-${String(mo + 1).padStart(2, '0')}-${String(Math.min(d, last)).padStart(2, '0')}`;
+    if (ds > today) break;
+    out.push(ds);
+  }
+  return out;
+}
+
+// The next date after `today` a repeating income is due
+export function nextRecurringDate(rule, today) {
+  const far = `${Number(today.slice(0, 4)) + 2}-12-31`;
+  return recurringDates(rule, far).find(ds => ds > today) || null;
+}

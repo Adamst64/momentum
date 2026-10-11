@@ -14,6 +14,7 @@ import NotesTab from './components/notes/NotesTab';
 import ListsTab from './components/lists/ListsTab';
 import InvestingTab from './components/investing/InvestingTab';
 import BudgetTab from './components/budget/BudgetTab';
+import { useMoneySync } from './hooks/useMoneySync';
 import NoteEditor from './components/notes/NoteEditor';
 import CreateTaskModal from './components/tasks/CreateTaskModal';
 import QuickAddSheet from './components/QuickAddSheet';
@@ -122,6 +123,7 @@ export default function App() {
   const listsHook     = usePersonalLists(userId);
   const investingHook = useInvesting(userId);
   const budgetHook    = useBudget(userId);
+  useMoneySync(budgetHook, showWork ? workHook : null, investingHook);
 
   // Open whatever a shortcut link asked for, once signed in
   useEffect(() => {
@@ -344,8 +346,8 @@ export default function App() {
         {tab === 'work'      && showWork && <WorkTab hook={workHook} />}
         {tab === 'notes'     && <NotesTab hook={notesHook} />}
         {tab === 'lists'     && <ListsTab hook={listsHook} />}
-        {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} />}
-        {tab === 'budget'    && <BudgetTab hook={budgetHook} />}
+        {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} budget={budgetHook} />}
+        {tab === 'budget'    && <BudgetTab hook={budgetHook} workEnabled={showWork} />}
 
         {quickAdd && (
           <QuickAddSheet

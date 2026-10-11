@@ -8,6 +8,8 @@ import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
 import ReceiptModal from './ReceiptModal';
 import MoneySheet from './MoneySheet';
+import AccountExtras from './AccountExtras';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -28,6 +30,15 @@ function Stat({ label, value, color }) {
 
 function TxRow({ tx, accountsById, categories, onOpen }) {
   const from = accountsById[tx.accountId]?.name || 'Deleted account';
+  if (tx.type === 'transfer' && tx.source === 'investing') {
+    const inv = `Investing${tx.invAccountName ? ` · ${tx.invAccountName}` : ''}`;
+    const out = !!tx.accountId;
+    const name = accountsById[out ? tx.accountId : tx.toAccountId]?.name || 'Deleted account';
+    return (
+      <Row onOpen={onOpen} emoji="📈" color={T.muted} title={tx.note || (out ? 'To investing' : 'From investing')}
+        sub={out ? `${name} → ${inv}` : `${inv} → ${name}`} amount={money(tx.amount)} amountColor={T.muted} />
+    );
+  }
   if (tx.type === 'transfer') {
     const to = accountsById[tx.toAccountId]?.name || 'Deleted account';
     return (
@@ -65,11 +76,12 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
   );
 }
 
-export default function BudgetTab({ hook }) {
+export default function BudgetTab({ hook, workEnabled }) {
   const {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
-    addCategory, updateCategory, removeCategory, scanReceipt,
+    addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork,
   } = hook;
+  const [investNote, setInvestNote] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
   const [openGroup, setOpenGroup] = useState(null);
   const [scanMenu, setScanMenu] = useState(false);
@@ -106,6 +118,8 @@ export default function BudgetTab({ hook }) {
   const changeMonth = n => { setMonth(m => shiftMonth(m, n)); setCatFilter(null); };
   const isCurrentMonth = month === todayYM();
   const filteredAccount = accountFilter && accountsById[accountFilter];
+  // An open account is its own page: swipe back (or ‹) returns to all accounts
+  useBackHandler(!!filteredAccount, () => { setAccountFilter(null); setCatFilter(null); });
 
   // First run: nothing to log against until there's an account
   if (accounts.length === 0) {
@@ -133,63 +147,80 @@ export default function BudgetTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {filteredAccount ? (() => {
+        const a = filteredAccount;
+        const bal = balances[a.id] || 0;
+        const credit = a.type === 'credit';
+        const pill = { padding: '8px 14px', borderRadius: 18, fontSize: 13, fontWeight: 600, border: `1px solid ${T.cardBorder}`, background: T.card };
+        return (
+          <>
+            <button onClick={() => { setAccountFilter(null); setCatFilter(null); }} style={{ alignSelf: 'flex-start', color: T.khaki, fontSize: 14, fontWeight: 600, padding: '2px 0' }}>
+              ‹ All accounts
+            </button>
+            <div style={{ marginTop: -6 }}>
+              <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>{a.name} · {typeLabel(a.type)}</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: bal < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
+                {credit ? money(Math.abs(bal)) : money(bal)}
+                {credit && <span style={{ fontSize: 15, fontWeight: 600, color: T.muted }}> {bal < 0 ? 'owed' : bal > 0 ? 'credit' : ''}</span>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button onClick={() => setMoneyMode('in')} style={{ ...pill, color: T.green }}>{credit ? 'Pay off' : '+ Add money'}</button>
+              <button onClick={() => setMoneyMode('out')} style={{ ...pill, color: T.khaki }}>− Take out</button>
+              <button onClick={() => setEditingAcct(a)} style={{ ...pill, color: T.muted }}>Edit account</button>
+            </div>
+            {(a.type === 'debit' || a.type === 'savings') && (
+              <AccountExtras account={a} workEnabled={workEnabled} categories={categories} onLinkWork={linkWork} onSetRecurring={setRecurring} />
+            )}
+          </>
+        );
+      })() : (
+        <>
       {/* Balances */}
-      <div>
-        <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Total balance</div>
-        <div style={{ fontSize: 32, fontWeight: 800, color: total < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
-          {money(total)}
-        </div>
-      </div>
+          <div>
+            <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Total balance</div>
+            <div style={{ fontSize: 32, fontWeight: 800, color: total < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
+              {money(total)}
+            </div>
+          </div>
 
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -16px', padding: '0 16px', scrollbarWidth: 'none' }}>
-        {accounts.map(a => {
-          const on = accountFilter === a.id;
-          const bal = balances[a.id] || 0;
-          return (
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -16px', padding: '0 16px', scrollbarWidth: 'none' }}>
+            {accounts.map(a => {
+              const on = accountFilter === a.id;
+              const bal = balances[a.id] || 0;
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
+                  style={{
+                    flexShrink: 0, minWidth: 120, padding: '10px 12px', borderRadius: 14, textAlign: 'left',
+                    background: on ? '#2A3A1A' : T.card, border: `1px solid ${on ? T.olive : T.cardBorder}`,
+                  }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: on ? T.khaki : T.text, whiteSpace: 'nowrap' }}>{a.name}</div>
+                  <div style={{ fontSize: 11, color: T.muted }}>{typeLabel(a.type)}</div>
+                  {a.type === 'credit' ? (
+                    <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>
+                      {money(Math.abs(bal))}{bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>{money(bal)}</div>
+                  )}
+                </button>
+              );
+            })}
             <button
-              key={a.id}
-              onClick={() => { setAccountFilter(on ? null : a.id); setCatFilter(null); }}
+              onClick={() => setEditingAcct('new')}
+              aria-label="Add account"
               style={{
-                flexShrink: 0, minWidth: 120, padding: '10px 12px', borderRadius: 14, textAlign: 'left',
-                background: on ? '#2A3A1A' : T.card, border: `1px solid ${on ? T.olive : T.cardBorder}`,
+                flexShrink: 0, width: 56, borderRadius: 14, border: `1px dashed ${T.subtle}`,
+                color: T.muted, fontSize: 24,
               }}
             >
-              <div style={{ fontSize: 13, fontWeight: 600, color: on ? T.khaki : T.text, whiteSpace: 'nowrap' }}>{a.name}</div>
-              <div style={{ fontSize: 11, color: T.muted }}>{typeLabel(a.type)}</div>
-              {a.type === 'credit' ? (
-                <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>
-                  {money(Math.abs(bal))}{bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
-                </div>
-              ) : (
-                <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>{money(bal)}</div>
-              )}
+              +
             </button>
-          );
-        })}
-        <button
-          onClick={() => setEditingAcct('new')}
-          aria-label="Add account"
-          style={{
-            flexShrink: 0, width: 56, borderRadius: 14, border: `1px dashed ${T.subtle}`,
-            color: T.muted, fontSize: 24,
-          }}
-        >
-          +
-        </button>
-      </div>
-
-      {filteredAccount && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, fontSize: 13, marginTop: -6 }}>
-          <span style={{ color: T.muted }}>Showing {filteredAccount.name} only</span>
-          <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            <button onClick={() => setMoneyMode('in')} style={{ color: T.green, fontWeight: 600 }}>
-              {filteredAccount.type === 'credit' ? 'Pay off' : '+ Add money'}
-            </button>
-            <button onClick={() => setMoneyMode('out')} style={{ color: T.khaki, fontWeight: 600 }}>− Take out</button>
-            <button onClick={() => setEditingAcct(filteredAccount)} style={{ color: T.khaki, fontWeight: 600 }}>Edit</button>
-            <button onClick={() => setAccountFilter(null)} style={{ color: T.muted }}>Show all</button>
-          </span>
-        </div>
+          </div>
+        </>
       )}
 
       <div style={{ display: 'flex', gap: 8 }}>
@@ -366,6 +397,11 @@ export default function BudgetTab({ hook }) {
       )}
 
       {/* Transactions */}
+      {monthTxs.length > 0 && (
+        <div style={{ fontSize: 12, color: T.muted, marginBottom: -8 }}>
+          {investNote ? 'Money moved to or from investing is edited in the Investing tab.' : 'Tap any entry to edit or delete it.'}
+        </div>
+      )}
       {monthTxs.length === 0 ? (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
           Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}in {monthTitle(month)}.
@@ -378,7 +414,8 @@ export default function BudgetTab({ hook }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${T.cardBorder}` }}>
               {g.txs.map(t => (
-                <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories} onOpen={() => setEditingTx(t)} />
+                <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories}
+                  onOpen={() => (t.source === 'investing' ? setInvestNote(true) : setEditingTx(t))} />
               ))}
             </div>
           </div>

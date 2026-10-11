@@ -1,8 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, deleteField, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
+
+// Also told when data that came from the local cache is confirmed by the server,
+// so "loaded" (used before anything is synced or cleaned up) can wait for that
+const META = { includeMetadataChanges: true };
 import { genId, } from '../utils/id';
-import { CREW_COLORS, getMondayId, dayEntries } from '../utils/workUtils';
+import { CREW_COLORS, getMondayId, dayEntries, parsePayEntry } from '../utils/workUtils';
 
 // Crews and members keep the order the user dragged them into ({ order: n });
 // older ones without it go last, by name
@@ -14,13 +18,14 @@ export function useWork(userId) {
   const [weeks,   setWeeks]   = useState([]);
   const [crews,   setCrews]   = useState([]);
   const [members, setMembers] = useState([]);
+  const [got,     setGot]     = useState({}); // which collections have arrived
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { setGot({}); return; }
     const unsubs = [
       onSnapshot(collection(db, 'users', userId, 'workDays'),    s => setDays(s.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(collection(db, 'users', userId, 'workWeeks'),   s => setWeeks(s.docs.map(d => ({ id: d.id, ...d.data() })))),
-      onSnapshot(collection(db, 'users', userId, 'workCrews'),   s => setCrews(s.docs.map(d => ({ id: d.id, ...d.data() })).sort(byOrder))),
+      onSnapshot(collection(db, 'users', userId, 'workWeeks'), META, s => { setWeeks(s.docs.map(d => ({ id: d.id, ...d.data() }))); if (!s.metadata.fromCache) setGot(g => ({ ...g, weeks: true })); }),
+      onSnapshot(collection(db, 'users', userId, 'workCrews'), META, s => { setCrews(s.docs.map(d => ({ id: d.id, ...d.data() })).sort(byOrder)); if (!s.metadata.fromCache) setGot(g => ({ ...g, crews: true })); }),
       onSnapshot(collection(db, 'users', userId, 'workMembers'), s => setMembers(s.docs.map(d => ({ id: d.id, ...d.data() })).sort(byOrder))),
     ];
     return () => unsubs.forEach(u => u());
@@ -51,13 +56,17 @@ export function useWork(userId) {
     }
   }, [userId, days]);
 
+  // paidAt: when it was first marked paid (the budget uses it to file the pay on that day)
   const setWeekPayment = useCallback(async (mondayId, crewId, paid, amount) => {
+    const prev = weeks.find(w => w.id === mondayId)?.[crewId];
+    const wasPaid = parsePayEntry(prev).paid;
+    const paidAt = paid ? (wasPaid && prev?.paidAt) || new Date().toISOString() : deleteField();
     await setDoc(
       doc(db, 'users', userId, 'workWeeks', mondayId),
-      { [crewId]: { paid, amount: Number(amount) || 0 } },
+      { [crewId]: { paid, amount: Number(amount) || 0, paidAt } },
       { merge: true },
     );
-  }, [userId]);
+  }, [userId, weeks]);
 
   const addCrew = useCallback(async (name, color) => {
     await setDoc(doc(db, 'users', userId, 'workCrews', genId()), { name: name.trim(), color: color || CREW_COLORS[0], order: nextOrder(crews) });
@@ -88,5 +97,7 @@ export function useWork(userId) {
     await deleteDoc(doc(db, 'users', userId, 'workMembers', id));
   }, [userId]);
 
-  return { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
+  const loaded = !!(got.weeks && got.crews);
+
+  return { loaded, days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
 }
