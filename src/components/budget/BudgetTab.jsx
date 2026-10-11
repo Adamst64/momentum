@@ -2,13 +2,14 @@ import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
 import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary } from '../../utils/budget';
-import { Card, SectionTitle } from '../investing/ui';
+import { Card, SectionTitle, Chips } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
 import ReceiptModal from './ReceiptModal';
 import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
+import SpendHighlights from './SpendHighlights';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
@@ -89,6 +90,8 @@ export default function BudgetTab({ hook, workEnabled }) {
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
   const [month, setMonth]           = useState(todayYM);
+  const [range, setRange]           = useState('month'); // 'month' | 'year' | 'all'
+  const [showList, setShowList]     = useState(false);  // year / all time: transactions folded away
   const [accountFilter, setAccountFilter] = useState(null);
   const [catFilter, setCatFilter]   = useState(null);
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
@@ -98,14 +101,16 @@ export default function BudgetTab({ hook, workEnabled }) {
   const accountsById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
   const total = accounts.reduce((s, a) => s + (balances[a.id] || 0), 0);
 
+  // The period on screen: one month, one year, or everything
+  const period = range === 'month' ? month : range === 'year' ? month.slice(0, 4) : '';
   const monthTxs = useMemo(() => txs.filter(t =>
-    t.date.startsWith(month)
+    t.date.startsWith(period)
     && (!accountFilter || t.accountId === accountFilter || t.toAccountId === accountFilter)
-  ), [txs, month, accountFilter]);
+  ), [txs, period, accountFilter]);
   const summary = useMemo(() => monthSummary(monthTxs, categories), [monthTxs, categories]);
   const perAccount = useMemo(
-    () => accountMonthSummary(accounts, txs.filter(t => t.date.startsWith(month))),
-    [accounts, txs, month]);
+    () => accountMonthSummary(accounts, txs.filter(t => t.date.startsWith(period))),
+    [accounts, txs, period]);
   const receipts = useMemo(() => groceryBreakdown(monthTxs), [monthTxs]);
   const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
 
@@ -115,8 +120,13 @@ export default function BudgetTab({ hook, workEnabled }) {
     groups[groups.length - 1].txs.push(t);
   }
 
-  const changeMonth = n => { setMonth(m => shiftMonth(m, n)); setCatFilter(null); };
-  const isCurrentMonth = month === todayYM();
+  // Never past this month (a year forward from last November stops at today)
+  const changeMonth = n => {
+    setMonth(m => { const next = shiftMonth(m, range === 'year' ? 12 * n : n); return next > todayYM() ? todayYM() : next; });
+    setCatFilter(null); setShowList(false);
+  };
+  const isCurrentMonth = range === 'year' ? month.slice(0, 4) >= todayYM().slice(0, 4) : month >= todayYM();
+  const periodTitle = range === 'month' ? monthTitle(month) : range === 'year' ? month.slice(0, 4) : 'All time';
   const filteredAccount = accountFilter && accountsById[accountFilter];
   // An open account is its own page: swipe back (or ‹) returns to all accounts
   useBackHandler(!!filteredAccount, () => { setAccountFilter(null); setCatFilter(null); });
@@ -267,18 +277,24 @@ export default function BudgetTab({ hook, workEnabled }) {
         </div>
       )}
 
-      {/* Month */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <button onClick={() => changeMonth(-1)} aria-label="Previous month" style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
-        <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{monthTitle(month)}</span>
-        <button
-          onClick={() => changeMonth(1)}
-          disabled={isCurrentMonth}
-          aria-label="Next month"
-          style={{ color: isCurrentMonth ? T.subtle : T.khaki, fontSize: 22, padding: '2px 12px' }}
-        >
-          ›
-        </button>
+      {/* Period: a month, a year, or all time */}
+      <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
+        value={range} onChange={v => { setRange(v); setCatFilter(null); setShowList(false); }} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -6 }}>
+        {range !== 'all' ? (
+          <button onClick={() => changeMonth(-1)} aria-label={`Previous ${range}`} style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
+        ) : <span style={{ width: 40 }} />}
+        <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{periodTitle}</span>
+        {range !== 'all' ? (
+          <button
+            onClick={() => changeMonth(1)}
+            disabled={isCurrentMonth}
+            aria-label={`Next ${range}`}
+            style={{ color: isCurrentMonth ? T.subtle : T.khaki, fontSize: 22, padding: '2px 12px' }}
+          >
+            ›
+          </button>
+        ) : <span style={{ width: 40 }} />}
       </div>
 
       <Card style={{ display: 'flex', gap: 12 }}>
@@ -287,6 +303,14 @@ export default function BudgetTab({ hook, workEnabled }) {
         <Stat label="Net" value={(summary.net > 0 ? '+' : '') + money(summary.net)}
           color={summary.net < 0 ? T.red : summary.net > 0 ? T.green : T.text} />
       </Card>
+
+      {range !== 'month' && (
+        <SpendHighlights
+          key={period}
+          txs={monthTxs} range={range} year={month.slice(0, 4)} currentYM={todayYM()}
+          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(null); }}
+        />
+      )}
 
       {/* Each account this month (all-accounts view only) */}
       {!accountFilter && accounts.length > 1 && (
@@ -397,16 +421,21 @@ export default function BudgetTab({ hook, workEnabled }) {
       )}
 
       {/* Transactions */}
-      {monthTxs.length > 0 && (
+      {range !== 'month' && monthTxs.length > 0 && (
+        <button onClick={() => setShowList(v => !v)} style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 600, color: T.khaki }}>
+          {showList ? 'Hide' : 'Show'} all {listed.length} entries {showList ? '▴' : '▾'}
+        </button>
+      )}
+      {monthTxs.length > 0 && (range === 'month' || showList) && (
         <div style={{ fontSize: 12, color: T.muted, marginBottom: -8 }}>
           {investNote ? 'Money moved to or from investing is edited in the Investing tab.' : 'Tap any entry to edit or delete it.'}
         </div>
       )}
       {monthTxs.length === 0 ? (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
-          Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}in {monthTitle(month)}.
+          Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}{range === 'all' ? 'yet' : `in ${periodTitle}`}.
         </div>
-      ) : (
+      ) : (range === 'month' || showList) && (
         groups.map(g => (
           <div key={g.date}>
             <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>

@@ -78,9 +78,12 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
   const isMM = s => Math.abs((assets[s]?.price ?? 0) - 1) < 0.01; // $1 money market fund
 
   const hasBank = bankAccounts.length > 0;
+  // Money from a bank goes into a fund first (Add money), then buys come from the fund.
+  // Buy/Sell straight from or to a bank only stays for trades already saved that way.
+  const bankTrade = hasBank && !!editRef && (init.pay === 'owned' || init.pay === 'out');
   const options = type === 'buy'
-    ? [...funds.map(h => `fund:${h.symbol}`), ...(hasBank ? ['bank'] : []), 'owned']
-    : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), ...(hasBank ? ['bank'] : []), 'out']
+    ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'owned']
+    : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'out']
     : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
     : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);

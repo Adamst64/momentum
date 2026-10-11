@@ -1124,7 +1124,7 @@ function BudgetCashCard({ budget, invested, hide, onMove }) {
         <button onClick={() => onMove('withdraw')} style={pill}>Investing → bank</button>
       </div>
       <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-        To buy a stock straight from a bank account, use Buy → From a bank account.
+        Bank → investing adds money into a fund (like FDRXX or VMFXX); buy stocks from that fund.
       </div>
     </Card>
   );
