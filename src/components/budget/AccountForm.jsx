@@ -1,35 +1,24 @@
 import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { ACCOUNT_TYPES, centsToInput } from '../../utils/budget';
+import { ACCOUNT_TYPES } from '../../utils/budget';
 import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog } from '../investing/ui';
-
-// Starting balance may be zero or negative (a credit card you already owe on)
-function parseBalance(str) {
-  const s = String(str).replace(/[$\s,]/g, '');
-  if (!s) return 0;
-  const n = Number(s);
-  return isFinite(n) ? Math.round(n * 100) : null;
-}
 
 export default function AccountForm({ initial, txCount, onSave, onDelete, onClose }) {
   const [name, setName]       = useState(initial?.name || '');
   const [type, setType]       = useState(initial?.type || 'cash');
-  const [balance, setBalance] = useState(
-    initial?.startBalance < 0 ? '-' + centsToInput(-initial.startBalance) : centsToInput(initial?.startBalance));
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const startBalance = parseBalance(balance);
-  const canSave = !!name.trim() && startBalance !== null && !saving;
+  const canSave = !!name.trim() && !saving;
 
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
     setError(null);
     try {
-      await onSave({ name, type, startBalance });
+      await onSave({ name, type });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -52,19 +41,6 @@ export default function AccountForm({ initial, txCount, onSave, onDelete, onClos
 
         <Field label="Type">
           <Chips options={ACCOUNT_TYPES} value={type} onChange={setType} small />
-        </Field>
-
-        <Field label="Starting balance">
-          <input
-            value={balance}
-            onChange={e => setBalance(e.target.value)}
-            inputMode="decimal"
-            placeholder="0.00"
-            style={inputStyle}
-          />
-          <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>
-            What's in it right now, before any transactions you log here. Use a minus for money owed on a credit card.
-          </span>
         </Field>
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}

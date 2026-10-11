@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, categoryOf, money, monthSummary, shiftMonth, monthTitle } from '../../utils/budget';
+import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle } from '../../utils/budget';
 import { Card, SectionTitle } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
+import CategoriesSheet from './CategoriesSheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -23,7 +24,7 @@ function Stat({ label, value, color }) {
   );
 }
 
-function TxRow({ tx, accountsById, onOpen }) {
+function TxRow({ tx, accountsById, categories, onOpen }) {
   const from = accountsById[tx.accountId]?.name || 'Deleted account';
   if (tx.type === 'transfer') {
     const to = accountsById[tx.toAccountId]?.name || 'Deleted account';
@@ -32,7 +33,7 @@ function TxRow({ tx, accountsById, onOpen }) {
         amount={money(tx.amount)} amountColor={T.muted} />
     );
   }
-  const c = categoryOf(tx.category);
+  const c = lookupCategory(categories, tx.category);
   const income = tx.type === 'income';
   return (
     <Row onOpen={onOpen} emoji={c.emoji} color={c.color} title={tx.note || c.label}
@@ -63,11 +64,15 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
 }
 
 export default function BudgetTab({ hook }) {
-  const { accounts, txs, balances, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx } = hook;
+  const {
+    accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
+    addCategory, updateCategory, removeCategory,
+  } = hook;
   const [month, setMonth]           = useState(todayYM);
   const [accountFilter, setAccountFilter] = useState(null);
   const [catFilter, setCatFilter]   = useState(null);
-  const [editingTx, setEditingTx]   = useState(null); // null | 'new' | tx
+  const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
+  const [showCategories, setShowCategories] = useState(false);
   const [editingAcct, setEditingAcct] = useState(null); // null | 'new' | account
 
   const accountsById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
@@ -77,7 +82,7 @@ export default function BudgetTab({ hook }) {
     t.date.startsWith(month)
     && (!accountFilter || t.accountId === accountFilter || t.toAccountId === accountFilter)
   ), [txs, month, accountFilter]);
-  const summary = useMemo(() => monthSummary(monthTxs), [monthTxs]);
+  const summary = useMemo(() => monthSummary(monthTxs, categories), [monthTxs, categories]);
   const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
 
   const groups = [];
@@ -98,7 +103,7 @@ export default function BudgetTab({ hook }) {
           Track where your money goes.<br />Start by adding where you keep it: cash, a card, savings.
         </div>
         <button
-          onClick={() => addAccount({ name: 'Cash', type: 'cash', startBalance: 0 })}
+          onClick={() => addAccount({ name: 'Cash', type: 'cash' })}
           style={{ padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}
         >
           + Add a Cash account
@@ -159,18 +164,32 @@ export default function BudgetTab({ hook }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginTop: -6 }}>
           <span style={{ color: T.muted }}>Showing {filteredAccount.name} only</span>
           <span style={{ display: 'flex', gap: 14 }}>
-            <button onClick={() => setEditingAcct(filteredAccount)} style={{ color: T.khaki, fontWeight: 600 }}>Edit account</button>
+            <button
+              onClick={() => setEditingTx({ preset: { type: 'income', category: BALANCE_CATEGORY.id, accountId: filteredAccount.id } })}
+              style={{ color: T.khaki, fontWeight: 600 }}
+            >
+              Add balance
+            </button>
+            <button onClick={() => setEditingAcct(filteredAccount)} style={{ color: T.khaki, fontWeight: 600 }}>Edit</button>
             <button onClick={() => setAccountFilter(null)} style={{ color: T.muted }}>Show all</button>
           </span>
         </div>
       )}
 
-      <button
-        onClick={() => setEditingTx('new')}
-        style={{ padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}
-      >
-        + Add transaction
-      </button>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setEditingTx('new')}
+          style={{ flex: 1, padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}
+        >
+          + Add transaction
+        </button>
+        <button
+          onClick={() => setShowCategories(true)}
+          style={{ padding: '14px 16px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+        >
+          Categories
+        </button>
+      </div>
 
       {/* Month */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -243,21 +262,37 @@ export default function BudgetTab({ hook }) {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${T.cardBorder}` }}>
               {g.txs.map(t => (
-                <TxRow key={t.id} tx={t} accountsById={accountsById} onOpen={() => setEditingTx(t)} />
+                <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories} onOpen={() => setEditingTx(t)} />
               ))}
             </div>
           </div>
         ))
       )}
 
-      {editingTx && (
-        <TxForm
-          initial={editingTx === 'new' ? null : editingTx}
-          accounts={accounts}
-          defaultAccountId={accountFilter}
-          onSave={data => editingTx === 'new' ? addTx(data) : updateTx(editingTx.id, data)}
-          onDelete={editingTx === 'new' ? null : () => deleteTx(editingTx.id)}
-          onClose={() => setEditingTx(null)}
+      {editingTx && (() => {
+        const isNew = editingTx === 'new' || !!editingTx.preset;
+        return (
+          <TxForm
+            initial={isNew ? null : editingTx}
+            preset={editingTx.preset}
+            accounts={accounts}
+            categories={categories}
+            defaultAccountId={accountFilter}
+            onSave={data => isNew ? addTx(data) : updateTx(editingTx.id, data)}
+            onAddCategory={addCategory}
+            onDelete={isNew ? null : () => deleteTx(editingTx.id)}
+            onClose={() => setEditingTx(null)}
+          />
+        );
+      })()}
+
+      {showCategories && (
+        <CategoriesSheet
+          categories={categories}
+          onAdd={addCategory}
+          onUpdate={updateCategory}
+          onRemove={removeCategory}
+          onClose={() => setShowCategories(false)}
         />
       )}
 

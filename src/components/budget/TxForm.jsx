@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
-import { EXPENSE_CATEGORIES, INCOME_CATEGORIES, parseAmount, centsToInput } from '../../utils/budget';
+import { parseAmount, centsToInput } from '../../utils/budget';
 import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog } from '../investing/ui';
+import CategoryForm from './CategoryForm';
 
 const TYPES = [
   { value: 'expense',  label: 'Expense' },
@@ -11,7 +12,7 @@ const TYPES = [
   { value: 'transfer', label: 'Transfer' },
 ];
 
-function CategoryGrid({ options, value, onChange }) {
+function CategoryGrid({ options, value, onChange, onNew }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
       {options.map(c => {
@@ -32,17 +33,28 @@ function CategoryGrid({ options, value, onChange }) {
           </button>
         );
       })}
+      <button
+        type="button"
+        onClick={onNew}
+        style={{
+          padding: '8px 9px', borderRadius: 10, border: `1px dashed ${T.subtle}`,
+          color: T.khaki, fontSize: 12.5, fontWeight: 600,
+        }}
+      >
+        + New
+      </button>
     </div>
   );
 }
 
 // Add or edit one transaction. `initial` is an existing transaction, or null for a new one.
-export default function TxForm({ initial, accounts, defaultAccountId, onSave, onDelete, onClose }) {
-  const firstAccount = defaultAccountId || accounts[0]?.id || '';
-  const [type, setType]           = useState(initial?.type || 'expense');
+export default function TxForm({ initial, preset, accounts, categories, defaultAccountId, onSave, onAddCategory, onDelete, onClose }) {
+  const start = initial || preset; // preset: a new transaction with some fields filled in
+  const firstAccount = start?.accountId || defaultAccountId || accounts[0]?.id || '';
+  const [type, setType]           = useState(start?.type || 'expense');
   const [amount, setAmount]       = useState(centsToInput(initial?.amount));
-  const [category, setCategory]   = useState(initial?.category || null);
-  const [accountId, setAccountId] = useState(initial?.accountId || firstAccount);
+  const [category, setCategory]   = useState(start?.category || null);
+  const [accountId, setAccountId] = useState(firstAccount);
   const [toAccountId, setToAccountId] = useState(
     initial?.toAccountId || accounts.find(a => a.id !== firstAccount)?.id || '');
   const [date, setDate]   = useState(initial?.date || todayStr());
@@ -50,9 +62,12 @@ export default function TxForm({ initial, accounts, defaultAccountId, onSave, on
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [newCategory, setNewCategory] = useState(false);
 
   const cents = parseAmount(amount);
-  const cats = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES;
+  // Deleted categories aren't offered, unless this transaction already uses one
+  const kind = type === 'income' ? 'income' : 'expense';
+  const cats = categories.filter(c => c.kind === kind && (!c.hidden || c.id === initial?.category));
   const catOk = type === 'transfer' || cats.some(c => c.id === category);
   const accountOk = !!accountId && (type !== 'transfer' || (toAccountId && toAccountId !== accountId));
   const canSave = !!cents && catOk && accountOk && !saving;
@@ -96,7 +111,7 @@ export default function TxForm({ initial, accounts, defaultAccountId, onSave, on
 
         {type !== 'transfer' && (
           <Field label="Category">
-            <CategoryGrid options={cats} value={category} onChange={setCategory} />
+            <CategoryGrid options={cats} value={category} onChange={setCategory} onNew={() => setNewCategory(true)} />
           </Field>
         )}
 
@@ -139,6 +154,15 @@ export default function TxForm({ initial, accounts, defaultAccountId, onSave, on
           </button>
         )}
       </div>
+
+      {newCategory && (
+        <CategoryForm
+          initial={null}
+          kind={kind}
+          onSave={async data => setCategory(await onAddCategory(data))}
+          onClose={() => setNewCategory(false)}
+        />
+      )}
 
       {confirmDelete && (
         <ConfirmDialog
