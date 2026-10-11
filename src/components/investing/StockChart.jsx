@@ -23,7 +23,6 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   const [adding, setAdding] = useState(false);
   const [noteLabel, setNoteLabel] = useState('');
   const [noteText, setNoteText] = useState('');
-  const [editingNote, setEditingNote] = useState(null); // { id, label, date, note } being edited
   const [noteDate, setNoteDate] = useState(() => new Date().toLocaleDateString('en-CA'));
   const [askNote, setAskNote] = useState(null);
   const [askDelete, setAskDelete] = useState(null);
@@ -48,8 +47,10 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   if (pts.length && livePrice) pts = [...pts.slice(0, -1), { ...pts[pts.length - 1], value: livePrice }];
   // Marks sit on the price of their day (or the next trading day)
   const noteDots = notes.map(n => {
-    const pt = pts.find(p => p.date >= n.date);
-    return pt ? { ...n, id: `note:${n.id}`, noteId: n.id, type: 'note', price: pt.value, priceThen: pt.value, priceNow: pts[pts.length - 1]?.value } : null;
+    // A mark newer than the last candle (today before close, a weekend) sits on the latest point
+    const last = pts[pts.length - 1];
+    const pt = pts.find(p => p.date >= n.date) || (last && n.date > last.date ? last : null);
+    return pt ? { ...n, id: `note:${n.id}`, noteId: n.id, type: 'note', date: pt.date, realDate: n.date, price: pt.value, priceThen: pt.value, priceNow: last.value } : null;
   }).filter(Boolean);
   const allDots = [...trades, ...noteDots];
   const trade = allDots.find(t => t.id === tradeId) || null;
@@ -91,66 +92,15 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         )}
       </div>
       {trade?.type === 'note' && (
-        <div key={trade.id} style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${NOTE_COLOR}55` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: NOTE_COLOR, flex: 1, minWidth: 0 }}>★ {trade.label}</span>
-            <button onClick={() => { setTradeId(null); setEditingNote(null); }} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
-          </div>
-          {(() => {
-            // How the stock moved from that day to right now (live price when there is one)
-            const now = livePrice || trade.priceNow;
-            const then = trade.priceThen;
-            const diff = now && then ? now - then : null;
-            return (
-              <>
-                {diff !== null && (
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: gainColor(diff), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
-                      {pct(diff / then)} <span style={{ fontSize: 15, fontWeight: 700 }}>{signedMoney(diff, hide)}</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
-                      since {formatDateYear(trade.date)} · {money(then, hide)} then → {money(now, hide)} now
-                    </div>
-                  </div>
-                )}
-                {diff === null && <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatDateYear(trade.date)}</div>}
-              </>
-            );
-          })()}
-          {editingNote?.id === trade.noteId ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-              <input value={editingNote.label} onChange={e => setEditingNote(n => ({ ...n, label: e.target.value }))} placeholder="Mark name" style={inputStyle} />
-              <input type="date" value={editingNote.date} max={new Date().toLocaleDateString('en-CA')} onChange={e => e.target.value && setEditingNote(n => ({ ...n, date: e.target.value }))} style={inputStyle} />
-              <textarea value={editingNote.note} onChange={e => setEditingNote(n => ({ ...n, note: e.target.value }))} placeholder="Note" rows={6} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.45, fontFamily: 'inherit' }} />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button
-                  onClick={async () => { if (!editingNote.label.trim()) return; await onUpdateNote(editingNote.id, { label: editingNote.label, date: editingNote.date, note: editingNote.note }); setEditingNote(null); }}
-                  style={{ flex: 1, padding: 10, borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}
-                >Save</button>
-                <button onClick={() => setEditingNote(null)} style={{ padding: '10px 14px', color: T.muted, fontSize: 14 }}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {trade.note && (
-                <div style={{ fontSize: 14, color: T.text, marginTop: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{trade.note}</div>
-              )}
-              {trade.auto
-                ? <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Added automatically from your watch list.</div>
-                : (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                    {onUpdateNote && <button onClick={() => setEditingNote({ id: trade.noteId, label: trade.label, date: trade.date, note: trade.note || '' })} style={{ fontSize: 12, fontWeight: 600, color: T.khaki, border: `1px solid ${T.khaki}55`, borderRadius: 8, padding: '5px 10px' }}>{trade.note ? 'Edit' : 'Edit / add a note'}</button>}
-                    {onDeleteNote && <button onClick={() => setAskNote(trade)} style={{ fontSize: 12, fontWeight: 600, color: T.red, border: `1px solid ${T.red}66`, borderRadius: 8, padding: '5px 10px' }}>Delete mark</button>}
-                  </div>
-                )}
-            </>
-          )}
-        </div>
+        <MarkCard
+          key={trade.id} mark={trade} now={livePrice || trade.priceNow} hide={hide}
+          onClose={() => setTradeId(null)} onUpdate={onUpdateNote} onAskDelete={onDeleteNote && (() => setAskNote(trade))}
+        />
       )}
       {askNote && (
         <ConfirmDialog
           title="Delete this mark?"
-          message={`“${askNote.label}” on ${formatDateYear(askNote.date)} will be removed from the chart.`}
+          message={`“${askNote.label}” on ${formatDateYear(askNote.realDate || askNote.date)} will be removed from the chart.`}
           onConfirm={async () => { await onDeleteNote(askNote.noteId); setTradeId(null); }}
           onClose={() => setAskNote(null)}
         />
@@ -191,6 +141,133 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
       <div style={{ marginTop: 10 }}>
         <Chips small options={RANGES} value={range} onChange={v => { setRange(v); setScrub(null); }} />
       </div>
+      {notes.length > 0 && (
+        <MarksList
+          symbol={symbol} notes={notes} priceHistory={priceHistory} now={livePrice || pts[pts.length - 1]?.value} hide={hide}
+          onUpdate={onUpdateNote} onAskDelete={onDeleteNote && (n => setAskNote(n))}
+        />
+      )}
+    </div>
+  );
+}
+
+// One mark: move since that day, the note, edit / delete.
+// mark: { noteId, label, date, realDate?, note, auto, priceThen }
+function MarkCard({ mark, now, hide, onClose, onUpdate, onAskDelete, flat }) {
+  const [editing, setEditing] = useState(null);
+  const day = mark.realDate || mark.date;
+  const then = mark.priceThen;
+  const diff = now && then ? now - then : null;
+  return (
+    <div style={flat ? { padding: '2px 0 4px' } : { marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${NOTE_COLOR}55` }}>
+      {!flat && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: NOTE_COLOR, flex: 1, minWidth: 0 }}>★ {mark.label}</span>
+          <button onClick={onClose} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>
+        </div>
+      )}
+      {diff !== null ? (
+        <div style={{ marginTop: flat ? 2 : 8 }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: gainColor(diff), fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {pct(diff / then)} <span style={{ fontSize: 15, fontWeight: 700 }}>{signedMoney(diff, hide)}</span>
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 3 }}>
+            since {formatDateYear(day)} · {money(then, hide)} then → {money(now, hide)} now
+          </div>
+        </div>
+      ) : !flat && <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{formatDateYear(day)}</div>}
+      {editing ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
+          <input value={editing.label} onChange={e => setEditing(n => ({ ...n, label: e.target.value }))} placeholder="Mark name" style={inputStyle} />
+          <input type="date" value={editing.date} max={new Date().toLocaleDateString('en-CA')} onChange={e => e.target.value && setEditing(n => ({ ...n, date: e.target.value }))} style={inputStyle} />
+          <textarea value={editing.note} onChange={e => setEditing(n => ({ ...n, note: e.target.value }))} placeholder="Note" rows={6} style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.45, fontFamily: 'inherit' }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={async () => { if (!editing.label.trim()) return; await onUpdate(mark.noteId, editing); setEditing(null); }}
+              style={{ flex: 1, padding: 10, borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}
+            >Save</button>
+            <button onClick={() => setEditing(null)} style={{ padding: '10px 14px', color: T.muted, fontSize: 14 }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <>
+          {mark.note && (
+            <div style={{ fontSize: 14, color: T.text, marginTop: 10, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{mark.note}</div>
+          )}
+          {mark.auto
+            ? <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Added automatically from your watch list.</div>
+            : (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                {onUpdate && <button onClick={() => setEditing({ label: mark.label, date: day, note: mark.note || '' })} style={{ fontSize: 12, fontWeight: 600, color: T.khaki, border: `1px solid ${T.khaki}55`, borderRadius: 8, padding: '5px 10px' }}>{mark.note ? 'Edit' : 'Edit / add a note'}</button>}
+                {onAskDelete && <button onClick={onAskDelete} style={{ fontSize: 12, fontWeight: 600, color: T.red, border: `1px solid ${T.red}66`, borderRadius: 8, padding: '5px 10px' }}>Delete mark</button>}
+              </div>
+            )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Every mark on this stock, newest first, whatever range the chart shows.
+// Prices for "since" come from daily 5-year history (monthly beyond that), loaded on first open.
+function MarksList({ symbol, notes, priceHistory, now, hide, onUpdate, onAskDelete }) {
+  const [open, setOpen] = useState(false);
+  const [openId, setOpenId] = useState(null);
+  const [hist, setHist] = useState(null); // { daily, monthly }
+  const oldest = notes.reduce((m, n) => (n.date < m ? n.date : m), notes[0].date);
+
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    (async () => {
+      const daily = await priceHistory(symbol, 'd5y').catch(() => []);
+      const monthly = !daily.length || oldest < daily[0].date ? await priceHistory(symbol, 'max').catch(() => []) : [];
+      if (live) setHist({ daily, monthly });
+    })();
+    return () => { live = false; };
+  }, [open, symbol, priceHistory, oldest]);
+
+  const priceOn = date => {
+    if (!hist) return null;
+    for (const pts of [hist.daily, hist.monthly]) {
+      if (!pts.length || date < pts[0].date) continue;
+      const pt = pts.find(p => p.date >= date) || pts[pts.length - 1];
+      return pt.value;
+    }
+    return null;
+  };
+
+  const sorted = [...notes].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  return (
+    <div style={{ marginTop: 12, borderTop: `1px solid ${T.cardBorder}`, paddingTop: 8 }}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 6, width: '100%', fontSize: 13, fontWeight: 700, color: T.text, padding: '4px 0' }}>
+        <span style={{ color: NOTE_COLOR }}>★</span> All marks ({notes.length})
+        <span style={{ marginLeft: 'auto', color: T.muted, fontSize: 12 }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && sorted.map(n => {
+        const then = priceOn(n.date);
+        const move = then && now ? now / then - 1 : null;
+        const expanded = openId === n.id;
+        return (
+          <div key={n.id} style={{ borderTop: `1px solid ${T.cardBorder}55`, padding: '8px 0' }}>
+            <button onClick={() => setOpenId(expanded ? null : n.id)} style={{ display: 'flex', alignItems: 'baseline', gap: 8, width: '100%', textAlign: 'left' }}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: expanded ? 'normal' : 'nowrap' }}>{n.label}</span>
+                <span style={{ fontSize: 11, color: T.muted }}>{formatDateYear(n.date)}{n.note && !expanded ? ' · has a note' : ''}</span>
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: move === null ? T.muted : gainColor(move), fontVariantNumeric: 'tabular-nums' }}>
+                {move === null ? (hist ? '' : '…') : pct(move)}
+              </span>
+            </button>
+            {expanded && (
+              <MarkCard
+                flat mark={{ ...n, noteId: n.id, priceThen: then }} now={now} hide={hide}
+                onUpdate={onUpdate} onAskDelete={onAskDelete && (() => onAskDelete({ ...n, noteId: n.id }))}
+              />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
