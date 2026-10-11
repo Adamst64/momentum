@@ -104,6 +104,7 @@ export default function BudgetTab({ hook }) {
   const changeMonth = n => { setMonth(m => shiftMonth(m, n)); setCatFilter(null); };
   const isCurrentMonth = month === todayYM();
   const filteredAccount = accountFilter && accountsById[accountFilter];
+  const cashAccount = accounts.find(a => a.type === 'cash');
 
   // First run: nothing to log against until there's an account
   if (accounts.length === 0) {
@@ -171,9 +172,18 @@ export default function BudgetTab({ hook }) {
       </div>
 
       {filteredAccount && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13, marginTop: -6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, fontSize: 13, marginTop: -6 }}>
           <span style={{ color: T.muted }}>Showing {filteredAccount.name} only</span>
-          <span style={{ display: 'flex', gap: 14 }}>
+          <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+            {/* Cash in hand → this account, as a transfer (not income) */}
+            {filteredAccount.type !== 'cash' && cashAccount && (
+              <button
+                onClick={() => setEditingTx({ preset: { type: 'transfer', accountId: cashAccount.id, toAccountId: filteredAccount.id, note: 'Cash deposit' } })}
+                style={{ color: T.khaki, fontWeight: 600 }}
+              >
+                Deposit cash
+              </button>
+            )}
             <button
               onClick={() => setEditingTx({ preset: { type: 'income', category: BALANCE_CATEGORY.id, accountId: filteredAccount.id } })}
               style={{ color: T.khaki, fontWeight: 600 }}

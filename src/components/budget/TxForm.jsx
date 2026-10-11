@@ -57,9 +57,9 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
   const [category, setCategory]   = useState(start?.category || null);
   const [accountId, setAccountId] = useState(firstAccount);
   const [toAccountId, setToAccountId] = useState(
-    initial?.toAccountId || accounts.find(a => a.id !== firstAccount)?.id || '');
+    start?.toAccountId || accounts.find(a => a.id !== firstAccount)?.id || '');
   const [date, setDate]   = useState(initial?.date || todayStr());
-  const [note, setNote]   = useState(initial?.note || '');
+  const [note, setNote]   = useState(start?.note || '');
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
