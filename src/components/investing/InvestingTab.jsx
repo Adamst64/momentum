@@ -277,6 +277,8 @@ export default function InvestingTab({ hook, userId, budget }) {
       <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
         <AccountPage
           g={pageGroup} hide={hide} onBack={() => setOpenAccountId(null)} onAdd={() => setAdding(true)}
+          coreFund={accounts.find(a => a.id === pageGroup.id)?.coreFund || null}
+          onSetCore={sym => hook.setCoreFund(pageGroup.id, sym)}
           onAssign={() => setManageAccounts(true)}
           renderRow={(pos, i) => <HoldingRow key={pos.key} h={pos} first={i === 0} {...rowProps} inAccounts={acctCount[pos.symbol]} share={allocTotal > 0 && pos.value ? pos.value / allocTotal : 0} />}
           onOpenSold={sym => setOpen({ symbol: sym, account: pageGroup.id })}
@@ -785,7 +787,7 @@ function GainRow({ label, sub, value, pctOf, hide, strong }) {
 }
 
 // An account's own page: its holdings and what was sold from it
-function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold }) {
+function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold, coreFund, onSetCore }) {
   const n = g.positions.length;
   const cost = g.positions.reduce((t, p) => t + (p.cost || 0), 0);
   const unrealized = g.positions.reduce((t, p) => t + (p.unrealized || 0), 0);
@@ -817,6 +819,8 @@ function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold }
           {n} holding{n !== 1 ? 's' : ''}{g.sold.length ? ` · ${g.sold.length} sold` : ''} · total = realized + unrealized{g.dividends > 0.005 ? ' + dividends' : ''}
         </div>
       </Card>
+
+      {g.id !== '' && <CoreFundRow g={g} coreFund={coreFund} onSetCore={onSetCore} hide={hide} />}
 
       {g.id === '' && (
         <button onClick={onAssign} style={{ fontSize: 13, color: T.khaki, textAlign: 'left' }}>Assign these to accounts →</button>
@@ -1126,6 +1130,49 @@ function BudgetCashCard({ budget, invested, hide, onMove }) {
       <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
         Bank → investing adds money into a fund (like FDRXX or VMFXX); buy stocks from that fund.
       </div>
+    </Card>
+  );
+}
+
+// The account's cash fund: where money from the bank lands and what buys are paid from
+function CoreFundRow({ g, coreFund, onSetCore, hide }) {
+  const [editing, setEditing] = useState(false);
+  const [other, setOther] = useState('');
+  const [err, setErr] = useState(null);
+  const held = g.positions.find(p => p.symbol === coreFund);
+  const choices = [...new Set(g.positions.map(p => p.symbol))];
+  const pick = async sym => {
+    setErr(null);
+    try { await onSetCore(sym); setEditing(false); setOther(''); } catch (e) { setErr(e.message || 'Could not save'); }
+  };
+  return (
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 20 }} aria-hidden="true">💵</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>
+            Cash fund{coreFund ? `: ${coreFund}` : ''}
+            {held && <span style={{ fontWeight: 400, color: T.muted }}> · {money(held.value, hide)}</span>}
+          </div>
+          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>
+            {coreFund ? 'Money from the bank lands here; buys are paid from it.' : 'Pick the fund this account keeps its cash in, like FDRXX or VMFXX.'}
+          </div>
+        </div>
+        <button onClick={() => setEditing(v => !v)} style={{ fontSize: 13, fontWeight: 600, color: T.khaki }}>{editing ? 'Done' : coreFund ? 'Change' : 'Choose'}</button>
+      </div>
+      {editing && (
+        <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {choices.length > 0 && (
+            <Chips small options={choices.map(sym => ({ value: sym, label: sym }))} value={coreFund} onChange={pick} />
+          )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={other} onChange={e => setOther(e.target.value.toUpperCase())} placeholder="Another fund, e.g. SPAXX" style={{ ...inputStyle, flex: 1 }} />
+            <button onClick={() => other.trim() && pick(other.trim())} style={{ padding: '0 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}>Set</button>
+          </div>
+          {coreFund && <button onClick={() => pick(null)} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.muted }}>Clear cash fund</button>}
+          {err && <div style={{ fontSize: 12, color: T.red }}>{err}</div>}
+        </div>
+      )}
     </Card>
   );
 }

@@ -37,7 +37,10 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
   // must be chosen each time, so nothing lands in the wrong place by accident.
   // null = not chosen yet; '' = "No account" (only offered before any account exists).
   const [account, setAccountState] = useState(editing ? init.account ?? '' : null);
-  const setAccount = v => { setAccountState(v); setPayWith(null); };
+  // Picking an account (or switching type) starts with its cash fund chosen, when it has one
+  const coreOf = id => (id ? accounts.find(x => x.id === id)?.coreFund || null : null);
+  const corePay = id => (coreOf(id) ? `fund:${coreOf(id)}` : null);
+  const setAccount = v => { setAccountState(v); setPayWith(corePay(v, type)); };
   const [type, setType]       = useState(editing ? init.type : initialType === 'interest' ? 'dividend' : initialType);
   const [date, setDate]       = useState(editing ? init.date : toDateStr(new Date()));
   const [symbol, setSymbol]   = useState(editing ? str(init.symbol) : initialSymbol);
@@ -85,7 +88,7 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
     ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'owned']
     : type === 'sell' ? [...funds.map(h => `fund:${h.symbol}`), ...(bankTrade ? ['bank'] : []), 'out']
     : type === 'dividend' ? [...funds.map(h => `fund:${h.symbol}`), ...(sym ? ['reinvest'] : []), 'out']
-    : type === 'deposit' ? [...acctHold.map(h => `fund:${h.symbol}`), 'new']
+    : type === 'deposit' ? [...new Set([...(coreOf(account) ? [`fund:${coreOf(account)}`] : []), ...acctHold.map(h => `fund:${h.symbol}`)]), 'new']
     : acctHold.map(h => `fund:${h.symbol}`);
   // Editing: keep the fund it used selectable even if nothing else holds it now
   if (editing && init.fund && init.pay === `fund:${init.fund}` && type === init.type && account === (init.account ?? '') && !options.includes(init.pay)) options.unshift(init.pay);
@@ -169,7 +172,7 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
     setError(null);
     try {
       if (type === 'buy') await ensureAsset(sym, p);
-      if (type === 'deposit' && pay === 'new') await ensureAsset(fundSym, 1);
+      if (type === 'deposit' && (pay === 'new' || !assets[fundSym])) await ensureAsset(fundSym, 1);
       // Linked to a bank account: every saved half carries bankRef, and the budget gets the transfer
       const bankRef = bankId ? editRef || genId() : null;
       const out = bankRef ? toSave.map(t => ({ ...t, bankRef })) : toSave;
@@ -194,13 +197,13 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
     }
   };
 
-  const label = o => o === 'bank' ? (type === 'buy' ? 'From a bank account' : 'To a bank account') : o === 'owned' ? 'Already owned' : o === 'out' ? (type === 'dividend' ? 'Paid out' : 'Taken out') : o === 'reinvest' ? `Reinvest in ${sym}` : o === 'new' ? 'Another fund…' : o.slice(5);
+  const label = o => (o.startsWith('fund:') && o.slice(5) === coreOf(account) ? `${o.slice(5)} (cash)` : null) || (o === 'bank' ? (type === 'buy' ? 'From a bank account' : 'To a bank account') : o === 'owned' ? 'Already owned' : o === 'out' ? (type === 'dividend' ? 'Paid out' : 'Taken out') : o === 'reinvest' ? `Reinvest in ${sym}` : o === 'new' ? 'Another fund…' : o.slice(5));
   const flowLabel = { buy: 'Paid with', sell: 'Money goes to', dividend: 'Goes to', deposit: 'Into', withdraw: 'From' }[type];
 
   return (
     <Modal title={editing ? 'Edit transaction' : 'New Transaction'} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Chips options={TYPES} value={type} onChange={t => { setType(t); setPayWith(null); }} />
+        <Chips options={TYPES} value={type} onChange={t => { setType(t); setPayWith(corePay(account, t)); }} />
 
         <AccountPicker hook={hook} value={account} onChange={setAccount} />
 

@@ -178,6 +178,10 @@ export function useInvesting(userId) {
 
   const renameAccount = useCallback((id, name) => updateDoc(ref('invAccounts', id), { name: name.trim() }), [ref]);
 
+  // The fund an account keeps its uninvested money in (FDRXX, VMFXX…): Add money,
+  // Withdraw, buys, sells and dividends start with it picked. null clears it.
+  const setCoreFund = useCallback((id, symbol) => updateDoc(ref('invAccounts', id), { coreFund: symbol || deleteField() }), [ref]);
+
   // Its transactions stay, moved to "No account"
   const deleteAccount = useCallback(async (id) => {
     const batch = writeBatch(db);
@@ -285,7 +289,7 @@ export function useInvesting(userId) {
     txsLoaded,
     txs, assets, assetDocs, snapshots, alerts, portfolio, accounts, watchLists,
     addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark,
-    addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
+    addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, setCoreFund, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };
 }
