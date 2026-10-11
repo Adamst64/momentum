@@ -285,10 +285,15 @@ export default function App() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            {/* The logo goes to the main menu, like the bottom-right button */}
+            <button
+              onClick={() => setTab('home')}
+              aria-label="Main menu"
+              style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: 0, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
               <span style={{ fontSize: 22, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>Momentum</span>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.olive, marginBottom: 2 }} />
-            </div>
+            </button>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             {TAB_DEFS[tab] && (
