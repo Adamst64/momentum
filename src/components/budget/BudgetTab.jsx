@@ -1,12 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, BALANCE_CATEGORY, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary } from '../../utils/budget';
+import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary } from '../../utils/budget';
 import { Card, SectionTitle } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
 import ReceiptModal from './ReceiptModal';
+import MoneySheet from './MoneySheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -72,6 +73,7 @@ export default function BudgetTab({ hook }) {
   const [receiptFile, setReceiptFile] = useState(null);
   const [openGroup, setOpenGroup] = useState(null);
   const [scanMenu, setScanMenu] = useState(false);
+  const [moneyMode, setMoneyMode] = useState(null); // 'in' | 'out' for the account being viewed
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
   const [month, setMonth]           = useState(todayYM);
@@ -104,7 +106,6 @@ export default function BudgetTab({ hook }) {
   const changeMonth = n => { setMonth(m => shiftMonth(m, n)); setCatFilter(null); };
   const isCurrentMonth = month === todayYM();
   const filteredAccount = accountFilter && accountsById[accountFilter];
-  const cashAccount = accounts.find(a => a.type === 'cash');
 
   // First run: nothing to log against until there's an account
   if (accounts.length === 0) {
@@ -155,7 +156,13 @@ export default function BudgetTab({ hook }) {
             >
               <div style={{ fontSize: 13, fontWeight: 600, color: on ? T.khaki : T.text, whiteSpace: 'nowrap' }}>{a.name}</div>
               <div style={{ fontSize: 11, color: T.muted }}>{typeLabel(a.type)}</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>{money(bal)}</div>
+              {a.type === 'credit' ? (
+                <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>
+                  {money(Math.abs(bal))}{bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
+                </div>
+              ) : (
+                <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>{money(bal)}</div>
+              )}
             </button>
           );
         })}
@@ -175,21 +182,10 @@ export default function BudgetTab({ hook }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', rowGap: 6, fontSize: 13, marginTop: -6 }}>
           <span style={{ color: T.muted }}>Showing {filteredAccount.name} only</span>
           <span style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            {/* Cash in hand → this account, as a transfer (not income) */}
-            {filteredAccount.type !== 'cash' && cashAccount && (
-              <button
-                onClick={() => setEditingTx({ preset: { type: 'transfer', accountId: cashAccount.id, toAccountId: filteredAccount.id, note: 'Cash deposit' } })}
-                style={{ color: T.khaki, fontWeight: 600 }}
-              >
-                Deposit cash
-              </button>
-            )}
-            <button
-              onClick={() => setEditingTx({ preset: { type: 'income', category: BALANCE_CATEGORY.id, accountId: filteredAccount.id } })}
-              style={{ color: T.khaki, fontWeight: 600 }}
-            >
-              Add balance
+            <button onClick={() => setMoneyMode('in')} style={{ color: T.green, fontWeight: 600 }}>
+              {filteredAccount.type === 'credit' ? 'Pay off' : '+ Add money'}
             </button>
+            <button onClick={() => setMoneyMode('out')} style={{ color: T.khaki, fontWeight: 600 }}>− Take out</button>
             <button onClick={() => setEditingAcct(filteredAccount)} style={{ color: T.khaki, fontWeight: 600 }}>Edit</button>
             <button onClick={() => setAccountFilter(null)} style={{ color: T.muted }}>Show all</button>
           </span>
@@ -276,7 +272,7 @@ export default function BudgetTab({ hook }) {
                 <span style={{ fontSize: 14, fontWeight: 600, color: spent ? T.text : T.muted }}>{spent ? '−' + money(spent) : money(0)}</span>
               </div>
               <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
-                <span style={{ flex: 1 }}>{typeLabel(a.type)} · balance {money(balances[a.id] || 0)}</span>
+                <span style={{ flex: 1 }}>{typeLabel(a.type)} · {a.type === 'credit' ? `owed ${money(Math.max(0, -(balances[a.id] || 0)))}` : `balance ${money(balances[a.id] || 0)}`}</span>
                 {income > 0 && <span style={{ color: T.green }}>+{money(income)} in</span>}
               </div>
               {summary.spent > 0 && spent > 0 && (
@@ -405,6 +401,19 @@ export default function BudgetTab({ hook }) {
           />
         );
       })()}
+
+      {moneyMode && filteredAccount && (
+        <MoneySheet
+          account={filteredAccount}
+          mode={moneyMode}
+          accounts={accounts}
+          balances={balances}
+          categories={categories}
+          onSave={addTx}
+          onSpend={() => setEditingTx({ preset: { type: 'expense', accountId: filteredAccount.id } })}
+          onClose={() => setMoneyMode(null)}
+        />
+      )}
 
       {receiptFile && (
         <ReceiptModal

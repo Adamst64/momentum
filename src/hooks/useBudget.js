@@ -4,7 +4,8 @@ import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getApp } from 'firebase/app';
 import { db } from '../firebase';
 import { genId } from '../utils/id';
-import { accountBalances, mergeCategories } from '../utils/budget';
+import { todayStr } from '../utils/dateUtils';
+import { accountBalances, mergeCategories, BALANCE_CATEGORY } from '../utils/budget';
 
 // users/{uid}/budgetAccounts/{id}   — { name, type: 'cash'|'debit'|'credit'|'savings', order }
 // users/{uid}/budgetCategories/{id} — edits to a built-in category, or a custom one (see mergeCategories)
@@ -39,9 +40,20 @@ export function useBudget(userId) {
   const balances = useMemo(() => accountBalances(accounts, txs), [accounts, txs]);
   const categories = useMemo(() => mergeCategories(categoryDocs), [categoryDocs]);
 
-  const addAccount = useCallback(async ({ name, type }) => {
+  // opening: cents already in the account, saved as an "Existing balance" entry (not income)
+  const addAccount = useCallback(async ({ name, type, opening = 0 }) => {
     const order = accounts.reduce((m, a) => Math.max(m, a.order ?? 0), -1) + 1;
-    await setDoc(ref('budgetAccounts', genId()), { name: name.trim(), type, order });
+    const id = genId();
+    const batch = writeBatch(db);
+    batch.set(ref('budgetAccounts', id), { name: name.trim(), type, order });
+    if (opening > 0 && type !== 'credit') {
+      batch.set(ref('budgetTxs', genId()), {
+        type: 'income', amount: opening, date: todayStr(), accountId: id, toAccountId: null,
+        category: BALANCE_CATEGORY.id, note: '', createdAt: new Date().toISOString(),
+      });
+    }
+    await batch.commit();
+    return id;
   }, [ref, accounts]);
 
   const updateAccount = useCallback(async (id, { name, type }) => {

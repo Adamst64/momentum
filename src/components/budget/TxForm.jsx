@@ -70,7 +70,10 @@ export default function TxForm({ initial, preset, accounts, categories, defaultA
   const cents = parseAmount(amount);
   // Deleted categories aren't offered, unless this transaction already uses one
   const kind = type === 'income' ? 'income' : 'expense';
-  const cats = categories.filter(c => c.kind === kind && (!c.hidden || c.id === initial?.category));
+  const isCredit = accounts.find(a => a.id === accountId)?.type === 'credit';
+  // A credit card never has a starting balance (it starts at $0 owed)
+  const cats = categories.filter(c => c.kind === kind && (!c.hidden || c.id === initial?.category)
+    && !(isCredit && c.id === 'balance' && initial?.category !== 'balance'));
   const catOk = type === 'transfer' || cats.some(c => c.id === category);
   const accountOk = !!accountId && (type !== 'transfer' || (toAccountId && toAccountId !== accountId));
   const canSave = !!cents && catOk && accountOk && !saving;
