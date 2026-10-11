@@ -95,6 +95,18 @@ const SECTIONS = {
       </>
     ),
   },
+  budget: {
+    color: '#5BA4E6',
+    blurb: 'Accounts & spending',
+    icon: c => (
+      <>
+        <path d="M4 7.5A2.5 2.5 0 016.5 5H18a1 1 0 011 1v2" stroke={c} strokeWidth="1.6" strokeLinecap="round" />
+        <rect x="3.5" y="7.5" width="17" height="12.5" rx="2.5" fill={c} fillOpacity="0.22" stroke={c} strokeWidth="1.6" />
+        <path d="M20.5 11.5h-4a2 2 0 000 4h4" stroke={c} strokeWidth="1.6" strokeLinejoin="round" />
+        <circle cx="16.5" cy="13.5" r="1" fill={c} />
+      </>
+    ),
+  },
 };
 
 export default function HomeMenu({ tabs, onOpen }) {

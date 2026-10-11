@@ -83,6 +83,16 @@ const TAB_DEFS = {
       </svg>
     ),
   },
+  budget: {
+    label: 'Budget',
+    icon: (on) => (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="6" width="18" height="13" rx="2.5" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <path d="M3 10h18" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" />
+        <path d="M15 15h3" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 };
 
 export { TAB_DEFS };

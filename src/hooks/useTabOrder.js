@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export const ALL_TABS = ['routines', 'tasks', 'work', 'shopping', 'birthdays', 'notes', 'lists', 'investing'];
+export const ALL_TABS = ['routines', 'tasks', 'work', 'shopping', 'birthdays', 'notes', 'lists', 'investing', 'budget'];
 
 export function useTabOrder(initial) {
   // Keep only known tabs and append any new ones the saved order predates

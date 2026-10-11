@@ -13,6 +13,7 @@ import WorkTab from './components/work/WorkTab';
 import NotesTab from './components/notes/NotesTab';
 import ListsTab from './components/lists/ListsTab';
 import InvestingTab from './components/investing/InvestingTab';
+import BudgetTab from './components/budget/BudgetTab';
 import NoteEditor from './components/notes/NoteEditor';
 import CreateTaskModal from './components/tasks/CreateTaskModal';
 import QuickAddSheet from './components/QuickAddSheet';
@@ -30,6 +31,7 @@ import { useWork } from './hooks/useWork';
 import { useNotes } from './hooks/useNotes';
 import { usePersonalLists } from './hooks/usePersonalLists';
 import { useInvesting } from './hooks/useInvesting';
+import { useBudget } from './hooks/useBudget';
 import { useTabOrder, ALL_TABS } from './hooks/useTabOrder';
 import { registerPushToken, getNotificationPermission } from './utils/pushNotifications';
 
@@ -119,6 +121,7 @@ export default function App() {
   const notesHook     = useNotes(userId);
   const listsHook     = usePersonalLists(userId);
   const investingHook = useInvesting(userId);
+  const budgetHook    = useBudget(userId);
 
   // Open whatever a shortcut link asked for, once signed in
   useEffect(() => {
@@ -337,6 +340,7 @@ export default function App() {
         {tab === 'notes'     && <NotesTab hook={notesHook} />}
         {tab === 'lists'     && <ListsTab hook={listsHook} />}
         {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} />}
+        {tab === 'budget'    && <BudgetTab hook={budgetHook} />}
 
         {quickAdd && (
           <QuickAddSheet
