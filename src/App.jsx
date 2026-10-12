@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { T } from './theme';
@@ -45,6 +45,13 @@ const writePrefs = v => { try { localStorage.setItem(PREFS_KEY, JSON.stringify(v
 // Home-screen shortcuts and links can open the app at ?action=<one of these>
 const URL_ACTIONS = ['add-task', 'add-item', 'add-list-item', 'new-note', 'review'];
 const REVIEW_OPENED_KEY = 'momentum_review_opened_for';
+// A review reminder stays "for tonight" until 4 AM the next morning (at most 12 hours)
+function reviewWindowEnd(sentAt) {
+  const end = new Date(sentAt);
+  if (end.getHours() >= 4) end.setDate(end.getDate() + 1);
+  end.setHours(4, 0, 0, 0);
+  return Math.min(end.getTime(), sentAt + 12 * 60 * 60 * 1000);
+}
 
 export default function App() {
   const { user, signIn, signUp, logOut, changePassword, resetPassword, applyPasswordReset, verifyResetCode } = useAuth();
@@ -213,10 +220,21 @@ export default function App() {
     };
   }, []);
 
-  // Opening the app soon after the review reminder opens the review, once per
-  // reminder. iOS doesn't reliably tell the app which notification was tapped
-  // (especially when the app was closed), so this doesn't depend on the tap.
+  // The review reminder opens the review, once per reminder: the first time the app
+  // comes forward after it was sent, any time that evening (until 4 AM). iOS doesn't
+  // reliably tell the app which notification was tapped, so this doesn't depend on
+  // the tap. (It used to stop after 30 minutes, so tapping it later did nothing.)
+  // Until it's been opened, a banner on every screen offers it too.
   const reviewSentAt = dailyReview?.lastSentAt;
+  const [reviewOpenedFor, setReviewOpenedFor] = useState(() => { try { return localStorage.getItem(REVIEW_OPENED_KEY); } catch { return null; } });
+  const reviewLive = !!reviewSentAt && Date.now() < reviewWindowEnd(reviewSentAt);
+  const reviewPending = reviewLive && reviewOpenedFor !== String(reviewSentAt);
+  const markReviewOpened = useCallback(() => {
+    if (!reviewSentAt) return;
+    try { localStorage.setItem(REVIEW_OPENED_KEY, String(reviewSentAt)); } catch { /* storage unavailable */ }
+    setReviewOpenedFor(String(reviewSentAt));
+  }, [reviewSentAt]);
+  useEffect(() => { if (showReview) markReviewOpened(); }, [showReview, markReviewOpened]);
   const visibleSince = useRef(Date.now());
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') visibleSince.current = Date.now(); };
@@ -227,14 +245,11 @@ export default function App() {
     if (!reviewSentAt) return;
     const check = () => {
       if (document.visibilityState !== 'visible') return;
-      if (Date.now() - reviewSentAt > 30 * 60 * 1000) return;
+      if (Date.now() >= reviewWindowEnd(reviewSentAt)) return;
       // Only right after coming forward (the reminder's data can arrive a few seconds
       // later), never in the middle of using the app
-      if (Date.now() - visibleSince.current > 15 * 1000) return;
-      try {
-        if (localStorage.getItem(REVIEW_OPENED_KEY) === String(reviewSentAt)) return;
-        localStorage.setItem(REVIEW_OPENED_KEY, String(reviewSentAt));
-      } catch { /* storage unavailable */ }
+      if (Date.now() - visibleSince.current > 30 * 1000) return;
+      try { if (localStorage.getItem(REVIEW_OPENED_KEY) === String(reviewSentAt)) return; } catch { /* storage unavailable */ }
       setShowReview(true);
     };
     check();
@@ -331,6 +346,20 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      {reviewPending && !showReview && (
+        <button
+          onClick={() => setShowReview(true)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, width: 'calc(100% - 32px)', margin: '12px 16px 0', padding: '12px 14px',
+            borderRadius: 14, background: '#2A3A1A', border: `1px solid ${T.olive}`, textAlign: 'left',
+          }}
+        >
+          <span style={{ fontSize: 20 }} aria-hidden="true">🌙</span>
+          <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: T.text }}>Your daily review is ready</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: T.khaki }}>Open ›</span>
+        </button>
+      )}
 
       <main style={{
         paddingTop: 20,
