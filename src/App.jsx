@@ -347,7 +347,7 @@ export default function App() {
         {tab === 'notes'     && <NotesTab hook={notesHook} />}
         {tab === 'lists'     && <ListsTab hook={listsHook} />}
         {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} budget={budgetHook} />}
-        {tab === 'budget'    && <BudgetTab hook={budgetHook} workEnabled={showWork} />}
+        {tab === 'budget'    && <BudgetTab hook={budgetHook} workEnabled={showWork} investing={investingHook} />}
 
         {quickAdd && (
           <QuickAddSheet

@@ -8,6 +8,7 @@ import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditIn
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
+import TransferSheet from '../TransferSheet';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
@@ -66,6 +67,11 @@ export default function InvestingTab({ hook, userId, budget }) {
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
   const [manageAccounts, setManageAccounts] = useState(false);
   const [editing, setEditing] = useState(null); // transaction being edited from All transactions
+  const [transfer, setTransfer] = useState(false);
+  // Hero: investments only, or net worth (investments + Budget cash)
+  const hasCash = (budget?.accounts?.length || 0) > 0;
+  const [heroMode, setHeroModeState] = useState(() => { try { return localStorage.getItem('momentum_hero') || 'inv'; } catch { return 'inv'; } });
+  const setHeroMode = v => { setHeroModeState(v); setScrub(null); setSpan(null); try { localStorage.setItem('momentum_hero', v); } catch { /* storage unavailable */ } };
   // Tapping an account opens its own page (null = the Portfolio list). Leaving
   // the tab or switching views always comes back to the list.
   const [openAccountId, setOpenAccountId] = useState(null);
@@ -121,6 +127,17 @@ export default function InvestingTab({ hook, userId, budget }) {
 
   const ret = useMemo(() => periodReturn(txs, series, portfolio.value, period, today), [txs, series, portfolio.value, period, today]);
 
+  // Budget cash on any date: running total of every budget entry up to that day
+  // (credit cards count as negative, so this is cash minus what's owed)
+  const worth = heroMode === 'worth' && hasCash;
+  const cashSteps = useMemo(() => cashTimeline(budget?.accounts || [], budget?.txs || []), [budget?.accounts, budget?.txs]);
+  const cashNow = useMemo(() => (budget?.accounts || []).reduce((t, a) => t + (budget.balances[a.id] || 0), 0) / 100, [budget?.accounts, budget?.balances]);
+  const cashAt = useCallback(d => {
+    let lo = 0, hi = cashSteps.length - 1, v = 0;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (cashSteps[m].date <= d) { v = cashSteps[m].total; lo = m + 1; } else hi = m - 1; }
+    return v / 100;
+  }, [cashSteps]);
+
   // Chart: the value history in the selected period, plus "now". Only market
   // days, so weekends and holidays don't show up as flat stretches. "Now" stands
   // in for the session current prices belong to (the last one when closed).
@@ -131,8 +148,15 @@ export default function InvestingTab({ hook, userId, budget }) {
     const pts = series
       .filter(s => s.date > start && s.date < nowDate && isMarketDay(s.date))
       .sort((a, b) => a.date.localeCompare(b.date));
-    return txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
-  }, [series, period, today, portfolio.value, portfolio.netDeposits, txs.length]);
+    const out = txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
+    if (!worth) return out;
+    // Net worth: each day's investments plus Budget cash that day (no deposits to
+    // exclude: money moving between bank and investing stays inside net worth)
+    return out.map((p, i) => {
+      const cash = i === out.length - 1 ? cashNow : cashAt(p.date);
+      return { date: p.date, label: p.label, value: p.value + cash, invested: p.value, cash };
+    });
+  }, [series, period, today, portfolio.value, portfolio.netDeposits, txs.length, worth, cashAt, cashNow]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
@@ -208,7 +232,7 @@ export default function InvestingTab({ hook, userId, budget }) {
 
   // Headline: the touched chart point, else the current value
   const first = chartPoints[0];
-  const headValue = span ? span.to.value : scrub ? scrub.value : portfolio.value;
+  const headValue = span ? span.to.value : scrub ? scrub.value : worth ? portfolio.value + cashNow : portfolio.value;
   const scrubChange = scrub && first ? scrub.value - first.value : null;
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
 
@@ -235,6 +259,7 @@ export default function InvestingTab({ hook, userId, budget }) {
         </Modal>
       )}
       {trade && <TxModal hook={hook} budget={budget} initialType={trade.type} initialSymbol={trade.symbol || ''} onClose={() => setTrade(null)} />}
+      {transfer && <TransferSheet investing={hook} budget={budget} onClose={() => setTransfer(false)} />}
       {manageAccounts && <AccountsModal hook={hook} onClose={() => setManageAccounts(false)} />}
       {editing && <TxModal hook={hook} budget={budget} editing={editing} onClose={() => setEditing(null)} />}
       {open && (
@@ -324,9 +349,23 @@ export default function InvestingTab({ hook, userId, budget }) {
           >+</button>
         </div>
 
+        {hasCash && txs.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <Chips small options={[{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }]} value={worth ? 'worth' : 'inv'} onChange={setHeroMode} />
+          </div>
+        )}
         <div style={{ marginTop: 10, fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
           {money(headValue, hide)}
         </div>
+        {worth && (() => {
+          const p = span ? span.to : scrub;
+          const inv = p ? p.invested : portfolio.value, cash = p ? p.cash : cashNow;
+          return (
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+              Investments <b style={{ color: T.text, fontWeight: 600 }}>{money(inv, hide)}</b> · Cash <b style={{ color: cash < 0 ? T.red : T.text, fontWeight: 600 }}>{money(cash, hide)}</b>
+            </div>
+          );
+        })()}
 
         {span ? (() => {
           // Gain between two dates, not counting money added or withdrawn in between
@@ -350,7 +389,15 @@ export default function InvestingTab({ hook, userId, budget }) {
           </div>
         ) : (
           <>
-            {ret && !ret.unavailable && (
+            {worth && chartPoints.length > 1 && (() => {
+              const d = chartPoints[chartPoints.length - 1].value - chartPoints[0].value;
+              return (
+                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, color: gainColor(d) }}>
+                  {signedMoney(d, hide)} <span style={{ color: T.muted, fontWeight: 400 }}>· {period === 'ALL' ? 'since you started' : periodLabel}</span>
+                </div>
+              );
+            })()}
+            {!worth && ret && !ret.unavailable && (
               <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, color: gainColor(ret.gain) }}>
                 {signedMoney(ret.gain, hide)} ({pct(ret.pct)}) <span style={{ color: T.muted, fontWeight: 400 }}>· {period === 'ALL' ? 'all time' : periodLabel}</span>
               </div>
@@ -375,7 +422,7 @@ export default function InvestingTab({ hook, userId, budget }) {
               <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={v => { setPeriod(v); setScrub(null); }} />
             </div>
             <div style={{ fontSize: 12, color: T.muted, marginTop: 10, lineHeight: 1.45 }}>
-              {ret?.unavailable
+              {worth ? 'Net worth = investments + every Budget account (credit cards count as what you owe).' : ret?.unavailable
                 ? `Not enough history for ${periodLabel} yet${ret.trackingSince ? ` (values saved since ${formatShortDate(ret.trackingSince)})` : ''}.`
                 : bench !== null && ret?.pct !== null && ret?.pct !== undefined
                   ? <>S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts</>
@@ -395,6 +442,13 @@ export default function InvestingTab({ hook, userId, budget }) {
           </button>
         )}
       </Card>
+
+      {hasCash && (
+        <button onClick={() => setTransfer(true)}
+          style={{ padding: 11, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
+          ⇄ Transfer money
+        </button>
+      )}
 
       <Chips options={VIEWS} value={view} onChange={setView} />
 
@@ -429,7 +483,7 @@ export default function InvestingTab({ hook, userId, budget }) {
       )}
 
       {view === 'portfolio' && budget?.accounts?.length > 0 && (
-        <BudgetCashCard budget={budget} invested={portfolio.value} hide={hide} onMove={type => setTrade({ type })} />
+        <BudgetCashCard budget={budget} hide={hide} />
       )}
 
       {view === 'watchlist' && (
@@ -1096,42 +1150,51 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
   );
 }
 
-// Cash: every Budget account, credit cards as what's owed, with the total and
-// net worth (investments + cash). Money moves either way through Add money / Withdraw.
-function BudgetCashCard({ budget, invested, hide, onMove }) {
+// Cash: every Budget account, folded like the other accounts; tap to see each one.
+// Credit cards show as what's owed.
+function BudgetCashCard({ budget, hide }) {
   const { accounts, balances } = budget;
+  const [open, setOpen] = useState(false);
   const cash = accounts.reduce((s, a) => s + (balances[a.id] || 0), 0) / 100;
-  const fmt = c => money(c / 100, hide);
-  const pill = { flex: 1, padding: '9px 10px', borderRadius: 10, fontSize: 13, fontWeight: 600, border: `1px solid ${T.cardBorder}`, background: T.bg, color: T.khaki };
   return (
-    <Card>
-      <SectionTitle right={<span style={{ fontSize: 15, fontWeight: 700, color: cash < 0 ? T.red : T.text }}>{money(cash, hide)}</span>}>
-        Cash · from Budget
-      </SectionTitle>
-      {accounts.map(a => {
-        const b = balances[a.id] || 0;
+    <Card style={{ padding: '12px 16px' }}>
+      <button onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left' }}>
+        <span style={{ fontSize: 18 }} aria-hidden="true">💵</span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text }}>Cash</span>
+          <span style={{ display: 'block', fontSize: 12, color: T.muted }}>{accounts.length} Budget account{accounts.length === 1 ? '' : 's'}</span>
+        </span>
+        <span style={{ fontSize: 16, fontWeight: 700, color: cash < 0 ? T.red : T.text, fontVariantNumeric: 'tabular-nums' }}>{money(cash, hide)}</span>
+        <span style={{ color: T.muted, fontSize: 12 }}>{open ? '▴' : '▾'}</span>
+      </button>
+      {open && accounts.map(a => {
+        const b = (balances[a.id] || 0) / 100;
         const credit = a.type === 'credit';
         return (
-          <div key={a.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '6px 0', borderTop: `1px solid ${T.cardBorder}`, fontSize: 14 }}>
+          <div key={a.id} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '7px 0 0', marginTop: 7, borderTop: `1px solid ${T.cardBorder}`, fontSize: 14 }}>
             <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
             <span style={{ fontSize: 11, color: T.muted }}>{credit ? (b < 0 ? 'owed' : 'credit card') : a.type === 'savings' ? 'savings' : a.type === 'cash' ? 'cash' : 'debit'}</span>
-            <span style={{ minWidth: 86, textAlign: 'right', fontWeight: 600, color: b < 0 ? T.red : T.text }}>{b < 0 ? '−' : ''}{fmt(Math.abs(b))}</span>
+            <span style={{ minWidth: 86, textAlign: 'right', fontWeight: 600, color: b < 0 ? T.red : T.text }}>{b < 0 ? '−' : ''}{money(Math.abs(b), hide)}</span>
           </div>
         );
       })}
-      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0 2px', borderTop: `1px solid ${T.cardBorder}`, fontSize: 13 }}>
-        <span style={{ color: T.muted }}>Net worth (investments + cash)</span>
-        <span style={{ fontWeight: 700, color: T.text }}>{money(invested + cash, hide)}</span>
-      </div>
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        <button onClick={() => onMove('deposit')} style={pill}>Bank → investing</button>
-        <button onClick={() => onMove('withdraw')} style={pill}>Investing → bank</button>
-      </div>
-      <div style={{ fontSize: 11, color: T.muted, marginTop: 6, lineHeight: 1.4 }}>
-        Bank → investing adds money into a fund (like FDRXX or VMFXX); buy stocks from that fund.
-      </div>
     </Card>
   );
+}
+
+// Running total of all Budget money by date: [{ date, total (cents) }], one step per day
+function cashTimeline(accounts, txs) {
+  const ids = new Set(accounts.map(a => a.id));
+  const byDay = {};
+  for (const t of txs) {
+    let d = 0;
+    if (t.type === 'expense' && ids.has(t.accountId)) d = -t.amount;
+    else if (t.type === 'income' && ids.has(t.accountId)) d = t.amount;
+    else if (t.type === 'transfer') d = (ids.has(t.toAccountId) ? t.amount : 0) - (ids.has(t.accountId) ? t.amount : 0);
+    if (d) byDay[t.date] = (byDay[t.date] || 0) + d;
+  }
+  let total = 0;
+  return Object.keys(byDay).sort().map(date => ({ date, total: (total += byDay[date]) }));
 }
 
 // The account's cash fund: where money from the bank lands and what buys are paid from

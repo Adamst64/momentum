@@ -11,6 +11,7 @@ import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
 import SpendHighlights from './SpendHighlights';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import TransferSheet from '../TransferSheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -77,12 +78,13 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
   );
 }
 
-export default function BudgetTab({ hook, workEnabled }) {
+export default function BudgetTab({ hook, workEnabled, investing }) {
   const {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
     addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork,
   } = hook;
   const [investNote, setInvestNote] = useState(false);
+  const [transfer, setTransfer] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
   const [openGroup, setOpenGroup] = useState(null);
   const [scanMenu, setScanMenu] = useState(false);
@@ -194,7 +196,8 @@ export default function BudgetTab({ hook, workEnabled }) {
             </div>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', margin: '0 -16px', padding: '0 16px', scrollbarWidth: 'none' }}>
+          {/* Every account at a glance: a grid, no sideways scrolling */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 8 }}>
             {accounts.map(a => {
               const on = accountFilter === a.id;
               const bal = balances[a.id] || 0;
@@ -203,18 +206,18 @@ export default function BudgetTab({ hook, workEnabled }) {
                   key={a.id}
                   onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
                   style={{
-                    flexShrink: 0, minWidth: 120, padding: '10px 12px', borderRadius: 14, textAlign: 'left',
+                    minWidth: 0, padding: '9px 10px', borderRadius: 12, textAlign: 'left',
                     background: on ? '#2A3A1A' : T.card, border: `1px solid ${on ? T.olive : T.cardBorder}`,
                   }}
                 >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: on ? T.khaki : T.text, whiteSpace: 'nowrap' }}>{a.name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: on ? T.khaki : T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{a.name}</div>
                   <div style={{ fontSize: 11, color: T.muted }}>{typeLabel(a.type)}</div>
                   {a.type === 'credit' ? (
                     <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>
                       {money(Math.abs(bal))}{bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
                     </div>
                   ) : (
-                    <div style={{ fontSize: 16, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 6 }}>{money(bal)}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: bal < 0 ? T.red : T.text, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{money(bal)}</div>
                   )}
                 </button>
               );
@@ -223,8 +226,8 @@ export default function BudgetTab({ hook, workEnabled }) {
               onClick={() => setEditingAcct('new')}
               aria-label="Add account"
               style={{
-                flexShrink: 0, width: 56, borderRadius: 14, border: `1px dashed ${T.subtle}`,
-                color: T.muted, fontSize: 24,
+                minHeight: 64, borderRadius: 12, border: `1px dashed ${T.subtle}`,
+                color: T.muted, fontSize: 22,
               }}
             >
               +
@@ -257,10 +260,10 @@ export default function BudgetTab({ hook, workEnabled }) {
           onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
         />
         <button
-          onClick={() => setShowCategories(true)}
-          style={{ padding: '14px 16px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+          onClick={() => setTransfer(true)}
+          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
         >
-          Categories
+          ⇄ Transfer
         </button>
       </div>
 
@@ -278,8 +281,12 @@ export default function BudgetTab({ hook, workEnabled }) {
       )}
 
       {/* Period: a month, a year, or all time */}
-      <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
-        value={range} onChange={v => { setRange(v); setCatFilter(null); setShowList(false); }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
+          value={range} onChange={v => { setRange(v); setCatFilter(null); setShowList(false); }} />
+        <span style={{ flex: 1 }} />
+        <button onClick={() => setShowCategories(true)} style={{ fontSize: 13, fontWeight: 600, color: T.khaki }}>Categories</button>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -6 }}>
         {range !== 'all' ? (
           <button onClick={() => changeMonth(-1)} aria-label={`Previous ${range}`} style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
@@ -483,6 +490,8 @@ export default function BudgetTab({ hook, workEnabled }) {
           onClose={() => setMoneyMode(null)}
         />
       )}
+
+      {transfer && investing && <TransferSheet investing={investing} budget={hook} onClose={() => setTransfer(false)} />}
 
       {receiptFile && (
         <ReceiptModal
