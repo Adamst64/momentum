@@ -1,5 +1,5 @@
 const { HttpsError } = require('firebase-functions/v2/https');
-const { isMarketDay } = require('./marketCalendar');
+const { isMarketDay, closeMinutes } = require('./marketCalendar');
 
 // Finnhub API key lives in Firestore at config/finnhub { key }. Clients can't
 // read it (no rule matches config/), only these functions via the Admin SDK.
@@ -82,8 +82,8 @@ async function extendedQuote(symbol) {
   for (let i = ts.length - 1; i >= 0; i--) {
     if (!(closes[i] > 0)) continue;
     const when = new Date(ts[i] * 1000);
-    const m = easternNow(when).minutes;
-    const session = m < 9 * 60 + 30 ? 'pre' : m >= 16 * 60 ? 'post' : null;
+    const { minutes: m, today } = easternNow(when);
+    const session = m < 9 * 60 + 30 ? 'pre' : m >= closeMinutes(today) ? 'post' : null;
     return session ? { extPrice: Math.round(closes[i] * 1e4) / 1e4, extSession: session, extTime: when.toISOString() } : null;
   }
   return null;
@@ -439,8 +439,8 @@ function easternNow(date = new Date()) {
   };
 }
 
-// Market day 9:30–16:00 ET
-const isRegularSession = et => et.weekday && et.minutes >= 9 * 60 + 30 && et.minutes < 16 * 60;
+// Market day 9:30–16:00 ET (13:00 on early-close days)
+const isRegularSession = et => et.weekday && et.minutes >= 9 * 60 + 30 && et.minutes < closeMinutes(et.today);
 // Market day 4:00–20:00 ET: regular session plus pre-market and after hours
 const isTradingDay = et => et.weekday && et.minutes >= 4 * 60 && et.minutes <= 20 * 60;
 

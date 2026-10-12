@@ -92,4 +92,13 @@ function priceDate(now = new Date()) {
   return lastMarketDay(iso(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()));
 }
 
-module.exports = { marketHolidays, isMarketDay, lastMarketDay, easternDate, priceDate };
+// Minutes past midnight ET the regular session ends: 1 PM on July 3, Black Friday
+// and Christmas Eve when they're market days, otherwise 4 PM
+function closeMinutes(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const early = isMarketDay(dateStr) && ((m === 7 && d === 3) || (m === 12 && d === 24)
+    || (m === 11 && d === Number(nthWeekday(y, 11, 4, 4).slice(8)) + 1));
+  return early ? 13 * 60 : 16 * 60;
+}
+
+module.exports = { marketHolidays, isMarketDay, lastMarketDay, easternDate, priceDate, closeMinutes };

@@ -1,5 +1,5 @@
 import { toDateStr, addDays } from './dateUtils';
-import { priceDate as currentSession } from './marketCalendar';
+import { priceDate as currentSession, easternDate, earlyClose } from './marketCalendar';
 
 // Transactions (users/{uid}/invTransactions):
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
@@ -23,19 +23,30 @@ import { priceDate as currentSession } from './marketCalendar';
 export const CASH_ID = 'cash'; // old invAssets doc for a cash target %, ignored
 export const BENCHMARK = 'SPY'; // S&P 500 ETF; its price is saved with each daily snapshot
 
-// Pre-market / after-hours price saved on an invAssets doc (extPrice, extSession,
-// extTime), compared with the last regular-session price. Null during the
-// regular session (weekdays 9:30–16:00 ET) or when it's older than 4 days.
+// Pre-market / after-hours price saved on an invAssets doc (extPrice, extTime),
+// compared with the last regular-session price. Which session it is comes from
+// the trade's own time (pre-market 4:00–9:30, after hours from the close to 8 PM ET),
+// and it only shows while nothing newer has happened: a pre-market price is gone
+// once that day's session opens, an after-hours one once the next session opens.
+// So this morning's pre-market price never shows as "Pre-market" after the close.
+// Null during the regular session and when older than 4 days.
 export function extendedPrice(a, now = new Date()) {
   if (!a?.extPrice || !a.price || !a.extTime) return null;
-  if (now - new Date(a.extTime) > 4 * 864e5) return null;
-  const et = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
-  const m = et.getHours() * 60 + et.getMinutes();
-  if (et.getDay() >= 1 && et.getDay() <= 5 && m >= 9 * 60 + 30 && m < 16 * 60) return null;
+  const at = new Date(a.extTime);
+  if (now - at > 4 * 864e5 || at > now) return null;
+  const OPEN = 9 * 60 + 30;
+  const t = easternDate(at);
+  const close = earlyClose(t.date) ? 13 * 60 : 16 * 60;
+  const session = t.minutes < OPEN ? 'pre' : t.minutes >= close ? 'post' : null;
+  if (!session) return null;
+  const n = easternDate(now);
+  // Pre-market: same day, before the open. After hours: no session has opened since that day.
+  const current = session === 'pre' ? n.date === t.date && n.minutes < OPEN : currentSession(now) === t.date;
+  if (!current) return null;
   return {
     price: a.extPrice,
-    session: a.extSession,
-    label: a.extSession === 'pre' ? 'Pre-market' : 'After hours',
+    session,
+    label: session === 'pre' ? 'Pre-market' : 'After hours',
     change: a.extPrice - a.price,
     pct: (a.extPrice - a.price) / a.price,
     time: a.extTime,
