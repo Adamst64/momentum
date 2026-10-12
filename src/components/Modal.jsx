@@ -3,9 +3,20 @@ import ReactDOM from 'react-dom';
 import { T } from '../theme';
 import { useBackHandler } from '../hooks/useBackHandler';
 
-export default function Modal({ title, onClose, children }) {
+// While any sheet is open the page behind can't scroll (it used to scroll along
+// with the sheet and show through underneath). Counted, since sheets stack.
+let openSheets = 0;
+
+// full: a whole-screen page (a holding's details) instead of a sheet that's only
+// as tall as its content
+export default function Modal({ title, onClose, children, full = false }) {
   useBackHandler(true, onClose);
   const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    if (openSheets++ === 0) document.body.style.overflow = 'hidden';
+    return () => { if (--openSheets === 0) document.body.style.overflow = ''; };
+  }, []);
 
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
@@ -17,7 +28,10 @@ export default function Modal({ title, onClose, children }) {
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const update = () => setKbHeight(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    // Only a keyboard counts: when nothing is being typed in, a viewport change
+    // (toolbars, scrolling) must not lift the sheet off the bottom
+    const typing = () => { const el = document.activeElement; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); };
+    const update = () => setKbHeight(typing() ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0);
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
     return () => {
@@ -45,11 +59,16 @@ export default function Modal({ title, onClose, children }) {
         style={{
           width: '100%',
           background: T.card,
-          borderRadius: '20px 20px 0 0',
-          padding: `20px 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`,
+          borderRadius: full ? 0 : '20px 20px 0 0',
+          padding: full
+            ? `calc(16px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`
+            : `20px 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`,
           // Never taller than the space above the keyboard, or its top goes off-screen
-          maxHeight: 'min(85vh, calc(100% - 24px))',
+          ...(full ? { height: '100%' } : { maxHeight: 'min(85vh, calc(100% - 24px))' }),
+          boxSizing: 'border-box',
           overflowY: 'auto',
+          overscrollBehavior: 'contain', // scrolling to the end doesn't drag the page behind
+          WebkitOverflowScrolling: 'touch',
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>

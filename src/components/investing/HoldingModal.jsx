@@ -163,7 +163,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
   );
 
   return (
-    <Modal title={symbol} onClose={onClose}>
+    <Modal title={symbol} onClose={onClose} full>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {asset.name && <div style={{ fontSize: 13, color: T.muted, marginTop: -12 }}>{asset.name}</div>}
 
