@@ -98,6 +98,7 @@ export function monthSummary(txs, categories) {
     if (t.type === 'income' && t.category !== BALANCE_CATEGORY.id) income += t.amount;
   }
   const byCategory = Object.entries(byCat)
+    .filter(([, total]) => total > 0) // only fully refunded purchases in it
     .map(([id, total]) => ({ ...lookupCategory(categories, id), id, total }))
     .sort((a, b) => b.total - a.total);
   return { spent, income, net: income - spent, categories: byCategory };
@@ -163,15 +164,18 @@ export function groceryBreakdown(txs) {
     g.items.push(item);
   };
   for (const t of txs) {
-    if (t.type !== 'expense' || !t.items?.length) continue;
+    // Items describe the receipt as bought, so a refunded receipt counts at its original price;
+    // a fully refunded one is left out
+    if (t.type !== 'expense' || !t.items?.length || !t.amount) continue;
+    const paid = t.originalAmount ?? t.amount;
     receipts++;
-    total += t.amount;
+    total += paid;
     let covered = 0;
     for (const i of t.items) {
       add(OLD_GROUPS[i.group] || i.group, { name: i.name, amount: i.amount, date: t.date });
       covered += i.amount;
     }
-    if (t.amount - covered) add('tax', { name: t.note || 'Receipt', amount: t.amount - covered, date: t.date });
+    if (paid - covered) add('tax', { name: t.note || 'Receipt', amount: paid - covered, date: t.date });
   }
   const groups = Object.values(by).filter(g => g.total).sort((a, b) => b.total - a.total);
   groups.forEach(g => g.items.sort((a, b) => b.amount - a.amount));
@@ -207,7 +211,7 @@ export function nextRecurringDate(rule, today) {
 // Months run from the category's first entry to now; finished months are before
 // currentYM (the current one is still adding up), so averages use only those.
 export function categoryStats(txs, catId, currentYM) {
-  const own = txs.filter(t => t.category === catId && (t.type === 'expense' || t.type === 'income'));
+  const own = txs.filter(t => t.category === catId && (t.type === 'expense' || t.type === 'income') && t.amount > 0);
   if (!own.length) return null;
   const kind = own[0].type;
   const first = own.reduce((m, t) => (t.date < m ? t.date : m), own[0].date).slice(0, 7);
@@ -262,3 +266,5 @@ export function categoryStats(txs, catId, currentYM) {
     byAccount: Object.entries(byAccount).map(([id, amt]) => ({ id, total: amt })).sort((a, b) => b.total - a.total),
   };
 }
+
+export const refundedTotal = t => (t.refunds || []).reduce((s, r) => s + r.amount, 0);

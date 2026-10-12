@@ -17,7 +17,9 @@ import { accountBalances, mergeCategories, BALANCE_CATEGORY, recurringDates } fr
 //                                    accountId, toAccountId (transfers), category, note, createdAt,
 //                                    items?: [{ name, amount (cents), group }] from a scanned receipt,
 //                                    source?: 'recurring' | 'work' | 'investing' (made by the app, see below),
-//                                    deleted?: true — an app-made entry you deleted, kept so it isn't re-made }
+//                                    deleted?: true — an app-made entry you deleted, kept so it isn't re-made,
+//                                    refunds?: [{ id, amount (cents), date }], originalAmount (cents) — on a refunded
+//                                    expense: amount is what it costs after refunds (0 when fully refunded) }
 // Accounts can also carry recurring: [{ id, label, amount (cents), months: 1|3, start, from?, category }]
 // (repeating income, added on each due date) and workLink: { since } (Work tab pay lands here).
 export function useBudget(userId) {
@@ -135,6 +137,7 @@ export function useBudget(userId) {
     category: t.type === 'transfer' ? null : t.category,
     note: (t.note || '').trim(),
     ...(t.items ? { items: t.type === 'expense' ? t.items : [] } : {}),
+    ...(t.originalAmount !== undefined ? { originalAmount: t.originalAmount } : {}),
   });
 
   const addTx = useCallback(async (t) => {
@@ -144,6 +147,25 @@ export function useBudget(userId) {
   const updateTx = useCallback(async (id, t) => {
     await updateDoc(ref('budgetTxs', id), clean(t));
   }, [ref]);
+
+  // Money back for (part of) a purchase: the purchase keeps its original price and
+  // its amount drops by the refund, so spending, stats and the balance all follow
+  const addRefund = useCallback(async (txId, { amount, date }) => {
+    const t = txDocs.find(x => x.id === txId);
+    if (!t || t.type !== 'expense') throw new Error('That purchase is gone.');
+    if (!(amount > 0) || amount > t.amount) throw new Error(`A refund can be at most ${(t.amount / 100).toFixed(2)}.`);
+    const refunds = [...(t.refunds || []), { id: genId(), amount, date }];
+    await updateDoc(ref('budgetTxs', txId), {
+      refunds, originalAmount: t.originalAmount ?? t.amount, amount: t.amount - amount,
+    });
+  }, [ref, txDocs]);
+
+  const removeRefund = useCallback(async (txId, refundId) => {
+    const t = txDocs.find(x => x.id === txId);
+    const r = t?.refunds?.find(x => x.id === refundId);
+    if (!r) return;
+    await updateDoc(ref('budgetTxs', txId), { refunds: t.refunds.filter(x => x.id !== refundId), amount: t.amount + r.amount });
+  }, [ref, txDocs]);
 
   // App-made entries (paychecks, Work pay) are kept as a hidden marker so they aren't made again
   const deleteTx = useCallback(async (id) => {
@@ -198,6 +220,6 @@ export function useBudget(userId) {
     scanReceipt, loaded: ready, txDocs, setRecurring, linkWork, putSynced, removeSynced,
     accounts, txs, balances, categories,
     addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
-    addCategory, updateCategory, removeCategory,
+    addCategory, updateCategory, removeCategory, addRefund, removeRefund,
   };
 }

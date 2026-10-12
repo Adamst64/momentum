@@ -1,7 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary, categoryStats } from '../../utils/budget';
+import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary, categoryStats, refundedTotal } from '../../utils/budget';
 import { Card, SectionTitle, Chips } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
@@ -53,10 +53,14 @@ function TxRow({ tx, accountsById, categories, onOpen }) {
   }
   const c = lookupCategory(categories, tx.category);
   const income = tx.type === 'income';
+  const back = refundedTotal(tx);
+  const base = tx.note ? `${c.label} · ${from}` : from;
   return (
     <Row onOpen={onOpen} emoji={c.emoji} color={c.color} title={tx.note || c.label}
-      sub={tx.note ? `${c.label} · ${from}` : from}
-      amount={(income ? '+' : '−') + money(tx.amount)} amountColor={income ? T.green : T.text} />
+      sub={back ? <>{base} · <span style={{ color: T.green }}>↩ {tx.amount ? `${money(back)} refunded` : 'refunded'}</span></> : base}
+      amount={tx.amount || !back ? (income ? '+' : '−') + money(tx.amount)
+        : <span style={{ textDecoration: 'line-through', color: T.muted }}>{money(tx.originalAmount)}</span>}
+      amountColor={income ? T.green : T.text} />
   );
 }
 
@@ -84,7 +88,7 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
 export default function BudgetTab({ hook, workEnabled, investing }) {
   const {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
-    addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork,
+    addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork, addRefund, removeRefund,
   } = hook;
   const [investTx, setInvestTx] = useState(null); // a bank ↔ investing transfer being looked at
   const [transfer, setTransfer] = useState(false);
@@ -496,6 +500,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             onUpdateCategory={updateCategory}
             onRemoveCategory={removeCategory}
             allTxs={txs}
+            onRefund={addRefund}
+            onRemoveRefund={removeRefund}
             onDelete={isNew ? null : () => deleteTx(editingTx.id)}
             onClose={() => setEditingTx(null)}
           />
