@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { T } from '../../theme';
 import WorkDayForm from './WorkDayForm';
 import WorkCalendar from './WorkCalendar';
@@ -14,9 +14,15 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-export default function WorkTab({ hook }) {
+const VIEWS = ['today', 'calendar', 'pay'];
+
+export default function WorkTab({ hook, requestedView }) {
   const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
-  const [view, setView]                 = useState('today');
+  const [view, setView]                 = useState(() => VIEWS.includes(requestedView?.view) ? requestedView.view : 'today');
+  // A notification (e.g. the Friday weekly texts reminder) can ask for a view
+  useEffect(() => {
+    if (VIEWS.includes(requestedView?.view)) setView(requestedView.view);
+  }, [requestedView?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedDay, setSelectedDay]   = useState(null);
   const [showDaySheet, setShowDaySheet] = useState(false);
   const [showCrewMgr, setShowCrewMgr]   = useState(false);

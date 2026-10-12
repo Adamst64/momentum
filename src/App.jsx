@@ -60,6 +60,8 @@ export default function App() {
     const t = new URLSearchParams(window.location.search).get('tab');
     return ALL_TABS.includes(t) ? t : 'home';
   });
+  // Sub-view a notification link asked for (e.g. ?tab=work&view=pay); n changes on each request
+  const [subView, setSubView] = useState(() => ({ view: new URLSearchParams(window.location.search).get('view'), n: 0 }));
   const [showSettings, setShowSettings] = useState(false);
   const [quickAdd, setQuickAdd]         = useState(null); // null | { mode }
   const [newTask, setNewTask]           = useState(false);
@@ -162,6 +164,7 @@ export default function App() {
       const p = new URL(url, window.location.href).searchParams;
       if (p.get('action') === 'review') setShowReview(true);
       if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
+      if (p.get('view')) setSubView(v => ({ view: p.get('view'), n: v.n + 1 }));
     };
     // A push's notification still in Notification Center hasn't been tapped yet
     const stillShowing = async (tag) => {
@@ -372,7 +375,7 @@ export default function App() {
         {tab === 'tasks'     && <TasksTab    hook={tasksHook} userId={userId} />}
         {tab === 'shopping'  && <ShoppingTab    hook={shoppingHook} userId={userId} />}
         {tab === 'birthdays' && <BirthdaysTab   hook={birthdaysHook} userId={userId} />}
-        {tab === 'work'      && showWork && <WorkTab hook={workHook} />}
+        {tab === 'work'      && showWork && <WorkTab hook={workHook} requestedView={subView} />}
         {tab === 'notes'     && <NotesTab hook={notesHook} />}
         {tab === 'lists'     && <ListsTab hook={listsHook} />}
         {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} budget={budgetHook} />}

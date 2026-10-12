@@ -215,7 +215,7 @@ async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
   await sendPush(db, messaging, userDoc.id, tokens,
     '💬 Weekly work texts',
     `Last week's summary is ready for ${worked.size} crew${worked.size === 1 ? '' : 's'}. Tap to send.`,
-    APP_URL + '?tab=work');
+    APP_URL + '?tab=work&view=pay');
 }
 
 // ── Task push notifications (every 5 minutes) ─────────────────────────────────
