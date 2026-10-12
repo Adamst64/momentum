@@ -41,14 +41,18 @@ async function yahooQuote(symbol) {
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
   const r = (await res.json())?.chart?.result?.[0];
   if (!r) return null;
-  const closes = (r.indicators?.quote?.[0]?.close || []).filter(c => c > 0);
-  const price = r.meta?.regularMarketPrice > 0 ? r.meta.regularMarketPrice : closes[closes.length - 1];
+  // Daily closes with their dates. A mutual fund's row for today has no close until
+  // its NAV posts in the evening, and Yahoo still stamps the quote with this
+  // morning's time, so the price's real trading day is the last row with a close.
+  const ts = r.timestamp || [];
+  const raw = r.indicators?.quote?.[0]?.close || [];
+  const days = ts.map((t, i) => ({ t, c: raw[i] })).filter(x => x.c > 0);
+  const last = days[days.length - 1];
+  const price = r.meta?.regularMarketPrice > 0 ? r.meta.regularMarketPrice : last?.c;
   if (!(price > 0)) return null;
-  const prevClose = closes.length >= 2 ? closes[closes.length - 2] : (r.meta?.chartPreviousClose || null);
+  const prevClose = days.length >= 2 ? days[days.length - 2].c : (r.meta?.chartPreviousClose || null);
   const round = n => (n ? Math.round(n * 1e4) / 1e4 : null);
-  // The trading day this price is from: a mutual fund's NAV is yesterday's until it posts in the evening
-  const t = r.meta?.regularMarketTime;
-  const priceDate = t ? easternNow(new Date(t * 1000)).today : null;
+  const priceDate = last ? easternNow(new Date(last.t * 1000)).today : null;
   return { price: round(price), prevClose: round(prevClose), priceDate, name: r.meta?.longName || r.meta?.shortName || null, provider: 'yahoo' };
 }
 
