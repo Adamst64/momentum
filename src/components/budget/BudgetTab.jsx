@@ -323,44 +323,39 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       {/* Each account this month (all-accounts view only) */}
       {!accountFilter && accounts.length > 1 && (
         <Card>
-          <SectionTitle>By account</SectionTitle>
-          {/* Balance now on the right; what was spent / came in during the period underneath */}
-          {perAccount.map(({ account: a, spent, income }) => {
-            const bal = balances[a.id] || 0;
-            const credit = a.type === 'credit';
-            return (
-              <button
-                key={a.id}
-                onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
-                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
-              >
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: bal < 0 ? T.red : T.text }}>
-                    {credit ? money(Math.abs(bal)) : money(bal)}{credit && bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
-                  </span>
+          <SectionTitle right={<span style={{ fontSize: 12, color: T.muted }}>{range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>}>Spent by account</SectionTitle>
+          {/* What each account spent in the period on screen (changes with the month / year) */}
+          {perAccount.map(({ account: a, spent, income }) => (
+            <button
+              key={a.id}
+              onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
+              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: spent ? T.text : T.muted }}>
+                  {money(spent)} <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>spent</span>
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
+                <span style={{ flex: 1 }}>{typeLabel(a.type)}</span>
+                {income > 0 && <span style={{ color: T.green }}>+{money(income)} came in</span>}
+              </div>
+              {summary.spent > 0 && spent > 0 && (
+                <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
+                  <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
                 </div>
-                <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
-                  <span style={{ flex: 1 }}>{typeLabel(a.type)} · {spent ? `spent ${money(spent)}` : 'nothing spent'} {range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>
-                  {income > 0 && <span style={{ color: T.green }}>+{money(income)} in</span>}
-                </div>
-                {summary.spent > 0 && spent > 0 && (
-                  <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
-                    <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
-                  </div>
-                )}
-              </button>
-            );
-          })}
+              )}
+            </button>
+          ))}
           <div style={{ paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>
-            <div style={{ display: 'flex', fontSize: 14, fontWeight: 700, color: T.text }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 14, fontWeight: 700, color: T.text }}>
               <span style={{ flex: 1 }}>All accounts</span>
-              <span style={{ color: total < 0 ? T.red : T.text }}>{money(total)}</span>
+              <span>{money(summary.spent)} <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>spent</span></span>
             </div>
-            <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
-              <span style={{ flex: 1 }}>{summary.spent ? `spent ${money(summary.spent)}` : 'nothing spent'} {range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>
-              {summary.income > 0 && <span style={{ color: T.green }}>+{money(summary.income)} in</span>}
-            </div>
+            {summary.income > 0 && (
+              <div style={{ fontSize: 12, color: T.green, marginTop: 2, textAlign: 'right' }}>+{money(summary.income)} came in</div>
+            )}
           </div>
         </Card>
       )}
