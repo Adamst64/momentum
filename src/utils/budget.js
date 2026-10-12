@@ -201,3 +201,64 @@ export function nextRecurringDate(rule, today) {
   const far = `${Number(today.slice(0, 4)) + 2}-12-31`;
   return recurringDates(rule, far).find(ds => ds > today) || null;
 }
+
+// Everything about one category for its detail page. `txs` are the entries in
+// scope (already narrowed to an account if one is open); `currentYM` is 'YYYY-MM'.
+// Months run from the category's first entry to now; finished months are before
+// currentYM (the current one is still adding up), so averages use only those.
+export function categoryStats(txs, catId, currentYM) {
+  const own = txs.filter(t => t.category === catId && (t.type === 'expense' || t.type === 'income'));
+  if (!own.length) return null;
+  const kind = own[0].type;
+  const first = own.reduce((m, t) => (t.date < m ? t.date : m), own[0].date).slice(0, 7);
+  const months = [];
+  for (let ym = first; ym <= currentYM && months.length < 600; ym = shiftMonth(ym, 1)) months.push(ym);
+  const byMonth = Object.fromEntries(months.map(m => [m, 0]));
+  const byYear = {};
+  const places = {};
+  const byAccount = {};
+  let total = 0;
+  for (const t of own) {
+    const ym = t.date.slice(0, 7);
+    if (ym in byMonth) byMonth[ym] += t.amount;
+    const y = t.date.slice(0, 4);
+    byYear[y] = (byYear[y] || 0) + t.amount;
+    total += t.amount;
+    // Same note = same place ("Lidl", "lidl " count together)
+    const key = (t.note || '').trim().toLowerCase();
+    if (key) {
+      const p = places[key] || (places[key] = { name: t.note.trim(), total: 0, count: 0 });
+      p.total += t.amount; p.count++;
+    }
+    byAccount[t.accountId] = (byAccount[t.accountId] || 0) + t.amount;
+  }
+  const done = months.filter(m => m < currentYM);
+  const doneTotal = done.reduce((s, m) => s + byMonth[m], 0);
+  const avgMonth = done.length ? Math.round(doneTotal / done.length) : null;
+  const last12 = done.slice(-12);
+  const lastYM = shiftMonth(currentYM, -1);
+  const thisYear = currentYM.slice(0, 4);
+  // Years, newest first; a year's monthly average counts only its months that are both tracked and finished
+  const years = Object.keys(byYear).sort().reverse().map(y => {
+    const n = done.filter(m => m.startsWith(y)).length;
+    return { year: y, total: byYear[y], perMonth: n ? Math.round(done.filter(m => m.startsWith(y)).reduce((s, m) => s + byMonth[m], 0) / n) : null, months: n, partial: y === thisYear };
+  });
+  return {
+    kind, total, count: own.length, months, byMonth, done, avgMonth,
+    perPurchase: Math.round(total / own.length),
+    perMonthCount: done.length ? own.filter(t => t.date.slice(0, 7) < currentYM).length / done.length : null,
+    thisMonth: byMonth[currentYM] || 0,
+    lastMonth: lastYM in byMonth ? byMonth[lastYM] : null,
+    // A full year of history gives a real yearly figure; less than that is an estimate
+    yearly: last12.length >= 12
+      ? { value: last12.reduce((s, m) => s + byMonth[m], 0), estimate: false }
+      : avgMonth !== null ? { value: avgMonth * 12, estimate: true } : null,
+    highMonth: done.reduce((b, m) => (!b || byMonth[m] > byMonth[b] ? m : b), null),
+    lowMonth: done.reduce((b, m) => (!b || byMonth[m] < byMonth[b] ? m : b), null),
+    years,
+    places: Object.values(places).sort((a, b) => b.total - a.total).slice(0, 5),
+    biggest: [...own].sort((a, b) => b.amount - a.amount).slice(0, 5),
+    recent: own.slice(0, 8), // txs arrive newest first
+    byAccount: Object.entries(byAccount).map(([id, amt]) => ({ id, total: amt })).sort((a, b) => b.total - a.total),
+  };
+}

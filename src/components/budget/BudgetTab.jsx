@@ -1,11 +1,13 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
-import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary } from '../../utils/budget';
+import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary, categoryStats } from '../../utils/budget';
 import { Card, SectionTitle, Chips } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
+import CategoryDetail from './CategoryDetail';
+import CategoryForm from './CategoryForm';
 import ReceiptModal from './ReceiptModal';
 import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
@@ -99,6 +101,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [catFilter, setCatFilter]   = useState(null);
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
   const [showCategories, setShowCategories] = useState(false);
+  const [detailCat, setDetailCat]   = useState(null); // category id whose detail page is open
+  const [editingCat, setEditingCat] = useState(null); // category being edited from its detail page
   const [editingAcct, setEditingAcct] = useState(null); // null | 'new' | account
 
   const accountsById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
@@ -115,6 +119,15 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
     () => accountMonthSummary(accounts, txs.filter(t => t.date.startsWith(period))),
     [accounts, txs, period]);
   const receipts = useMemo(() => groceryBreakdown(monthTxs), [monthTxs]);
+  // The open category's numbers, across all time (and only the open account, if one is)
+  const detail = useMemo(() => {
+    if (!detailCat) return null;
+    const scoped = accountFilter ? txs.filter(t => t.accountId === accountFilter) : txs;
+    const stats = categoryStats(scoped, detailCat, todayYM());
+    if (!stats) return null;
+    const allSpent = scoped.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : 0), 0);
+    return { stats, share: allSpent ? stats.total / allSpent : null, category: lookupCategory(categories, detailCat) };
+  }, [detailCat, txs, accountFilter, categories]);
   const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
 
   const groups = [];
@@ -380,7 +393,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               return (
                 <button
                   key={c.id}
-                  onClick={() => setCatFilter(on ? null : c.id)}
+                  onClick={() => setDetailCat(c.id)}
                   style={{
                     display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', width: '100%', textAlign: 'left',
                     opacity: !catFilter || on ? 1 : 0.5,
@@ -390,10 +403,12 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
                   <span style={{ flex: 1, fontSize: 14, color: T.text, fontWeight: on ? 700 : 400 }}>{c.label}</span>
                   <span style={{ fontSize: 12, color: T.muted }}>{pct}%</span>
                   <span style={{ fontSize: 14, fontWeight: 600, color: T.text, minWidth: 80, textAlign: 'right' }}>{money(c.total)}</span>
+                  <span style={{ color: T.muted, fontSize: 16, marginLeft: -4 }} aria-hidden="true">›</span>
                 </button>
               );
             })}
           </div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Tap a category for its averages, yearly totals and more.</div>
         </Card>
       )}
 
@@ -514,6 +529,34 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           scanReceipt={scanReceipt}
           onSave={addTx}
           onClose={() => setReceiptFile(null)}
+        />
+      )}
+
+      {detail && (
+        <CategoryDetail
+          category={detail.category}
+          stats={detail.stats}
+          share={detail.share}
+          accountsById={accountsById}
+          scopeLabel={filteredAccount ? filteredAccount.name : null}
+          currentYM={todayYM()}
+          onOpenTx={t => setEditingTx(t)}
+          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(detailCat); setDetailCat(null); }}
+          onShowAll={() => { setCatFilter(detailCat); setShowList(true); setDetailCat(null); }}
+          onEdit={detail.category.fixed || detail.category.id === 'missing' ? null : () => setEditingCat(detail.category)}
+          onClose={() => setDetailCat(null)}
+        />
+      )}
+
+      {editingCat && (
+        <CategoryForm
+          initial={editingCat}
+          kind={editingCat.kind}
+          categories={categories}
+          txs={txs}
+          onSave={data => updateCategory(editingCat.id, data)}
+          onRemove={moveTo => { setDetailCat(null); return removeCategory(editingCat.id, moveTo); }}
+          onClose={() => setEditingCat(null)}
         />
       )}
 
