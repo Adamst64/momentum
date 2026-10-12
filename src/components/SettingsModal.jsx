@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, getDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
 import { T } from '../theme';
 import { todayStr } from '../utils/dateUtils';
@@ -98,29 +98,54 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
     }
   };
 
+  // Everything stored under your account, plus the shared shopping lists you're in.
+  // Keep this list in step with the collections the hooks use.
+  const USER_COLLECTIONS = [
+    'routines', 'commitments', 'tasks', 'notes', 'personalLists', 'shopping', 'birthdays',
+    'workDays', 'workWeeks', 'workCrews', 'workMembers',
+    'budgetAccounts', 'budgetTxs', 'budgetCategories',
+    'invTransactions', 'invAssets', 'invAccounts', 'invWatchLists', 'invAlerts', 'invSnapshots',
+  ];
+  const [exportState, setExportState] = useState(null); // null | 'busy' | 'done' | error message
   const handleExport = async () => {
-    const shoppingExport = await Promise.all(
-      (shoppingLists || []).map(async (list) => {
-        const [itemsSnap, tagsSnap] = await Promise.all([
-          getDocs(collection(db, 'lists', list.id, 'items')),
-          getDocs(collection(db, 'lists', list.id, 'tags')),
-        ]);
-        return {
-          id: list.id, name: list.name,
-          items: itemsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-          tags: tagsSnap.docs.map(d => ({ id: d.id, ...d.data() })),
-        };
-      })
-    );
+    if (exportState === 'busy') return;
+    setExportState('busy');
+    try {
+      const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const uid = userId || user?.uid;
+      const data = { exportedAt: new Date().toISOString(), version: 4, account: user?.email || null };
+      const profile = await getDoc(doc(db, 'users', uid));
+      if (profile.exists()) {
+        const { fcmTokens, ...rest } = profile.data(); // device push tokens aren't yours to keep
+        data.profile = rest;
+      }
+      await Promise.all(USER_COLLECTIONS.map(async name => {
+        data[name] = rows(await getDocs(collection(db, 'users', uid, name)));
+      }));
+      const lists = await getDocs(query(collection(db, 'lists'), where('members', 'array-contains', uid)));
+      data.sharedLists = await Promise.all(lists.docs.map(async l => {
+        const [items, tags, inventory] = await Promise.all(['items', 'tags', 'inventory'].map(sub => getDocs(collection(db, 'lists', l.id, sub)).catch(() => null)));
+        return { id: l.id, ...l.data(), items: items ? rows(items) : [], tags: tags ? rows(tags) : [], inventory: inventory ? rows(inventory) : [] };
+      }));
 
-    const data = { exportedAt: new Date().toISOString(), version: 3, routines, tasks, shopping: shoppingExport, notes, lists: personalLists };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = `momentum-${todayStr()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const name = `momentum-${todayStr()}.json`;
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      // On iPhone the share sheet lets you "Save to Files"; elsewhere it downloads
+      const file = typeof File !== 'undefined' ? new File([blob], name, { type: 'application/json' }) : null;
+      if (file && navigator.canShare?.({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: name }); setExportState('done'); return; }
+        catch (e) { if (e?.name === 'AbortError') { setExportState(null); return; } }
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+      setExportState('done');
+    } catch (e) {
+      setExportState(e.message || 'Export failed. Try again.');
+    }
   };
 
   return ReactDOM.createPortal(
@@ -171,10 +196,15 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
 
         <Group>
           <Row
-            label="Export as JSON"
-            detail={`${routines.length}r · ${tasks.length}t · ${(notes || []).length}n · ${(shoppingLists || []).length + (personalLists || []).length} lists`}
+            label="Export all my data"
+            detail={exportState === 'busy' ? 'Preparing…' : exportState === 'done' ? 'Saved ✓' : 'JSON file'}
             onTap={handleExport}
           />
+          <div style={{ padding: '8px 16px 12px', fontSize: 12, color: exportState && exportState !== 'busy' && exportState !== 'done' ? T.red : T.muted, lineHeight: 1.45 }}>
+            {exportState && exportState !== 'busy' && exportState !== 'done'
+              ? exportState
+              : 'Everything: routines, tasks, notes, lists, birthdays, work, budget and investing. On iPhone choose "Save to Files". The database is also backed up automatically every day.'}
+          </div>
         </Group>
 
         <Group>
@@ -290,7 +320,7 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           {resetOpen && (
             <div style={{ padding: '12px 16px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.45 }}>
-                Choose what progress to clear. Your routines, commitments and tasks stay. This can't be undone, so use <b style={{ color: T.text }}>Export as JSON</b> above first if you might want it back.
+                Choose what progress to clear. Your routines, commitments and tasks stay. This can't be undone, so use <b style={{ color: T.text }}>Export all my data</b> above first if you might want it back.
               </div>
               {RESET_CATEGORIES.map(c => {
                 const on = resetKeys.includes(c.key);
