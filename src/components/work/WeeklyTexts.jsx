@@ -50,9 +50,9 @@ export default function WeeklyTexts({ days, crews, members, weeks, today, onText
                 onClick={() => onTexted(crew.id, mondayId)}
                 style={{
                   padding: '7px 12px', borderRadius: 10, fontSize: 13, fontWeight: 700, textDecoration: 'none', flexShrink: 0,
-                  background: sent ? T.subtle : T.olive, color: sent ? T.text : '#fff',
+                  background: T.olive, color: '#fff',
                 }}
-              >{sent ? 'Text again' : 'Text it'}</a>
+              >Text it</a>
             </div>
             {open && (
               <pre style={{

@@ -38,8 +38,6 @@ export default function WorkTab({ hook }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      <WeeklyTexts days={days} crews={crews} members={members} weeks={weeks} today={today} onTexted={markCrewTexted} />
-
       {/* Inner tabs */}
       <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>
         {[['today', 'Today'], ['calendar', 'Calendar'], ['pay', 'Pay']].map(([v, label]) => (
@@ -80,6 +78,10 @@ export default function WorkTab({ hook }) {
           </div>
           <WorkCalendar days={days} weeks={weeks} crews={crews} onSelectDay={handleCalendarSelect} />
         </>
+      )}
+
+      {view === 'pay' && (
+        <WeeklyTexts days={days} crews={crews} members={members} weeks={weeks} today={today} onTexted={markCrewTexted} />
       )}
 
       {view === 'pay' && (
