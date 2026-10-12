@@ -1,7 +1,7 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue, FieldPath } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const investing = require('./investing');
 const receipts = require('./receipts');
@@ -166,6 +166,50 @@ async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
     APP_URL + '?action=review');
 }
 
+// Fridays at 3 PM (local): remind to text last week's work summary to each crew
+// that has a text number and worked last week. The text itself is opened from
+// the Work tab (Messages, one tap to send); this only sends the reminder.
+async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
+  const data = userDoc.data();
+  if (data.features?.workTab !== true) return;
+  const pref = data.preferences?.workTexts;
+  if (!pref) return;
+  const now = localNow(pref.timezone || 'America/New_York');
+  const dow = new Date(now.today + 'T12:00:00Z').getUTCDay();
+  if (dow !== 5 || !isDue('15:00', now.minutes) || pref.lastSentDate === now.today) return;
+
+  const shift = (ds, n) => {
+    const d = new Date(ds + 'T12:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+  const prevMon = shift(now.today, -11); // Friday → Monday of the week before
+  const prevSun = shift(prevMon, 6);
+
+  const crewsSnap = await userDoc.ref.collection('workCrews').get();
+  const textCrews = new Set(crewsSnap.docs.filter(d => d.data().phone).map(d => d.id));
+  if (!textCrews.size) return;
+
+  const daysSnap = await userDoc.ref.collection('workDays')
+    .where(FieldPath.documentId(), '>=', prevMon)
+    .where(FieldPath.documentId(), '<=', prevSun)
+    .get();
+  const worked = new Set();
+  daysSnap.docs.forEach(d => {
+    const day = d.data();
+    if (day.isOff) return;
+    if (textCrews.has(day.crewId)) worked.add(day.crewId);
+    if (textCrews.has(day.second?.crewId)) worked.add(day.second.crewId);
+  });
+
+  await userDoc.ref.update({ 'preferences.workTexts.lastSentDate': now.today });
+  if (!worked.size) return;
+  await sendPush(db, messaging, userDoc.id, tokens,
+    '💬 Weekly work texts',
+    `Last week's summary is ready for ${worked.size} crew${worked.size === 1 ? '' : 's'}. Tap to send.`,
+    APP_URL + '?tab=work');
+}
+
 // ── Task push notifications (every 5 minutes) ─────────────────────────────────
 
 exports.sendTaskNotifications = onSchedule(
@@ -187,6 +231,7 @@ exports.sendTaskNotifications = onSchedule(
       if (!tokens.length) return;
 
       await maybeSendDailyReview(db, messaging, userDoc, tokens);
+      await maybeSendWorkTexts(db, messaging, userDoc, tokens);
 
       const tasksSnap = await db.collection('users').doc(uid).collection('tasks').get();
 

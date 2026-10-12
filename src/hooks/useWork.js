@@ -80,6 +80,23 @@ export function useWork(userId) {
     await deleteDoc(doc(db, 'users', userId, 'workCrews', id));
   }, [userId]);
 
+  // Optional number that this crew's weekly summary is texted to. Also saves the
+  // timezone so the Friday 3 PM reminder fires in local time.
+  const updateCrewPhone = useCallback(async (id, phone) => {
+    const clean = (phone || '').trim();
+    await updateDoc(doc(db, 'users', userId, 'workCrews', id), { phone: clean || deleteField() });
+    if (clean) {
+      await setDoc(doc(db, 'users', userId), {
+        preferences: { workTexts: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone } },
+      }, { merge: true });
+    }
+  }, [userId]);
+
+  // Remember that last week's summary was opened in Messages for this crew
+  const markCrewTexted = useCallback(async (id, mondayId) => {
+    await updateDoc(doc(db, 'users', userId, 'workCrews', id), { lastTextedWeek: mondayId });
+  }, [userId]);
+
   const addMember = useCallback(async (name) => {
     await setDoc(doc(db, 'users', userId, 'workMembers', genId()), { name: name.trim(), order: nextOrder(members) });
   }, [userId, members]);
@@ -99,5 +116,5 @@ export function useWork(userId) {
 
   const loaded = !!(got.weeks && got.crews);
 
-  return { loaded, days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
+  return { loaded, days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
 }

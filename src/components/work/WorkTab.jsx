@@ -4,6 +4,7 @@ import WorkDayForm from './WorkDayForm';
 import WorkCalendar from './WorkCalendar';
 import WorkPaySection from './WorkPaySection';
 import CrewManager from './CrewManager';
+import WeeklyTexts from './WeeklyTexts';
 import { formatDayFull } from '../../utils/workUtils';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
@@ -14,7 +15,7 @@ function todayStr() {
 }
 
 export default function WorkTab({ hook }) {
-  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
+  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
   const [view, setView]                 = useState('today');
   const [selectedDay, setSelectedDay]   = useState(null);
   const [showDaySheet, setShowDaySheet] = useState(false);
@@ -36,6 +37,8 @@ export default function WorkTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+      <WeeklyTexts days={days} crews={crews} today={today} onTexted={markCrewTexted} />
 
       {/* Inner tabs */}
       <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>
@@ -119,6 +122,7 @@ export default function WorkTab({ hook }) {
           onAddCrew={addCrew}
           onDeleteCrew={deleteCrew}
           onUpdateCrewColor={updateCrewColor}
+          onUpdateCrewPhone={updateCrewPhone}
           onAddMember={addMember}
           onDeleteMember={deleteMember}
           onReorderCrews={reorderCrews}

@@ -25,8 +25,36 @@ function AddInput({ placeholder, onAdd, nextColor }) {
   );
 }
 
-function CrewList({ crews, onDelete, onUpdateColor, onReorder }) {
+// Optional number this crew's weekly summary gets texted to
+function PhoneRow({ crew, onSave, onDone }) {
+  const [val, setVal] = useState(crew.phone || '');
+  const save = () => { onSave(crew.id, val); onDone(); };
+  return (
+    <div style={{ padding: '8px 14px 4px' }}>
+      <div style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>Text the weekly summary to <span style={{ color: T.subtle }}>(optional)</span></div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          autoFocus
+          type="tel"
+          inputMode="tel"
+          value={val}
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && save()}
+          placeholder="Phone number"
+          style={{ flex: 1, minWidth: 0, background: T.subtle, border: 'none', outline: 'none', borderRadius: 10, padding: '10px 12px', color: T.text, fontSize: 14 }}
+        />
+        {crew.phone && (
+          <button onClick={() => { onSave(crew.id, ''); onDone(); }} style={{ padding: '10px 12px', borderRadius: 10, background: T.subtle, color: T.red, fontSize: 13 }}>Remove</button>
+        )}
+        <button onClick={save} style={{ padding: '10px 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}>Save</button>
+      </div>
+    </div>
+  );
+}
+
+function CrewList({ crews, onDelete, onUpdateColor, onUpdatePhone, onReorder }) {
   const [editingColorId, setEditingColorId] = useState(null);
+  const [editingPhoneId, setEditingPhoneId] = useState(null);
 
   if (crews.length === 0) {
     return <div style={{ fontSize: 13, color: T.muted, padding: '8px 0 2px' }}>None added yet</div>;
@@ -40,12 +68,27 @@ function CrewList({ crews, onDelete, onUpdateColor, onReorder }) {
             <DragHandle color={T.muted} {...handle} />
             {/* Color swatch — tap to open picker */}
             <button
-              onClick={() => setEditingColorId(editingColorId === crew.id ? null : crew.id)}
+              onClick={() => { setEditingColorId(editingColorId === crew.id ? null : crew.id); setEditingPhoneId(null); }}
               style={{ width: 22, height: 22, borderRadius: '50%', background: crew.color || CREW_COLORS[0], flexShrink: 0, border: editingColorId === crew.id ? '2px solid #fff' : '2px solid transparent', transition: 'border 0.15s' }}
             />
-            <span style={{ flex: 1, fontSize: 14, color: T.text }}>{crew.name}</span>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, color: T.text }}>{crew.name}</span>
+              {crew.phone && <span style={{ display: 'block', fontSize: 11, color: T.muted }}>Texts to {crew.phone}</span>}
+            </span>
+            <button
+              onClick={() => { setEditingPhoneId(editingPhoneId === crew.id ? null : crew.id); setEditingColorId(null); }}
+              aria-label={`Text number for ${crew.name}`}
+              style={{ padding: '4px 6px', color: crew.phone ? T.khaki : T.muted, display: 'flex' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M4 5h16v11H9l-5 4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+              </svg>
+            </button>
             <button onClick={() => { onDelete(crew.id); setEditingColorId(null); }} style={{ color: T.red, fontSize: 20, lineHeight: 1, padding: '0 4px' }}>×</button>
           </div>
+          {editingPhoneId === crew.id && (
+            <PhoneRow crew={crew} onSave={onUpdatePhone} onDone={() => setEditingPhoneId(null)} />
+          )}
           {editingColorId === crew.id && (
             <div style={{ display: 'flex', gap: 8, padding: '8px 14px 4px', flexWrap: 'wrap' }}>
               {CREW_COLORS.map(color => (
@@ -80,7 +123,7 @@ function MemberList({ members, onDelete, onReorder }) {
   );
 }
 
-export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onAddMember, onDeleteMember, onReorderCrews, onReorderMembers, onClose }) {
+export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onUpdateCrewPhone, onAddMember, onDeleteMember, onReorderCrews, onReorderMembers, onClose }) {
   useBackHandler(true, onClose);
   const nextCrewColor = CREW_COLORS[crews.length % CREW_COLORS.length];
 
@@ -93,14 +136,14 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <span>
             <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: T.text }}>Crews & Members</span>
-            <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>Hold ≡ and drag to reorder</span>
+            <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>Hold ≡ and drag to reorder · tap the bubble to add a number for weekly texts</span>
           </span>
           <button onClick={onClose} style={{ color: T.muted, fontSize: 24, lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
 
         <div style={{ marginBottom: 24 }}>
           <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Crews</div>
-          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} onReorder={onReorderCrews} />
+          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} onUpdatePhone={onUpdateCrewPhone} onReorder={onReorderCrews} />
           <AddInput placeholder="Crew name…" onAdd={onAddCrew} nextColor={nextCrewColor} />
         </div>
 
