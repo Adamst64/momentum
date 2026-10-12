@@ -169,7 +169,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
   for (let d = 1; d <= dim; d++)     cells.push(d);
 
   return ReactDOM.createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 110, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 110, background: T.bg, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,

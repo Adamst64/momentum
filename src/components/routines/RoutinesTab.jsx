@@ -207,7 +207,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
 
       {/* All Routines overlay */}
       {showAllRoutines && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
           <div style={{
             display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
             padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',

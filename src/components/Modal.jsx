@@ -24,7 +24,8 @@ export default function Modal({ title, onClose, children, full = false }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  // Push sheet above the keyboard on iOS
+  // Is the keyboard open? (only changes the bottom padding; the overlay itself
+  // follows the visible screen through --vv-top / --vv-height, see main.jsx)
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
@@ -44,14 +45,15 @@ export default function Modal({ title, onClose, children, full = false }) {
     <div
       onClick={onClose}
       style={{
+        // Exactly the visible part of the screen (above the keyboard when it's open),
+        // so the field being typed in can't be pushed off the top
         position: 'fixed',
-        top: 0, left: 0, right: 0,
-        bottom: kbHeight,
+        left: 0, right: 0,
+        top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)',
         zIndex: 100,
         background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'flex-end',
         backdropFilter: 'blur(4px)',
-        transition: 'bottom 0.25s ease',
       }}
     >
       <div

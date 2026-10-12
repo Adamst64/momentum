@@ -61,7 +61,7 @@ export default function NoteViewer({ note: n, onSaveText, onEdit, onClose }) {
 
   return ReactDOM.createPortal(
     // Below Modal (100) so the editor sheet opens on top of it
-    <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: T.bg, display: 'flex', flexDirection: 'column' }}>
+    <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 90, background: T.bg, display: 'flex', flexDirection: 'column' }}>
 
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,

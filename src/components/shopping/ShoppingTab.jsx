@@ -374,7 +374,7 @@ export default function ShoppingTab({ hook, userId }) {
       )}
 
       {showNewList && ReactDOM.createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200 }}>
           <div onClick={closeNewList}
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
           <div style={{
@@ -441,7 +441,7 @@ export default function ShoppingTab({ hook, userId }) {
       )}
 
       {menuList && ReactDOM.createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200 }}>
           <div onClick={closeMenu} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,

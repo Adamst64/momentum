@@ -50,12 +50,12 @@ export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTa
   };
 
   return ReactDOM.createPortal(
-    <div style={{ position: 'fixed', inset: 0, zIndex: 200 }}>
+    <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200 }}>
       <div onClick={onClose} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         background: T.card, borderRadius: '20px 20px 0 0',
-        padding: '20px 20px 32px', maxHeight: '75vh', overflowY: 'auto',
+        padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.75)', overflowY: 'auto',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Tags</span>

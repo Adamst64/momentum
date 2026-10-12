@@ -149,14 +149,14 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
   };
 
   return ReactDOM.createPortal(
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
+    <div onClick={onClose} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
       <div
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%', background: T.card,
           borderRadius: '20px 20px 0 0',
           padding: '20px 0 calc(20px + env(safe-area-inset-bottom))',
-          maxHeight: '88dvh', overflowY: 'auto',
+          maxHeight: 'calc(var(--vv-height, 100dvh) * 0.88)', overflowY: 'auto',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px 20px' }}>
