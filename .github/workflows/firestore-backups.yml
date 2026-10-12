@@ -1,0 +1,35 @@
+name: Firestore daily backups
+
+# Turns on Firestore's built-in daily backups (kept 14 days) for the app's database.
+# Runs when this file changes or by hand; safe to re-run: it only creates the
+# schedule if there isn't one, and lists the backups so far.
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/firestore-backups.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backups:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Daily backup schedule
+        run: |
+          gcloud auth activate-service-account --key-file="$RUNNER_TEMP/sa.json"
+          gcloud config set project momentum-4acf1
+          if gcloud firestore backups schedules list --database='(default)' --format='value(name)' | grep -q .; then
+            echo "A backup schedule already exists:"
+          else
+            gcloud firestore backups schedules create --database='(default)' --recurrence=daily --retention=14d
+          fi
+          gcloud firestore backups schedules list --database='(default)'
+          echo "Backups so far:"
+          gcloud firestore backups list --format='table(name.basename(),snapshotTime,state)' || true
