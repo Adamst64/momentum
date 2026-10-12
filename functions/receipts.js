@@ -63,7 +63,7 @@ async function scanReceipt(db, request) {
   let response;
   try {
     response = await client.messages.create({
-      model: 'claude-opus-5-5',
+      model: 'claude-haiku-5-5', // cheapest model; receipts are a simple read. Switch back to claude-opus-5-5 if it makes mistakes
       max_tokens: 16000,
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
       messages: [{
