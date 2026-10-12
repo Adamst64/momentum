@@ -200,7 +200,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               <button onClick={() => setEditingAcct(a)} style={{ ...pill, color: T.muted }}>Edit account</button>
             </div>
             {(a.type === 'debit' || a.type === 'savings') && (
-              <AccountExtras account={a} workEnabled={workEnabled} categories={categories} onLinkWork={linkWork} onSetRecurring={setRecurring} />
+              <AccountExtras account={a} workEnabled={workEnabled} workLinkedElsewhere={accounts.some(x => x.workLink?.since && x.id !== a.id)} categories={categories} onLinkWork={linkWork} onSetRecurring={setRecurring} />
             )}
           </>
         );

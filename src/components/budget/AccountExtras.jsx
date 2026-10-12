@@ -2,16 +2,16 @@ import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr, toDateStr, formatDateYear, formatShortDate } from '../../utils/dateUtils';
-import { money, parseAmount, centsToInput, nextRecurringDate, lookupCategory, BALANCE_CATEGORY } from '../../utils/budget';
+import { money, parseAmount, centsToInput, nextRecurringDate, recurringDates, lookupCategory, BALANCE_CATEGORY } from '../../utils/budget';
 import { genId } from '../../utils/id';
 import { Card, SectionTitle, Field, Chips, PrimaryButton, ConfirmDialog, inputStyle } from '../investing/ui';
 
 const OFTEN = [{ value: 1, label: 'Every month' }, { value: 3, label: 'Every 3 months' }];
 
 // On a debit card / savings page: where pay comes in automatically.
-// - Work tab pay (debit cards, one account at a time)
+// - Work tab pay (debit cards, one account at a time: offered only while no other account has it)
 // - Repeating income, e.g. a salary on the 1st of every month or a quarterly bonus
-export default function AccountExtras({ account, workEnabled, categories, onLinkWork, onSetRecurring }) {
+export default function AccountExtras({ account, workEnabled, workLinkedElsewhere, categories, onLinkWork, onSetRecurring }) {
   const [editing, setEditing] = useState(null); // null | 'new' | rule
   const [askUnlink, setAskUnlink] = useState(false);
   const rules = account.recurring || [];
@@ -22,7 +22,7 @@ export default function AccountExtras({ account, workEnabled, categories, onLink
     <Card>
       <SectionTitle>Pay coming in</SectionTitle>
 
-      {workEnabled && account.type === 'debit' && (
+      {workEnabled && account.type === 'debit' && (linked || !workLinkedElsewhere) && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 0 10px', borderBottom: `1px solid ${T.cardBorder}` }}>
           <span style={{ fontSize: 20 }} aria-hidden="true">🛠️</span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -100,6 +100,9 @@ function RuleForm({ initial, categories, onSave, onDelete, onClose }) {
   const [askDelete, setAskDelete] = useState(false);
   const cents = parseAmount(amount);
   const past = !initial && start < todayStr();
+  // The next few payment dates from today (or from the first payment, if that's later)
+  const from = start > todayStr() ? start : todayStr();
+  const upcoming = recurringDates({ start, months }, `${Number(from.slice(0, 4)) + 3}-12-31`).filter(d => d >= from).slice(0, 4);
 
   const save = async () => {
     if (!cents || busy) return;
@@ -128,6 +131,10 @@ function RuleForm({ initial, categories, onSave, onDelete, onClose }) {
         <Field label={initial ? 'Paid on (same day each time)' : 'First payment'}>
           <input type="date" value={start} onChange={e => e.target.value && setStart(e.target.value)} style={inputStyle} />
           {past && <span style={{ fontSize: 12, color: T.khaki }}>Payments from {formatDateYear(start)} up to today will be added too.</span>}
+          {/* Same day of the month each time (not every 30 days); a day the month doesn't have moves to its last day */}
+          <span style={{ fontSize: 12, color: T.muted }}>
+            Upcoming: {upcoming.map(formatShortDate).join(', ')}…
+          </span>
         </Field>
         <Field label="Category">
           <Chips small options={cats.map(c => ({ value: c.id, label: `${c.emoji} ${c.label}` }))} value={category} onChange={setCategory} />
