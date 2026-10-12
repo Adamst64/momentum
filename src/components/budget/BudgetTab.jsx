@@ -12,6 +12,7 @@ import AccountExtras from './AccountExtras';
 import SpendHighlights from './SpendHighlights';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import TransferSheet from '../TransferSheet';
+import InvestTransferSheet from './InvestTransferSheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 
@@ -83,7 +84,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
     addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork,
   } = hook;
-  const [investNote, setInvestNote] = useState(false);
+  const [investTx, setInvestTx] = useState(null); // a bank ↔ investing transfer being looked at
   const [transfer, setTransfer] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
   const [openGroup, setOpenGroup] = useState(null);
@@ -323,30 +324,43 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       {!accountFilter && accounts.length > 1 && (
         <Card>
           <SectionTitle>By account</SectionTitle>
-          {perAccount.map(({ account: a, spent, income }) => (
-            <button
-              key={a.id}
-              onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
-            >
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                <span style={{ fontSize: 14, fontWeight: 600, color: spent ? T.text : T.muted }}>{spent ? '−' + money(spent) : money(0)}</span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
-                <span style={{ flex: 1 }}>{typeLabel(a.type)} · {a.type === 'credit' ? `owed ${money(Math.max(0, -(balances[a.id] || 0)))}` : `balance ${money(balances[a.id] || 0)}`}</span>
-                {income > 0 && <span style={{ color: T.green }}>+{money(income)} in</span>}
-              </div>
-              {summary.spent > 0 && spent > 0 && (
-                <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
-                  <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
+          {/* Balance now on the right; what was spent / came in during the period underneath */}
+          {perAccount.map(({ account: a, spent, income }) => {
+            const bal = balances[a.id] || 0;
+            const credit = a.type === 'credit';
+            return (
+              <button
+                key={a.id}
+                onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
+                style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
+              >
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                  <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: bal < 0 ? T.red : T.text }}>
+                    {credit ? money(Math.abs(bal)) : money(bal)}{credit && bal < 0 && <span style={{ fontSize: 11, fontWeight: 600 }}> owed</span>}
+                  </span>
                 </div>
-              )}
-            </button>
-          ))}
-          <div style={{ display: 'flex', fontSize: 13, fontWeight: 700, color: T.text, paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>
-            <span style={{ flex: 1 }}>All accounts</span>
-            <span>−{money(summary.spent)}{summary.income ? <span style={{ color: T.green, fontWeight: 600 }}> · +{money(summary.income)}</span> : null}</span>
+                <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
+                  <span style={{ flex: 1 }}>{typeLabel(a.type)} · {spent ? `spent ${money(spent)}` : 'nothing spent'} {range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>
+                  {income > 0 && <span style={{ color: T.green }}>+{money(income)} in</span>}
+                </div>
+                {summary.spent > 0 && spent > 0 && (
+                  <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
+                    <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+          <div style={{ paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>
+            <div style={{ display: 'flex', fontSize: 14, fontWeight: 700, color: T.text }}>
+              <span style={{ flex: 1 }}>All accounts</span>
+              <span style={{ color: total < 0 ? T.red : T.text }}>{money(total)}</span>
+            </div>
+            <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
+              <span style={{ flex: 1 }}>{summary.spent ? `spent ${money(summary.spent)}` : 'nothing spent'} {range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>
+              {summary.income > 0 && <span style={{ color: T.green }}>+{money(summary.income)} in</span>}
+            </div>
           </div>
         </Card>
       )}
@@ -435,7 +449,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       )}
       {monthTxs.length > 0 && (range === 'month' || showList) && (
         <div style={{ fontSize: 12, color: T.muted, marginBottom: -8 }}>
-          {investNote ? 'Money moved to or from investing is edited in the Investing tab.' : 'Tap any entry to edit or delete it.'}
+          Tap any entry to see, edit or delete it.
         </div>
       )}
       {monthTxs.length === 0 ? (
@@ -451,7 +465,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${T.cardBorder}` }}>
               {g.txs.map(t => (
                 <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories}
-                  onOpen={() => (t.source === 'investing' ? setInvestNote(true) : setEditingTx(t))} />
+                  onOpen={() => (t.source === 'investing' ? setInvestTx(t) : setEditingTx(t))} />
               ))}
             </div>
           </div>
@@ -491,6 +505,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         />
       )}
 
+      {investTx && (
+        <InvestTransferSheet tx={investTx} accountsById={accountsById} investing={investing} budget={hook} onClose={() => setInvestTx(null)} />
+      )}
       {transfer && investing && <TransferSheet investing={investing} budget={hook} onClose={() => setTransfer(false)} />}
 
       {receiptFile && (
