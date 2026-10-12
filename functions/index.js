@@ -167,7 +167,7 @@ async function maybeSendDailyReview(db, messaging, userDoc, tokens) {
 }
 
 // Fridays at 3 PM (local): remind to text last week's work summary to each crew
-// that has a text number and worked last week. The text itself is opened from
+// that has a text number, worked last week and isn't marked paid for it yet. The text itself is opened from
 // the Work tab (Messages, one tap to send); this only sends the reminder.
 async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
   const data = userDoc.data();
@@ -201,6 +201,14 @@ async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
     if (textCrews.has(day.crewId)) worked.add(day.crewId);
     if (textCrews.has(day.second?.crewId)) worked.add(day.second.crewId);
   });
+
+  // Crews already marked paid for that week don't need the text anymore
+  const weekSnap = await userDoc.ref.collection('workWeeks').doc(prevMon).get();
+  const week = weekSnap.exists ? weekSnap.data() : {};
+  for (const crewId of [...worked]) {
+    const pay = week[crewId];
+    if (pay === true || pay?.paid === true) worked.delete(crewId);
+  }
 
   await userDoc.ref.update({ 'preferences.workTexts.lastSentDate': now.today });
   if (!worked.size) return;

@@ -38,7 +38,7 @@ export default function WorkTab({ hook }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      <WeeklyTexts days={days} crews={crews} today={today} onTexted={markCrewTexted} />
+      <WeeklyTexts days={days} crews={crews} members={members} weeks={weeks} today={today} onTexted={markCrewTexted} />
 
       {/* Inner tabs */}
       <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>

@@ -32,28 +32,29 @@ export function crewWeekEntries(days, crewId, mondayId) {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-// Weekly summary for one crew: each day's windows, doors and crew leader.
-// No comments, notes or pay status.
-export function buildWeekText(crew, entries, mondayId) {
+// Weekly summary for one crew: each day's windows, doors, crew leader and who was
+// on site; the total is days and leader / not leader. No comments, notes or pay.
+export function buildWeekText(crew, entries, mondayId, members = []) {
+  const nameOf = id => members.find(m => m.id === id)?.name;
   const lines = [bold(crew.name), `Week of ${formatWeekRange(mondayId)}`, ''];
-  let windows = 0, doors = 0, leader = 0;
+  let leader = 0;
   entries.forEach(e => {
-    const w = e.windows || 0, dr = e.doors || 0;
-    windows += w; doors += dr;
     if (e.isCrewLead) leader++;
     const day = new Date(e.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const onSite = (e.memberIds || []).map(nameOf).filter(Boolean);
     lines.push(
       bold(day),
-      `Windows: ${bold(w)} · Doors: ${bold(dr)}`,
+      `Windows: ${bold(e.windows || 0)} · Doors: ${bold(e.doors || 0)}`,
       `Crew leader: ${e.isCrewLead ? '✅ Yes' : '❌ No'}`,
+      ...(onSite.length ? [`On site: ${onSite.join(', ')}`] : []),
       '',
     );
   });
   lines.push(
     '━━━━━━━━━━',
-    `${bold('TOTAL')} · ${bold(plural(entries.length, 'day'))}`,
-    `Windows: ${bold(windows)} · Doors: ${bold(doors)}`,
-    `Crew leader: ${plural(leader, 'day')} · Not leader: ${plural(entries.length - leader, 'day')}`,
+    `${bold('TOTAL')}: ${bold(plural(entries.length, 'day'))}`,
+    `Crew leader: ${bold(plural(leader, 'day'))}`,
+    `Not crew leader: ${bold(plural(entries.length - leader, 'day'))}`,
   );
   return lines.join('\n');
 }
