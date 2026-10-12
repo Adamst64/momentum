@@ -33,7 +33,8 @@ export function crewWeekEntries(days, crewId, mondayId) {
 }
 
 // Weekly summary for one crew: each day's windows, doors, crew leader and who was
-// on site; the total is days and leader / not leader. No comments, notes or pay.
+// on site, plus notes ticked for the text; the total is days and leader / not
+// leader. Other notes and pay status stay out.
 export function buildWeekText(crew, entries, mondayId, members = []) {
   const nameOf = id => members.find(m => m.id === id)?.name;
   const lines = [bold(crew.name), `Week of ${formatWeekRange(mondayId)}`, ''];
@@ -47,6 +48,8 @@ export function buildWeekText(crew, entries, mondayId, members = []) {
       `Windows: ${bold(e.windows || 0)} · Doors: ${bold(e.doors || 0)}`,
       `Crew leader: ${e.isCrewLead ? '✅ Yes' : '❌ No'}`,
       ...(onSite.length ? [`On site: ${onSite.join(', ')}`] : []),
+      // Only notes ticked "Include this note in the weekly text"
+      ...(e.commentInText && e.comment?.trim() ? [`Note: ${e.comment.trim()}`] : []),
       '',
     );
   });

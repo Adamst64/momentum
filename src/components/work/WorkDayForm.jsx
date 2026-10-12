@@ -86,7 +86,8 @@ function MembersCard({ ids, members, onAdd, onRemove }) {
   );
 }
 
-function CommentCard({ value, onChange }) {
+// Notes are private unless "Include in weekly text" is checked
+function CommentCard({ value, onChange, inText, onToggleInText }) {
   return (
     <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
       <textarea
@@ -96,13 +97,34 @@ function CommentCard({ value, onChange }) {
         rows={3}
         style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
       />
+      <button
+        type="button"
+        onClick={() => onToggleInText(!inText)}
+        aria-pressed={inText}
+        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', paddingTop: 10, marginTop: 4, borderTop: `1px solid ${T.cardBorder}`, textAlign: 'left' }}
+      >
+        <span style={{
+          width: 20, height: 20, borderRadius: 5, flexShrink: 0, boxSizing: 'border-box',
+          border: inText ? 'none' : `2px solid ${T.muted}`, background: inText ? T.olive : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          {inText && (
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M2 6l3 3 5-5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+        </span>
+        <span style={{ fontSize: 13, color: inText ? T.text : T.muted }}>
+          Include this note in the weekly text
+        </span>
+      </button>
     </div>
   );
 }
 
-const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', isOff: false, second: null };
+const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', commentInText: false, isOff: false, second: null };
 // Rare split day: part of the day with a second crew, with its own counts
-const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false, memberIds: [], comment: '' };
+const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false, memberIds: [], comment: '', commentInText: false };
 const norm = (base) => ({ ...EMPTY, ...base });
 
 export default function WorkDayForm({ dateStr, initial, crews, members, onSave, onDelete }) {
@@ -198,7 +220,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
           </div>
 
           <MembersCard ids={form.memberIds} members={members} onAdd={() => setShowMemberPicker('first')} onRemove={id => set('memberIds', form.memberIds.filter(x => x !== id))} />
-          <CommentCard value={form.comment} onChange={v => set('comment', v)} />
+          <CommentCard value={form.comment} onChange={v => set('comment', v)} inText={!!form.commentInText} onToggleInText={v => set('commentInText', v)} />
 
           {/* Second crew (rare split day), kept below everything for the first crew */}
           {form.second ? (
@@ -231,7 +253,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
                 </div>
               </div>
               <MembersCard ids={form.second.memberIds || []} members={members} onAdd={() => setShowMemberPicker('second')} onRemove={id => setSecond('memberIds', (form.second.memberIds || []).filter(x => x !== id))} />
-              <CommentCard value={form.second.comment || ''} onChange={v => setSecond('comment', v)} />
+              <CommentCard value={form.second.comment || ''} onChange={v => setSecond('comment', v)} inText={!!form.second.commentInText} onToggleInText={v => setSecond('commentInText', v)} />
               <button
                 onClick={() => set('second', null)}
                 style={{ alignSelf: 'flex-start', fontSize: 13, color: T.red, padding: '2px 4px' }}
