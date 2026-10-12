@@ -4,9 +4,12 @@ import { T } from '../../theme';
 import { CATEGORY_COLORS } from '../../utils/budget';
 import { inputStyle, Field, PrimaryButton } from '../investing/ui';
 import DeleteCategoryDialog from './DeleteCategoryDialog';
+import ErrorBoundary from '../ErrorBoundary';
 
-// The full emoji set is large, so it only loads once someone opens the picker
+// The full emoji set is large, so it only loads once someone opens the picker.
+// If it can't load (offline, or an update replaced the file), a short built-in list is shown.
 const EmojiPicker = lazy(() => import('emoji-picker-react'));
+const BASIC_EMOJI = '🛒 🍔 ☕ 🍕 🍺 🚗 ⛽ 🚌 ✈️ 🏠 💡 📱 💻 🛍️ 👕 👟 💊 🏥 🦷 💇 🎉 🎬 🎮 🎵 📚 🎓 🐶 👶 🎁 💍 🏋️ ⚽ 🧾 💳 🏦 💼 💵 🔧 🧹 🌱 🍼 🚬 🏖️ ❤️ ⭐ 📦'.split(' ');
 
 // Add or edit a category. `initial` is an existing category, or null for a new one of `kind`.
 // onRemove(moveTo | null); categories and txs let the delete step offer where entries go
@@ -60,6 +63,13 @@ export default function CategoryForm({ initial, kind, categories = [], txs = [],
         </div>
 
         {picking && (
+          <ErrorBoundary fallback={() => (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', gap: 4 }}>
+              {BASIC_EMOJI.map(e => (
+                <button key={e} type="button" onClick={() => { setEmoji(e); setPicking(false); }} style={{ fontSize: 24, padding: 6, borderRadius: 8 }}>{e}</button>
+              ))}
+            </div>
+          )}>
           <Suspense fallback={<div style={{ height: 360, color: T.muted, fontSize: 13, textAlign: 'center', paddingTop: 40 }}>Loading emojis…</div>}>
             <EmojiPicker
               onEmojiClick={e => { setEmoji(e.emoji); setPicking(false); }}
@@ -73,6 +83,7 @@ export default function CategoryForm({ initial, kind, categories = [], txs = [],
               style={{ '--epr-bg-color': T.bg, '--epr-category-label-bg-color': T.bg, '--epr-search-input-bg-color': T.card, borderColor: T.cardBorder }}
             />
           </Suspense>
+          </ErrorBoundary>
         )}
 
         <Field label="Color">
