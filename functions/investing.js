@@ -33,6 +33,8 @@ async function quote(symbol, key) {
 
 // Latest price, previous close and name from Yahoo (keyless). Mutual funds
 // have one price a day (NAV, published in the evening).
+const isFund = r => r.meta?.instrumentType === 'MUTUALFUND';
+
 async function yahooQuote(symbol) {
   if (!/^[A-Z0-9.\-^=]{1,15}$/.test(symbol)) return null;
   const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?interval=1d&range=5d`,
@@ -41,18 +43,32 @@ async function yahooQuote(symbol) {
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
   const r = (await res.json())?.chart?.result?.[0];
   if (!r) return null;
-  // Daily closes with their dates. A mutual fund's row for today has no close until
-  // its NAV posts in the evening, and Yahoo still stamps the quote with this
-  // morning's time, so the price's real trading day is the last row with a close.
+  // Daily closes with their dates. Yahoo's quote time can't be trusted for funds:
+  // it stamps yesterday's NAV with this morning's time, and once tonight's NAV is
+  // out the price updates before today's row gets its close. So compare the price
+  // with the last real close: the same → that's the price's day (no move today
+  // yet); different → it's a newer price, and that close is its previous close.
   const ts = r.timestamp || [];
   const raw = r.indicators?.quote?.[0]?.close || [];
   const days = ts.map((t, i) => ({ t, c: raw[i] })).filter(x => x.c > 0);
   const last = days[days.length - 1];
+  const before = days[days.length - 2];
   const price = r.meta?.regularMarketPrice > 0 ? r.meta.regularMarketPrice : last?.c;
   if (!(price > 0)) return null;
-  const prevClose = days.length >= 2 ? days[days.length - 2].c : (r.meta?.chartPreviousClose || null);
   const round = n => (n ? Math.round(n * 1e4) / 1e4 : null);
-  const priceDate = last ? easternNow(new Date(last.t * 1000)).today : null;
+  const etDate = t => easternNow(new Date(t * 1000)).today;
+  let prevClose, priceDate;
+  const qt = r.meta?.regularMarketTime;
+  // Same price as the last close, or that close is today's (a stock mid-session)
+  if (last && (Math.abs(price - last.c) < 0.00005 || (qt && etDate(qt) === etDate(last.t) && !isFund(r)))) {
+    prevClose = before ? before.c : (r.meta?.chartPreviousClose || null);
+    priceDate = etDate(last.t);
+  } else {
+    prevClose = last ? last.c : (r.meta?.chartPreviousClose || null);
+    priceDate = qt ? etDate(qt) : null;
+    // A newer price can't be from the same day as the close it's compared with
+    if (last && priceDate && priceDate <= etDate(last.t)) priceDate = null;
+  }
   return { price: round(price), prevClose: round(prevClose), priceDate, name: r.meta?.longName || r.meta?.shortName || null, provider: 'yahoo' };
 }
 

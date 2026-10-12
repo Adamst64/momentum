@@ -169,14 +169,26 @@ export default function InvestingTab({ hook, userId, budget }) {
     finally { setUpdating(false); }
   }, [refreshPrices]);
 
-  // Refresh on open when prices are stale: 15 minutes while anything trades,
-  // 12 hours while the market is fully closed
+  // Refresh on open (and when the app comes back to the front) when prices are
+  // stale: 15 minutes while anything trades, 12 hours while the market is closed.
+  // A fund still showing yesterday's price on a trading day keeps the 15 minutes
+  // into the evening, so its NAV (out around 6–8 PM ET) shows up without a pull.
+  const held = portfolio.holdings;
+  const waitingNav = held.some(h => assets[h.symbol]?.priceProvider === 'yahoo' && !movedToday(assets[h.symbol])) && isMarketDay(today);
+  const freshness = useRef({});
+  freshness.current = { hasAuto, lastUpdate, session: status.session, waitingNav, update, updating };
   useEffect(() => {
-    if (autoTried.current || !hasAuto) return;
-    autoTried.current = true;
-    const age = lastUpdate ? Date.now() - new Date(lastUpdate) : Infinity;
-    if (age > (status.session === 'closed' ? STALE_CLOSED_MS : STALE_OPEN_MS)) update();
-  }, [hasAuto, lastUpdate, status.session, update]);
+    const check = () => {
+      const f = freshness.current;
+      if (!f.hasAuto || f.updating || document.visibilityState !== 'visible') return;
+      const age = f.lastUpdate ? Date.now() - new Date(f.lastUpdate) : Infinity;
+      const limit = f.session === 'closed' && !f.waitingNav ? STALE_CLOSED_MS : STALE_OPEN_MS;
+      if (age > limit) f.update();
+    };
+    if (!autoTried.current && hasAuto) { autoTried.current = true; check(); }
+    document.addEventListener('visibilitychange', check);
+    return () => document.removeEventListener('visibilitychange', check);
+  }, [hasAuto]);
 
   // Pull down from the top of the page to refresh
   // Works from anywhere at the top, the chart included: a gesture that turns
