@@ -4,7 +4,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { movedToday, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -934,7 +934,7 @@ function SoldRows({ items, hide, onOpen }) {
 
 const NO_LIST = '__none'; // stocks you watch that aren't in any list
 
-const dayPct = a => (a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null);
+const dayPct = a => (!movedToday(a) ? 0 : a.price && a.prevClose ? (a.price - a.prevClose) / a.prevClose : null);
 
 // Watchlist home: your lists; tap one to open it
 function WatchHome({ hook, items, onOpenList }) {

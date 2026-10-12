@@ -26,7 +26,7 @@ async function quote(symbol, key) {
     // only the rate limit should stop us — everything else tries Yahoo
     if (e instanceof HttpsError) throw e;
   }
-  if (q && q.c > 0) return { price: q.c, prevClose: q.pc || null };
+  if (q && q.c > 0) return { price: q.c, prevClose: q.pc || null, priceDate: q.t ? easternNow(new Date(q.t * 1000)).today : null };
   try { return await yahooQuote(symbol); }
   catch (e) { console.warn(`Yahoo quote for ${symbol} failed:`, e.message); return null; }
 }
@@ -46,7 +46,10 @@ async function yahooQuote(symbol) {
   if (!(price > 0)) return null;
   const prevClose = closes.length >= 2 ? closes[closes.length - 2] : (r.meta?.chartPreviousClose || null);
   const round = n => (n ? Math.round(n * 1e4) / 1e4 : null);
-  return { price: round(price), prevClose: round(prevClose), name: r.meta?.longName || r.meta?.shortName || null, provider: 'yahoo' };
+  // The trading day this price is from: a mutual fund's NAV is yesterday's until it posts in the evening
+  const t = r.meta?.regularMarketTime;
+  const priceDate = t ? easternNow(new Date(t * 1000)).today : null;
+  return { price: round(price), prevClose: round(prevClose), priceDate, name: r.meta?.longName || r.meta?.shortName || null, provider: 'yahoo' };
 }
 
 // Fetch quotes for symbols (sequential: free tier allows ~60 calls/minute)
@@ -191,7 +194,7 @@ async function refreshPrices(db, request) {
     prices[sym] = q;
     const ref = assetsCol.doc(sym);
     const existing = (await ref.get()).data() || {};
-    const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now,
+    const update = { symbol: sym, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: now, priceDate: q.priceDate || null,
       ...(q.provider === 'yahoo' ? { priceProvider: 'yahoo', ...(!existing.name && q.name ? { name: q.name } : {}) } : {}),
       ...(q.provider === 'yahoo' ? {} : await extendedFields(sym, et)) };
     if (sym === BENCHMARK && !existing.watch) update.benchmark = true;
@@ -474,7 +477,7 @@ async function maybeSnapshot(db, userDoc, key, et) {
       if (!q) continue;
       prices[sym] = q.price;
       await userRef.collection('invAssets').doc(sym).set(
-        { price: q.price, prevClose: q.prevClose, priceUpdatedAt: now }, { merge: true });
+        { price: q.price, prevClose: q.prevClose, priceUpdatedAt: now, priceDate: q.priceDate || null }, { merge: true });
     }
   }
 
@@ -485,7 +488,7 @@ async function maybeSnapshot(db, userDoc, key, et) {
       if (q) {
         spy = q.price;
         await userRef.collection('invAssets').doc(BENCHMARK).set(
-          { symbol: BENCHMARK, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: new Date().toISOString() }, { merge: true });
+          { symbol: BENCHMARK, source: 'finnhub', price: q.price, prevClose: q.prevClose, priceUpdatedAt: new Date().toISOString(), priceDate: q.priceDate || null }, { merge: true });
       }
     } catch { /* benchmark is optional */ }
 

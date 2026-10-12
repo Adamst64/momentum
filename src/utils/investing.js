@@ -1,4 +1,5 @@
 import { toDateStr, addDays } from './dateUtils';
+import { priceDate as currentSession } from './marketCalendar';
 
 // Transactions (users/{uid}/invTransactions):
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
@@ -129,20 +130,26 @@ export function replay(txs, { byAccount = false } = {}) {
 }
 
 // Current-price fields for one replayed holding or position
+// A price from before the current trading day (a mutual fund whose NAV only posts
+// in the evening) hasn't moved today yet: its day change counts as zero, not as
+// the previous day's move.
+export const movedToday = a => !a.priceDate || a.priceDate >= currentSession();
+
 function priced(x, assets) {
   const a = assets[x.symbol] || {};
   const price = a.price ?? null;
+  const prevClose = movedToday(a) ? a.prevClose ?? null : price;
   const value = price !== null ? x.qty * price : null;
   const unrealized = value !== null ? value - x.cost : null;
   return {
     ...x,
     name: a.name || null,
     source: a.source || 'manual',
-    price, prevClose: a.prevClose ?? null, priceUpdatedAt: a.priceUpdatedAt || null,
+    price, prevClose, priceUpdatedAt: a.priceUpdatedAt || null, priceDate: a.priceDate || null,
     avgCost: x.qty > 0 ? x.cost / x.qty : null,
     value, unrealized,
     unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
-    dayPct: price && a.prevClose ? (price - a.prevClose) / a.prevClose : null,
+    dayPct: price && prevClose ? (price - prevClose) / prevClose : null,
     ext: extendedPrice(a),
   };
 }
