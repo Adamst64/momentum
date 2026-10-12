@@ -5,8 +5,8 @@ const Anthropic = require('@anthropic-ai/sdk');
 // The Anthropic API key lives in Firestore at config/anthropic { key }, like the
 // other API keys: clients can't read config/, only functions via the Admin SDK.
 
-// Keep in sync with GROCERY_GROUPS in src/utils/budget.js
-const GROUPS = ['fruits', 'vegetables', 'meat', 'dairy', 'bakery', 'pantry', 'snacks', 'drinks', 'frozen', 'prepared', 'household', 'personal', 'other'];
+// Keep in sync with GROCERY_GROUPS in src/utils/budget.js (frozen was merged into prepared)
+const GROUPS = ['fruits', 'vegetables', 'meat', 'dairy', 'bakery', 'pantry', 'snacks', 'sweets', 'drinks', 'alcohol', 'prepared', 'household', 'pets', 'personal', 'health', 'other'];
 
 const SCHEMA = {
   type: 'object',
@@ -39,12 +39,22 @@ For each item give:
 - name: a short readable name (expand abbreviations like "ORG BNLS CHKN BRST" → "Organic boneless chicken breast")
 - price: what was paid for that line after any discount or coupon printed right under it (fold the discount into the item; don't list discounts, deposits or bag fees as items unless they can't be tied to an item — then list them as group "other" with a negative or positive price)
 - group, one of:
-  fruits (fresh fruit and berries), vegetables (fresh vegetables, herbs, salad, potatoes, mushrooms),
-  meat (meat, poultry, fish, seafood, tofu and other proteins), dairy (milk, cheese, yogurt, butter, cream, eggs, plant milks),
-  bakery (bread, buns, tortillas, pastries), pantry (rice, pasta, flour, cereal, canned and jarred food, sauces, oils, spices, nuts, baking),
-  snacks (chips, crackers, candy, chocolate, cookies, ice cream bars), drinks (water, soda, juice, coffee, tea, alcohol),
-  frozen (frozen meals, frozen vegetables and fruit, ice cream), prepared (deli, rotisserie, ready meals, sushi, salads from the counter),
-  household (cleaning, paper towels, trash bags, foil, pet food), personal (toiletries, cosmetics, medicine, vitamins), other.
+  fruits (fresh fruit and berries)
+  vegetables (fresh vegetables, herbs, salad greens, potatoes, mushrooms)
+  meat (meat, poultry, fish, seafood, tofu and other proteins — fresh or frozen raw, e.g. frozen fish fillets or frozen chicken)
+  dairy (milk, cheese, yogurt, butter, cream, eggs, plant milks)
+  bakery (bread, buns, bagels, tortillas, pastries)
+  pantry (rice, pasta, flour, cereal, oats, canned and jarred food, sauces, condiments, oils, spices, nuts, baking supplies, baby food and formula)
+  snacks (savory snacks: chips, crackers, pretzels, popcorn, granola and protein bars)
+  sweets (candy, chocolate, cookies, cakes, desserts, ice cream of every kind including bars and frozen novelties)
+  drinks (non-alcoholic: water, soda, juice, sports drinks, coffee including beans and grounds, tea)
+  alcohol (beer, wine, spirits, hard seltzer, cider)
+  prepared (deli counter, rotisserie chicken, ready-to-eat meals, sushi, counter salads, and frozen ready meals like frozen pizza, frozen dinners, frozen dumplings)
+  household (cleaning supplies, paper towels, toilet paper, trash bags, foil, food storage, light bulbs, batteries)
+  pets (pet food, treats, litter and pet supplies)
+  personal (toiletries and cosmetics: shampoo, soap, toothpaste, deodorant, razors, makeup, diapers and wipes)
+  health (medicine, pain relief, cold and allergy, vitamins and supplements, first aid, prescriptions, contact lens solution, anything pharmacy-only)
+  other (anything that fits none of these)
 
 Also give the store name, the purchase date as YYYY-MM-DD (empty string if not printed), the grand total, and the tax (sum of all tax lines, 0 if none).
 If the photo isn't a receipt or can't be read, return an empty items list and total 0.`;

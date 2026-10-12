@@ -128,22 +128,27 @@ export const monthTitle = ym => {
 
 // Food groups for scanned receipt items. Keep ids in sync with GROUPS in functions/receipts.js
 export const GROCERY_GROUPS = [
-  { id: 'fruits',     label: 'Fruits',              emoji: '🍎', color: '#FF6B6B' },
-  { id: 'vegetables', label: 'Vegetables',          emoji: '🥦', color: '#4FCB66' },
+  { id: 'fruits',     label: 'Fruits',               emoji: '🍎', color: '#FF6B6B' },
+  { id: 'vegetables', label: 'Vegetables',           emoji: '🥦', color: '#4FCB66' },
   { id: 'meat',       label: 'Meat, fish & protein', emoji: '🥩', color: '#d55181' },
-  { id: 'dairy',      label: 'Dairy & eggs',        emoji: '🧀', color: '#F2D16B' },
-  { id: 'bakery',     label: 'Bread & bakery',      emoji: '🥖', color: '#D9A35F' },
-  { id: 'pantry',     label: 'Pantry',              emoji: '🥫', color: '#B98A5E' },
-  { id: 'snacks',     label: 'Snacks & sweets',     emoji: '🍫', color: '#B79CF0' },
-  { id: 'drinks',     label: 'Drinks',              emoji: '🥤', color: '#3987e5' },
-  { id: 'frozen',     label: 'Frozen',              emoji: '🧊', color: '#5BA4E6' },
-  { id: 'prepared',   label: 'Deli & ready meals',  emoji: '🍱', color: '#E5A44B' },
-  { id: 'household',  label: 'Household',           emoji: '🧻', color: '#9085e9' },
-  { id: 'personal',   label: 'Personal care',       emoji: '🧴', color: '#5EC4A8' },
-  { id: 'other',      label: 'Other',               emoji: '📦', color: '#8E8E93' },
+  { id: 'dairy',      label: 'Dairy & eggs',         emoji: '🧀', color: '#F2D16B' },
+  { id: 'bakery',     label: 'Bread & bakery',       emoji: '🥖', color: '#D9A35F' },
+  { id: 'pantry',     label: 'Pantry',               emoji: '🥫', color: '#B98A5E' },
+  { id: 'snacks',     label: 'Snacks',               emoji: '🥨', color: '#D96B3B' },
+  { id: 'sweets',     label: 'Sweets & ice cream',   emoji: '🍫', color: '#F28FB3' },
+  { id: 'drinks',     label: 'Drinks',               emoji: '🥤', color: '#3987e5' },
+  { id: 'alcohol',    label: 'Alcohol',              emoji: '🍷', color: '#B5485F' },
+  { id: 'prepared',   label: 'Deli & ready meals',   emoji: '🍱', color: '#E5A44B' },
+  { id: 'household',  label: 'Household',            emoji: '🧻', color: '#9085e9' },
+  { id: 'pets',       label: 'Pet food & supplies',  emoji: '🐾', color: '#5BA4E6' },
+  { id: 'personal',   label: 'Personal care',        emoji: '🧴', color: '#5EC4A8' },
+  { id: 'health',     label: 'Health & pharmacy',    emoji: '💊', color: '#2EC4B6' },
+  { id: 'other',      label: 'Other',                emoji: '📦', color: '#8E8E93' },
 ];
+// Groups that were merged away; items saved with them count under the new one
+const OLD_GROUPS = { frozen: 'prepared' };
 export const TAX_GROUP = { id: 'tax', label: 'Tax & fees', emoji: '🧾', color: '#5A5A5E' };
-export const lookupGroup = id => GROCERY_GROUPS.find(g => g.id === id) || (id === 'tax' ? TAX_GROUP : GROCERY_GROUPS[GROCERY_GROUPS.length - 1]);
+export const lookupGroup = id => GROCERY_GROUPS.find(g => g.id === (OLD_GROUPS[id] || id)) || (id === 'tax' ? TAX_GROUP : GROCERY_GROUPS[GROCERY_GROUPS.length - 1]);
 
 // Spending by food group across expenses that carry receipt items
 // ({ items: [{ name, amount (cents), group }] }). Whatever the items don't cover
@@ -163,7 +168,7 @@ export function groceryBreakdown(txs) {
     total += t.amount;
     let covered = 0;
     for (const i of t.items) {
-      add(i.group, { name: i.name, amount: i.amount, date: t.date });
+      add(OLD_GROUPS[i.group] || i.group, { name: i.name, amount: i.amount, date: t.date });
       covered += i.amount;
     }
     if (t.amount - covered) add('tax', { name: t.note || 'Receipt', amount: t.amount - covered, date: t.date });

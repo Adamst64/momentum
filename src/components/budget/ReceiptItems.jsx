@@ -5,7 +5,7 @@ import { GROCERY_GROUPS, lookupGroup, parseAmount } from '../../utils/budget';
 const small = { background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 8, color: T.text, fontSize: 14, padding: '6px 8px', outline: 'none', colorScheme: 'dark', minWidth: 0 };
 
 // Editable receipt lines: [{ name, price (text, dollars), group }]
-export const itemsToRows = items => (items || []).map(i => ({ name: i.name, price: (i.amount / 100).toFixed(2), group: i.group }));
+export const itemsToRows = items => (items || []).map(i => ({ name: i.name, price: (i.amount / 100).toFixed(2), group: lookupGroup(i.group).id }));
 export const rowsToItems = rows => rows
   .map(r => ({ name: r.name.trim() || 'Item', amount: parseSigned(r.price), group: r.group }))
   .filter(i => i.amount);
