@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { T } from '../../theme';
 import { formatDateYear, todayStr } from '../../utils/dateUtils';
 import { genId } from '../../utils/id';
@@ -33,6 +33,8 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
   const [ask, setAsk] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);          // folded by default
+  const swipe = useRef(null);
 
   const [y, m] = month.split('-').map(Number);
   const first = new Date(y, m - 1, 1).getDay();
@@ -80,17 +82,42 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
     );
   };
 
+  const nextUp = upcoming[0];
+  if (!open) {
+    return (
+      <button onClick={() => setOpen(true)}
+        style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', background: T.bg, borderRadius: 12, padding: '11px 12px' }}>
+        <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>📅 Calendar</span>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: T.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {nextUp ? `${nextUp.label} · ${formatDateYear(nextUp.date)}` : 'Nothing coming up'}
+        </span>
+        <span style={{ color: T.muted, fontSize: 12 }}>▾</span>
+      </button>
+    );
+  }
+
   return (
     <div style={{ background: T.bg, borderRadius: 12, padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1 }}>📅 {symbol} calendar</span>
+        <button onClick={() => setOpen(false)} style={{ fontSize: 14, fontWeight: 700, color: T.text, flex: 1, textAlign: 'left' }}>📅 {symbol} calendar <span style={{ color: T.muted, fontSize: 12 }}>▴</span></button>
         <button onClick={() => shift(-1)} aria-label="Previous month" style={{ color: T.khaki, fontSize: 18, padding: '0 8px' }}>‹</button>
         <span style={{ fontSize: 13, color: T.text, minWidth: 92, textAlign: 'center' }}>
           {new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
         </span>
         <button onClick={() => shift(1)} aria-label="Next month" style={{ color: T.khaki, fontSize: 18, padding: '0 8px' }}>›</button>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center' }}>
+      {/* Swipe left / right to change month (the app's swipe-back stays out of it) */}
+      <div
+        data-no-swipe-back
+        onTouchStart={e => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY }; }}
+        onTouchEnd={e => {
+          const s0 = swipe.current; swipe.current = null;
+          if (!s0) return;
+          const t = e.changedTouches[0], dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+          if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) shift(dx < 0 ? 1 : -1);
+        }}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center', touchAction: 'pan-y' }}
+      >
         {WEEK.map((d, i) => <span key={i} style={{ fontSize: 10, color: T.muted, padding: '2px 0' }}>{d}</span>)}
         {Array.from({ length: first }, (_, i) => <span key={`b${i}`} />)}
         {Array.from({ length: days }, (_, i) => {

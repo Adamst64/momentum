@@ -467,7 +467,9 @@ function SwipeBack({ onBack }) {
     let start = null; // { x, y, active }
     const onStart = e => {
       const t = e.touches[0];
-      start = e.touches.length === 1 && t.clientX <= EDGE ? { x: t.clientX, y: t.clientY, active: false, dead: false } : null;
+      // Areas with their own sideways swipes (e.g. a calendar's months) opt out
+      const own = e.target instanceof Element && e.target.closest('[data-no-swipe-back]');
+      start = e.touches.length === 1 && t.clientX <= EDGE && !own ? { x: t.clientX, y: t.clientY, active: false, dead: false } : null;
     };
     const onMove = e => {
       if (!start || start.dead) return;
