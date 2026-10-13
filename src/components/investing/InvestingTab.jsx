@@ -616,15 +616,31 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
         </div>
         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
+          {/* Total gain, then the day's move: live (today / pre-market / after hours) in color, the last session's in grey */}
           <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
-            {pct(h.unrealizedPct)}{(() => {
-              // Before the open: the pre-market move when there is one, else the last session's, labeled with its day
-              const dc = dayContext();
-              if (dc.pre && h.ext) return <span style={{ color: gainColor(h.ext.pct) }}> · {pct(h.ext.pct)} pre-market</span>;
-              return h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} {dc.word}</span>;
-            })()}
+            {signedMoney(h.unrealized, hide)}{h.unrealizedPct !== null ? ` (${pct(h.unrealizedPct)})` : ''}
           </div>
-          {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
+          {(() => {
+            const dc = dayContext();
+            // A fund whose new price isn't out yet has no move to show
+            const day = h.dayPct !== null && h.prevClose && Math.abs(h.price - h.prevClose) > 1e-9 ? { change: h.qty * (h.price - h.prevClose), pct: h.dayPct } : null;
+            const ext = h.ext ? { change: h.qty * h.ext.change, pct: h.ext.pct, label: h.ext.label.toLowerCase() } : null;
+            const line = (m, label, color, size = 11) => (
+              <div style={{ fontSize: size, color }}>{signedMoney(m.change, hide)} ({pct(m.pct)}) {label}</div>
+            );
+            if (dc.pre) return (
+              <>
+                {ext && line(ext, 'pre-market', gainColor(ext.pct))}
+                {day && line(day, dc.word, T.muted)}
+              </>
+            );
+            return (
+              <>
+                {day && line(day, dc.word, gainColor(day.pct))}
+                {ext && line(ext, ext.label, gainColor(ext.pct))}
+              </>
+            );
+          })()}
         </div>
       </div>
       {share > 0 && (
