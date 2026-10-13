@@ -4,7 +4,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { movedToday, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -416,7 +416,7 @@ export default function InvestingTab({ hook, userId, budget }) {
             )}
             {txs.length > 0 && (
               <div style={{ fontSize: 12, marginTop: 2, color: gainColor(portfolio.dayChange) }}>
-                {signedMoney(portfolio.dayChange, hide)} today
+                {signedMoney(portfolio.dayChange, hide)} {dayContext().word}
                 {portfolio.ext && (
                   <span style={{ color: gainColor(portfolio.ext.change) }}> · {signedMoney(portfolio.ext.change, hide)} {portfolio.ext.label.toLowerCase()}</span>
                 )}
@@ -617,7 +617,12 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
           <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
-            {pct(h.unrealizedPct)}{h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} today</span>}
+            {pct(h.unrealizedPct)}{(() => {
+              // Before the open: the pre-market move when there is one, else the last session's, labeled with its day
+              const dc = dayContext();
+              if (dc.pre && h.ext) return <span style={{ color: gainColor(h.ext.pct) }}> · {pct(h.ext.pct)} pre-market</span>;
+              return h.dayPct !== null && <span style={{ color: gainColor(h.dayPct) }}> · {pct(h.dayPct)} {dc.word}</span>;
+            })()}
           </div>
           {h.ext && <div style={{ fontSize: 11, color: gainColor(h.ext.pct) }}>{h.ext.label} {pct(h.ext.pct)}</div>}
         </div>
@@ -829,7 +834,19 @@ function AccountCard({ g, hide, onOpen }) {
         </span>
         <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           <span style={{ display: 'block', fontSize: 15, fontWeight: 700, color: T.text }}>{money(g.value, hide)}</span>
-          {Math.abs(g.dayChange) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.dayChange) }}>{signedMoney(g.dayChange, hide)} today</span>}
+          {(() => {
+            // Before the open: only the pre-market move (yesterday's change isn't today's)
+            const dc = dayContext();
+            if (dc.pre) return g.ext && Math.abs(g.ext.change) > 0.005
+              ? <span style={{ display: 'block', fontSize: 11, color: gainColor(g.ext.change) }}>{signedMoney(g.ext.change, hide)} pre-market</span>
+              : null;
+            return (
+              <>
+                {Math.abs(g.dayChange) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.dayChange) }}>{signedMoney(g.dayChange, hide)} {dc.word}</span>}
+                {g.ext?.session === 'post' && Math.abs(g.ext.change) > 0.005 && <span style={{ display: 'block', fontSize: 11, color: gainColor(g.ext.change) }}>{signedMoney(g.ext.change, hide)} after hours</span>}
+              </>
+            );
+          })()}
         </span>
         <span style={{ fontSize: 18, color: T.muted, marginLeft: 2 }}>›</span>
       </button>
@@ -870,8 +887,18 @@ function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold, 
       <Card style={noSelect}>
         <div style={{ fontSize: 13, color: T.muted, fontWeight: 600 }}>{g.name}</div>
         <div style={{ marginTop: 4, fontSize: 30, fontWeight: 800, color: T.text, letterSpacing: -0.6, fontVariantNumeric: 'tabular-nums' }}>{money(g.value, hide)}</div>
-        <div style={{ fontSize: 13, color: gainColor(g.dayChange), marginTop: 2 }}>
-          {signedMoney(g.dayChange, hide)}{prevValue > 0 ? ` (${pct(g.dayChange / prevValue)})` : ''} today
+        <div style={{ fontSize: 13, color: gainColor(dayContext().pre ? (g.ext?.change ?? 0) : g.dayChange), marginTop: 2 }}>
+          {(() => {
+            const dc = dayContext();
+            const last = `${signedMoney(g.dayChange, hide)}${prevValue > 0 ? ` (${pct(g.dayChange / prevValue)})` : ''} ${dc.word}`;
+            if (!dc.pre) return last;
+            return (
+              <>
+                {g.ext ? <>{signedMoney(g.ext.change, hide)}{g.ext.pct !== null ? ` (${pct(g.ext.pct)})` : ''} pre-market</> : 'No pre-market moves yet'}
+                <span style={{ color: T.muted }}> · {last}</span>
+              </>
+            );
+          })()}
         </div>
         <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <GainRow label="Realized" sub="sold" value={g.realized} pctOf={g.soldBasis} hide={hide} />

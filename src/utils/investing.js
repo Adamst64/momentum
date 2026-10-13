@@ -1,5 +1,5 @@
 import { toDateStr, addDays } from './dateUtils';
-import { priceDate as currentSession, easternDate, earlyClose } from './marketCalendar';
+import { priceDate as currentSession, easternDate, earlyClose, isMarketDay } from './marketCalendar';
 
 // Transactions (users/{uid}/invTransactions):
 //   deposit / withdraw: { type, date, amount, note? }      — salary in, cash out
@@ -165,6 +165,18 @@ function priced(x, assets) {
   };
 }
 
+// What "today's change" means right now. Before the open on a trading day (and on
+// weekends/holidays) the latest change is from the last session, so it's labeled
+// with that day ("Fri"), not "today"; pre: the pre-market is the live move.
+export function dayContext(now = new Date()) {
+  const et = easternDate(now);
+  const session = currentSession(now);
+  const word = session === et.date ? 'today'
+    : new Date(session + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+  const pre = isMarketDay(et.date) && et.minutes < 9 * 60 + 30;
+  return { word, pre };
+}
+
 // Open positions grouped by account, in your account order; '' (no account) last.
 // Each: { id, name, positions, sold, cash, value, dayChange } where value = positions + cash
 // (cash only exists from older entries now) and sold = positions fully sold in that account.
@@ -189,6 +201,14 @@ export function accountGroups(txs, assets, accounts = []) {
         dividends: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.dividends, 0),
         value: cash + ps.reduce((t, p) => t + (p.value || 0), 0),
         dayChange: ps.reduce((t, p) => t + (p.prevClose && p.price ? p.qty * (p.price - p.prevClose) : 0), 0),
+        // Pre-market / after-hours move of what's held (stocks and ETFs; funds don't trade then)
+        ext: (() => {
+          const withExt = ps.filter(p => p.ext);
+          if (!withExt.length) return null;
+          const change = withExt.reduce((t, p) => t + p.qty * p.ext.change, 0);
+          const base = withExt.reduce((t, p) => t + p.qty * p.price, 0);
+          return { label: withExt[0].ext.label, session: withExt[0].ext.session, change, pct: base ? change / base : null };
+        })(),
       };
     });
 }
