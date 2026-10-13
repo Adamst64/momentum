@@ -3,7 +3,7 @@ import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt } from '../../utils/investing';
 import { Chips, gainColor, noSelect, ConfirmDialog, inputStyle } from './ui';
-import { ValueChart, NOTE_COLOR } from './Charts';
+import { ValueChart, NOTE_COLOR, DIV_COLOR } from './Charts';
 
 const RANGES = [
   { value: '1mo', label: '1M' },
@@ -125,7 +125,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
       )}
       {!trade && allDots.length > 0 && points?.length > 1 && (
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
-          {trades.length > 0 && <><span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells · </>}
+          {trades.length > 0 && <><span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells · {trades.some(t => t.reinvest) && <><span style={{ color: DIV_COLOR, fontWeight: 700 }}>D</span> dividends reinvested · </>}</>}
           {noteDots.length > 0 && <><span style={{ color: NOTE_COLOR, fontWeight: 700 }}>★</span> your marks · </>}
           tap one for details · two fingers to compare dates
         </div>
@@ -284,6 +284,7 @@ function MarksList({ symbol, notes, priceHistory, now, hide, onUpdate, onAskDele
 // Details for one tapped buy or sell
 function TradeCard({ t, hide, onClose, onDelete, onEdit }) {
   const buy = t.type === 'buy';
+  const tint = t.reinvest ? DIV_COLOR : buy ? '#30D158' : '#FF9F0A';
   const row = (label, value, color = T.text) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, padding: '3px 0' }}>
       <span style={{ color: T.muted }}>{label}</span>
@@ -291,10 +292,10 @@ function TradeCard({ t, hide, onClose, onDelete, onEdit }) {
     </div>
   );
   return (
-    <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${buy ? '#30D158' : '#FF9F0A'}55` }}>
+    <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${tint}55` }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: buy ? '#30D158' : '#FF9F0A' }}>
-          {buy ? (t.fromCash === false ? 'Added (already owned)' : 'Bought') : t.closedOut ? 'Sold (all)' : 'Sold'}
+        <span style={{ fontSize: 14, fontWeight: 700, color: tint }}>
+          {t.reinvest ? 'Dividend reinvested' : buy ? (t.fromCash === false ? 'Added (already owned)' : 'Bought') : t.closedOut ? 'Sold (all)' : 'Sold'}
         </span>
         <span style={{ fontSize: 12, color: T.muted, flex: 1 }}>{formatDateYear(t.date)}</span>
         <button onClick={onClose} aria-label="Close" style={{ fontSize: 16, color: T.muted, padding: '0 2px' }}>×</button>

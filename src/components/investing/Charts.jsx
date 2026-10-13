@@ -4,6 +4,7 @@ import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
 import { SERIES, OTHER_COLOR, gainColor, noSelect } from './ui';
 
+export const DIV_COLOR = '#BF5AF2';
 export const NOTE_COLOR = '#FFD60A'; // your own marks on a chart
 
 // ── Portfolio value over time (single series, touch/hover crosshair) ────────
@@ -242,11 +243,13 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
               </g>
             );
           }
+          // B buy (green), S sell (orange), D dividend reinvested (purple)
+          const mark = t.reinvest ? { fill: DIV_COLOR, letter: 'D' } : buy ? { fill: '#30D158', letter: 'B' } : { fill: '#FF9F0A', letter: 'S' };
           return (
             <g key={t.id} style={{ pointerEvents: 'none' }}>
               {sel && <circle cx={cx} cy={cy} r={9} fill="none" stroke={T.text} strokeWidth={1.5} />}
-              <circle cx={cx} cy={cy} r={6} fill={buy ? '#30D158' : '#FF9F0A'} stroke={T.card} strokeWidth={1.5} />
-              <text x={cx} y={cy + 2.6} textAnchor="middle" fontSize="7" fontWeight="800" fill="#000">{buy ? 'B' : 'S'}</text>
+              <circle cx={cx} cy={cy} r={6} fill={mark.fill} stroke={T.card} strokeWidth={1.5} />
+              <text x={cx} y={cy + 2.6} textAnchor="middle" fontSize="7" fontWeight="800" fill="#000">{mark.letter}</text>
             </g>
           );
         })}

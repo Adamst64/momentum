@@ -170,6 +170,11 @@ export function useInvesting(userId) {
   }, [assets, ref]);
   const deleteMark = useCallback((symbol, mark) => updateDoc(ref('invAssets', symbol), { marks: arrayRemove(mark) }), [ref]);
 
+  // ── Dates to watch for a stock (its calendar) ──
+  // events: [{ id, date, label, kind: 'earnings'|'dividend'|'other', note? }] — the list is replaced whole
+  const setEvents = useCallback((symbol, events) =>
+    setDoc(ref('invAssets', symbol), { symbol, events }, { merge: true }), [ref]);
+
   const addAccount = useCallback(async (name) => {
     const id = genId();
     await setDoc(ref('invAccounts', id), { name: name.trim(), order: accountDocs.length, createdAt: new Date().toISOString() });
@@ -288,7 +293,7 @@ export function useInvesting(userId) {
   return {
     txsLoaded,
     txs, assets, assetDocs, snapshots, alerts, portfolio, accounts, watchLists,
-    addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark,
+    addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark, setEvents,
     addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, setCoreFund, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
   };

@@ -9,6 +9,7 @@ import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDial
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
 import TransferSheet from '../TransferSheet';
+import { stockEvents } from './PositionCalendar';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
@@ -587,8 +588,9 @@ export default function InvestingTab({ hook, userId, budget }) {
 
 // One holding (or one account's position) in the Portfolio list
 function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, laterDate, hide, sliceColor, onOpen }) {
-  const next = assets[h.symbol]?.nextEarnings;
-  const showEarn = next && next.date >= today && next.date <= laterDate;
+  // The next date on this stock's calendar (yours or the earnings report) within 3 weeks
+  const next = stockEvents(assets[h.symbol]).find(e => e.date >= today);
+  const showEarn = next && next.date <= laterDate;
   return (
     <button
       onClick={() => onOpen(h.account !== null && h.account !== undefined ? { symbol: h.symbol, account: h.account } : h.symbol)}
@@ -603,7 +605,7 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
                 fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
                 color: next.date <= soonDate ? T.khaki : T.muted, background: next.date <= soonDate ? '#2A2616' : T.bg,
               }}>
-                Earnings {earningsBadge(next.date, today)}
+                {next.kind === 'earnings' ? 'Earnings' : next.label.length > 16 ? next.label.slice(0, 15) + '…' : next.label} {earningsBadge(next.date, today)}
               </span>
             )}
             {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}

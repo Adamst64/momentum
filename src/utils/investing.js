@@ -252,8 +252,11 @@ export function computePortfolio(txs, assets) {
 // Every buy and sell of one symbol, in date order, with what each one did:
 // buys get today's value of those shares; sells get the realized gain at the
 // average cost back then (the same average-cost method as replay).
+// Each buy and sell of one symbol with what it meant. A buy saved together with a
+// dividend (reinvested) is flagged reinvest, so charts mark it D instead of B.
 export function tradeDetails(txs, symbol, priceNow = null) {
   let qty = 0, cost = 0;
+  const divLinks = new Set(txs.filter(t => t.type === 'dividend' && t.linkId).map(t => t.linkId));
   return sortTx(txs.filter(t => t.symbol === symbol && (t.type === 'buy' || t.type === 'sell'))).map(t => {
     const fee = t.fee || 0;
     if (t.type === 'buy') {
@@ -261,7 +264,7 @@ export function tradeDetails(txs, symbol, priceNow = null) {
       qty += t.quantity; cost += total;
       const valueNow = priceNow ? t.quantity * priceNow : null;
       return {
-        ...t, total, valueNow,
+        ...t, total, valueNow, reinvest: !!t.linkId && divLinks.has(t.linkId),
         gain: valueNow !== null ? valueNow - total : null,
         gainPct: valueNow !== null && total > 0 ? valueNow / total - 1 : null,
       };
