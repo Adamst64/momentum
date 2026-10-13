@@ -3,11 +3,11 @@ import { useLongPress } from '../../hooks/useLongPress';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr, parseDate } from '../../utils/dateUtils';
-import { parseAmount, centsToInput, money, refundedTotal } from '../../utils/budget';
+import { parseAmount, centsToInput, money, refundedTotal, GROCERY_GROUPS, lookupGroup } from '../../utils/budget';
 import RefundSheet, { RefundPanel } from './RefundPanel';
 import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog } from '../investing/ui';
 import CategoryForm from './CategoryForm';
-import ReceiptItems, { itemsToRows, rowsToItems } from './ReceiptItems';
+import ReceiptItems, { itemsToRows, rowsToItems, parseSigned } from './ReceiptItems';
 
 const TYPES = [
   { value: 'expense',  label: 'Expense' },
@@ -79,6 +79,9 @@ export default function TxForm({
   const [editCat, setEditCat] = useState(null); // category held down in the grid
   const [rows, setRows] = useState(() => itemsToRows(initial?.items)); // scanned receipt lines
   const [showItems, setShowItems] = useState(false);
+  // Groceries typed in by hand: one food group for the whole amount, or split into items
+  const [foodGroup, setFoodGroup] = useState(null);
+  const [split, setSplit] = useState(false);
   const [refunding, setRefunding] = useState(false);
 
   const cents = parseAmount(amount);
@@ -99,6 +102,7 @@ export default function TxForm({
     if (t !== type) setCategory(null);
   };
 
+  const groceryPick = type === 'expense' && category === 'groceries' && !initial?.items?.length;
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
@@ -106,7 +110,10 @@ export default function TxForm({
     try {
       await onSave({
         type, amount: cents - refunded, category, accountId, toAccountId, date, note,
-        ...(initial?.items ? { items: rowsToItems(rows) } : {}),
+        ...(initial?.items ? { items: rowsToItems(rows) }
+          : groceryPick && split ? { items: rowsToItems(rows) }
+          : groceryPick && foodGroup ? { items: [{ name: note.trim() || lookupGroup(foodGroup).label, amount: cents - refunded, group: foodGroup }] }
+          : {}),
         ...(refunded ? { originalAmount: cents } : {}),
       });
       onClose();
@@ -161,6 +168,43 @@ export default function TxForm({
             <CategoryGrid options={cats} value={category} onChange={setCategory} onNew={() => setNewCategory(true)}
               onHold={onUpdateCategory && (c => !c.fixed && setEditCat(c))} />
             {onUpdateCategory && <span style={{ fontSize: 11, color: T.muted }}>Press and hold a category to edit or delete it.</span>}
+          </Field>
+        )}
+
+        {groceryPick && (
+          <Field label="What kind of groceries? (optional)">
+            {!split ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
+                  {GROCERY_GROUPS.map(g => {
+                    const on = foodGroup === g.id;
+                    return (
+                      <button key={g.id} type="button" onClick={() => setFoodGroup(on ? null : g.id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 9px', borderRadius: 10, minWidth: 0, fontSize: 12.5, textAlign: 'left',
+                          background: on ? g.color + '2E' : T.bg, border: `1px solid ${on ? g.color : T.cardBorder}`, color: on ? T.text : T.muted, fontWeight: on ? 600 : 400 }}>
+                        <span aria-hidden="true">{g.emoji}</span>
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{g.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button type="button" onClick={() => { setSplit(true); setRows([{ name: '', price: amount || '', group: foodGroup || 'other' }]); }}
+                  style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 600, color: T.khaki, marginTop: 6 }}>
+                  Split across several kinds ›
+                </button>
+              </>
+            ) : (
+              <>
+                <ReceiptItems rows={rows} onChange={setRows} />
+                {(() => {
+                  const left = (cents || 0) - rows.reduce((t, r) => t + parseSigned(r.price), 0);
+                  return left ? <span style={{ fontSize: 12, color: left < 0 ? T.red : T.muted }}>{left > 0 ? `${money(left)} not split yet (counts as Tax & fees)` : `Items are ${money(-left)} more than the amount`}</span> : null;
+                })()}
+                <button type="button" onClick={() => { setSplit(false); setRows([]); }} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.muted, marginTop: 4 }}>
+                  ‹ One kind for the whole amount
+                </button>
+              </>
+            )}
           </Field>
         )}
 
