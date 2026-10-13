@@ -103,6 +103,18 @@ export default function TxForm({
   };
 
   const groceryPick = type === 'expense' && category === 'groceries' && !initial?.items?.length;
+  // A one-kind grocery entry typed in by hand: its item is named after the note and
+  // is the whole amount, so editing the note or amount updates it too (unless the
+  // item itself was renamed or repriced). Older ones without the flag: same, when
+  // the item still carries the old note as its name.
+  const keepNoteItem = items => {
+    const orig = initial?.items;
+    if (orig?.length !== 1 || items.length !== 1) return items;
+    const o = orig[0], it = items[0];
+    const linked = o.fromNote || (o.name === (initial.note || '').trim() && o.amount === initial.amount);
+    if (!linked || it.name !== o.name || it.amount !== o.amount) return items;
+    return [{ ...it, name: note.trim() || lookupGroup(it.group).label, amount: cents - refunded, fromNote: true }];
+  };
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
@@ -110,9 +122,9 @@ export default function TxForm({
     try {
       await onSave({
         type, amount: cents - refunded, category, accountId, toAccountId, date, note,
-        ...(initial?.items ? { items: rowsToItems(rows) }
+        ...(initial?.items ? { items: keepNoteItem(rowsToItems(rows)) }
           : groceryPick && split ? { items: rowsToItems(rows) }
-          : groceryPick && foodGroup ? { items: [{ name: note.trim() || lookupGroup(foodGroup).label, amount: cents - refunded, group: foodGroup }] }
+          : groceryPick && foodGroup ? { items: [{ name: note.trim() || lookupGroup(foodGroup).label, amount: cents - refunded, group: foodGroup, fromNote: true }] }
           : {}),
         ...(refunded ? { originalAmount: cents } : {}),
       });
