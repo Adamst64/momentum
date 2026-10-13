@@ -402,6 +402,7 @@ export function validateTx(txs, tx) {
 }
 
 export const PERIODS = [
+  { key: '1D',  label: '1D',  start: t => addDays(t, -1) },
   { key: '1W',  label: '1W',  start: t => addDays(t, -7) },
   { key: '1M',  label: '1M',  start: t => shiftMonths(t, -1) },
   { key: '3M',  label: '3M',  start: t => shiftMonths(t, -3) },

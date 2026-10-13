@@ -6,6 +6,8 @@ import { Chips, gainColor, noSelect, ConfirmDialog, inputStyle } from './ui';
 import { ValueChart, NOTE_COLOR, DIV_COLOR } from './Charts';
 
 const RANGES = [
+  { value: 'i1d', label: '1D' },
+  { value: 'i5d', label: '1W' },
   { value: '1mo', label: '1M' },
   { value: '3mo', label: '3M' },
   { value: '6mo', label: '6M' },
@@ -76,16 +78,16 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
               {signedMoney(span.to.value - span.from.value, hide)} ({pct(span.to.value / span.from.value - 1)})
             </div>
             <div style={{ fontSize: 12, color: T.muted }}>
-              {formatDateYear(span.from.date)} → {formatDateYear(span.to.date)} · {money(span.from.value, hide)} → {money(span.to.value, hide)}
+              {span.from.label || formatDateYear(span.from.date)} → {span.to.label || formatDateYear(span.to.date)} · {money(span.from.value, hide)} → {money(span.to.value, hide)}
             </div>
           </>
         ) : shown && (
           <>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(shown.value, hide)}</div>
             <div style={{ fontSize: 12, color: T.muted }}>
-              {scrub ? formatDateYear(scrub.date) : 'Now'}
+              {scrub ? scrub.label || formatDateYear(scrub.date) : 'Now'}
               {change !== null && shown !== first && (
-                <span style={{ color: gainColor(change) }}> · {signedMoney(change, hide)} ({pct(change / first.value)}) since {formatDateYear(first.date)}</span>
+                <span style={{ color: gainColor(change) }}> · {signedMoney(change, hide)} ({pct(change / first.value)}) since {first.label || formatDateYear(first.date)}</span>
               )}
             </div>
           </>

@@ -259,7 +259,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
           const pa = points[a], pb = points[b];
           const up2 = pb.value >= pa.value;
           const c2 = up2 ? T.oliveLight : T.red;
-          const la = formatDateYear(pa.date), lb = formatDateYear(pb.date);
+          const la = pa.label || formatDateYear(pa.date), lb = pb.label || formatDateYear(pb.date);
           const wa = la.length * 5.2 + 10, wb = lb.length * 5.2 + 10;
           const xa = Math.max(0, Math.min(x(a) - wa, W - wa - wb));
           const xb = Math.min(W - wb, Math.max(x(b), xa + wa + 2));

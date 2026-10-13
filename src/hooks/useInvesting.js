@@ -249,7 +249,8 @@ export function useInvesting(userId) {
   const priceHistory = useCallback(async (symbol, range) => {
     const key = `${symbol}:${range}`;
     const hit = historyCache.current[key];
-    if (hit && Date.now() - hit.at < 15 * 60 * 1000) return hit.points;
+    // Intraday (1D / 1W) moves while you watch: kept 2 minutes; daily history 15
+    if (hit && Date.now() - hit.at < (range.startsWith('i') ? 2 : 15) * 60 * 1000) return hit.points;
     const fn = httpsCallable(getFunctions(getApp()), 'priceHistory');
     const points = (await fn({ symbol, range })).data.points || [];
     historyCache.current[key] = { at: Date.now(), points };

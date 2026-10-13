@@ -139,6 +139,42 @@ export default function InvestingTab({ hook, userId, budget }) {
     return v / 100;
   }, [cashSteps]);
 
+  // 1D / 1W: the portfolio through the day, rebuilt from intraday prices of what's
+  // held now (5-minute steps for 1D, 30-minute for 1W). Funds without intraday
+  // prices count at their current price. Daily history is shown until these load.
+  const intraRange = period === '1D' ? 'i1d' : period === '1W' ? 'i5d' : null;
+  const heldKey = portfolio.holdings.filter(h => h.qty > 0).map(h => `${h.symbol}:${h.qty}`).join(',');
+  const [intra, setIntra] = useState(null); // { key, points }
+  useEffect(() => {
+    if (!intraRange || !heldKey || !hook.priceHistory) return undefined;
+    let live = true;
+    const key = `${intraRange}|${heldKey}`;
+    const held = heldKey.split(',').map(x => { const [symbol, q] = x.split(':'); return { symbol, qty: Number(q) }; });
+    Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts]).catch(() => [h.symbol, []])))
+      .then(pairs => {
+        if (!live) return;
+        const series = Object.fromEntries(pairs);
+        const times = [...new Set(pairs.flatMap(([, pts]) => pts.map(p => p.t)).filter(Boolean))].sort((a, b) => a - b);
+        const labelAt = {};
+        pairs.forEach(([, pts]) => pts.forEach(p => { if (p.t) labelAt[p.t] = { label: p.label, date: p.date }; }));
+        const cursor = {};
+        const points = times.map(t => {
+          let v = portfolio.cash || 0;
+          for (const h of held) {
+            const pts = series[h.symbol] || [];
+            let i = cursor[h.symbol] ?? -1;
+            while (i + 1 < pts.length && pts[i + 1].t <= t) i++;
+            cursor[h.symbol] = i;
+            const price = i >= 0 ? pts[i].value : pts[0]?.value ?? assets[h.symbol]?.price ?? 0;
+            v += h.qty * price;
+          }
+          return { date: labelAt[t].date, label: labelAt[t].label, value: v };
+        });
+        setIntra({ key, points });
+      });
+    return () => { live = false; };
+  }, [intraRange, heldKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Chart: the value history in the selected period, plus "now". Only market
   // days, so weekends and holidays don't show up as flat stretches. "Now" stands
   // in for the session current prices belong to (the last one when closed).
@@ -149,15 +185,25 @@ export default function InvestingTab({ hook, userId, budget }) {
     const pts = series
       .filter(s => s.date > start && s.date < nowDate && isMarketDay(s.date))
       .sort((a, b) => a.date.localeCompare(b.date));
-    const out = txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
+    let out = txs.length ? [...pts, { date: nowDate, value: portfolio.value, netDeposits: portfolio.netDeposits, label: 'Now' }] : [];
+    const intraPts = intraRange && intra?.key === `${intraRange}|${heldKey}` && intra.points.length > 1 ? intra.points : null;
+    if (txs.length && intraPts) {
+      // Money in or out during the day isn't in these points, so none is subtracted
+      const nd = portfolio.netDeposits;
+      out = [
+        ...(intraRange === 'i1d' ? [{ date: intraPts[0].date, label: 'Previous close', value: portfolio.value - portfolio.dayChange, netDeposits: nd }] : []),
+        ...intraPts.map(p => ({ ...p, netDeposits: nd })),
+        { date: nowDate, value: portfolio.value, netDeposits: nd, label: 'Now' },
+      ];
+    }
     if (!worth) return out;
     // Net worth: each day's investments plus Budget cash that day (no deposits to
     // exclude: money moving between bank and investing stays inside net worth)
     return out.map((p, i) => {
-      const cash = i === out.length - 1 ? cashNow : cashAt(p.date);
+      const cash = i === out.length - 1 || intraPts ? cashNow : cashAt(p.date);
       return { date: p.date, label: p.label, value: p.value + cash, invested: p.value, cash };
     });
-  }, [series, period, today, portfolio.value, portfolio.netDeposits, txs.length, worth, cashAt, cashNow]);
+  }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, txs.length, worth, cashAt, cashNow, intra, intraRange, heldKey]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');

@@ -619,6 +619,8 @@ const SEARCH_TYPES = new Set(['Common Stock', 'ETP', 'ADR', 'REIT', 'Closed-End 
 const HISTORY_RANGES = {
   '1mo': '1d', '3mo': '1d', '6mo': '1d', '1y': '1d', '5y': '1wk', '10y': '1wk', max: '1mo',
   d2y: ['2y', '1d'], d5y: ['5y', '1d'],
+  // Intraday: today's session in 5-minute steps, the last 5 sessions in 30-minute steps
+  i1d: ['1d', '5m'], i5d: ['5d', '30m'],
 };
 
 async function priceHistory(db, request) {
@@ -639,10 +641,19 @@ async function priceHistory(db, request) {
   const ts = r?.timestamp || [];
   const closes = r?.indicators?.quote?.[0]?.close || [];
   const points = [];
+  const intraday = range.startsWith('i');
   for (let i = 0; i < ts.length; i++) {
     if (!(closes[i] > 0)) continue;
     const date = easternNow(new Date(ts[i] * 1000)).today;
     const value = Math.round(closes[i] * 1e4) / 1e4;
+    if (intraday) {
+      // Every step is its own point, labeled with its time (Eastern)
+      const when = new Date(ts[i] * 1000);
+      const time = when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+      const day = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
+      points.push({ date, t: ts[i], value, label: range === 'i1d' ? `${time} ET` : `${day}, ${time}` });
+      continue;
+    }
     // The live (unfinished) candle can share a date with the last one; keep the newest
     if (points.length && points[points.length - 1].date === date) points[points.length - 1].value = value;
     else points.push({ date, value });
