@@ -57,6 +57,7 @@ For each item give:
   other (anything that fits none of these)
 
 Also give the store name, the purchase date as YYYY-MM-DD (empty string if not printed), the grand total, and the tax (sum of all tax lines, 0 if none).
+Some stores print no item names (only item codes or prices). Don't guess items from codes: if no line has a readable product name, return an empty items list but still give the store, date, total and tax. A department line with a total (e.g. "PRODUCE 12.40", "DAIRY 6.98") counts as an item named after the department.
 If the photo isn't a receipt or can't be read, return an empty items list and total 0.`;
 
 async function scanReceipt(db, request) {

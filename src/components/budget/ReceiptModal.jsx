@@ -33,6 +33,7 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
   const [category, setCategory] = useState('groceries');
   const [accountId, setAccountId] = useState(defaultAccountId || null);
   const [saving, setSaving] = useState(false);
+  const [noNames, setNoNames] = useState(false); // the receipt had no item names
 
   useEffect(() => {
     let live = true;
@@ -40,12 +41,19 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
       try {
         const r = await scanReceipt(await prepareImage(file), 'image/jpeg');
         if (!live) return;
-        if (!r.items?.length) throw new Error("Couldn't find any items. Try a flatter, sharper photo with the whole receipt in view.");
+        // No item names (some stores print only codes) but a total: one row for the
+        // whole purchase, to assign to a group or split by hand
+        if (!r.items?.length && !(r.total > 0)) throw new Error("Couldn't read this receipt. Try a flatter, sharper photo with the whole receipt in view.");
         setStore(r.store || '');
         if (r.date && r.date <= todayStr()) setDate(r.date);
-        const itemsSum = r.items.reduce((s, i) => s + i.price, 0);
+        const itemsSum = (r.items || []).reduce((s, i) => s + i.price, 0);
         setTotal(centsToInput(Math.round((r.total || itemsSum + (r.tax || 0)) * 100)));
-        setRows(r.items.map(i => ({ name: i.name, price: i.price.toFixed(2), group: i.group })));
+        if (r.items?.length) {
+          setRows(r.items.map(i => ({ name: i.name, price: i.price.toFixed(2), group: i.group })));
+        } else {
+          setNoNames(true);
+          setRows([{ name: r.store || 'Groceries', price: (r.total - (r.tax || 0)).toFixed(2), group: 'other' }]);
+        }
         setState('review');
       } catch (e) {
         if (!live) return;
@@ -105,6 +113,11 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
           <Field label="Paid from">
             <Chips small options={accounts.map(a => ({ value: a.id, label: a.name }))} value={accountId} onChange={setAccountId} />
           </Field>
+          {noNames && (
+            <div style={{ fontSize: 13, color: T.khaki, lineHeight: 1.45, background: '#2A2616', borderRadius: 10, padding: '10px 12px' }}>
+              This receipt doesn't list item names, so the whole amount is one row. Pick what kind it was below, or split it: change the price and add rows for each kind.
+            </div>
+          )}
           <Field label={`Items (${rows.length}) — fix any group that's wrong`}>
             <ReceiptItems rows={rows} onChange={setRows} />
           </Field>
