@@ -28,6 +28,24 @@ document.addEventListener('focusin', e => {
   setTimeout(() => { if (document.activeElement === el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 350);
 });
 
+// Updates: an installed iPhone app rarely checks for a new version and keeps running
+// the old code until it's fully restarted. Check whenever the app comes to the front;
+// once a new version has taken over, reload the next time the app goes to the
+// background (so nothing you're doing gets interrupted).
+if ('serviceWorker' in navigator) {
+  let updateReady = false;
+  const check = () => navigator.serviceWorker.getRegistration().then(r => r?.update()).catch(() => {});
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    updateReady = true;
+    if (document.visibilityState === 'hidden') window.location.reload();
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') { if (updateReady) window.location.reload(); }
+    else check();
+  });
+  setInterval(() => { if (document.visibilityState === 'visible') check(); }, 30 * 60 * 1000);
+}
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <ErrorBoundary>
