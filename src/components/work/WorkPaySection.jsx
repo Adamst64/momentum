@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
-import { getMondayId, formatWeekRange, parsePayEntry, dayEntries } from '../../utils/workUtils';
+import { getMondayId, formatWeekRange, parsePayEntry, dayEntries, tripOf, formatHours, TRIP_COLOR } from '../../utils/workUtils';
 import { ConfirmSheet } from '../routines/CommitmentSheets';
 
 const NO_LEAD = '#E8875A'; // orange tag for days worked without being crew leader
@@ -149,7 +149,70 @@ function WeekCrewRow({ mondayId, crewId, stats, rawEntry, crews, onSetPayment })
   );
 }
 
-export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
+// A trip-only day (nothing installed). Its pay stays open until you decide:
+// paid (with the amount) or not paid. Reopening asks first.
+function TripRow({ trip, crews, onSetTripPay }) {
+  const crew = crews.find(c => c.id === trip.crewId);
+  const [entering, setEntering] = useState(false);
+  const [amt, setAmt] = useState('');
+  const [confirmReopen, setConfirmReopen] = useState(false);
+  const date = new Date(trip.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+  const savePaid = () => { onSetTripPay(trip.id, 'paid', parseFloat(amt) || 0); setEntering(false); };
+
+  return (
+    <div style={{ padding: '12px 16px', borderBottom: `1px solid ${T.cardBorder}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: TRIP_COLOR, background: TRIP_COLOR + '22', border: `1px solid ${TRIP_COLOR}55`, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>TRIP ONLY</span>
+        <span style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{date}</span>
+        {crew?.color && <span style={{ width: 7, height: 7, borderRadius: '50%', background: crew.color }} />}
+        <span style={{ fontSize: 12, color: T.muted, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{crew?.name || 'No crew'}</span>
+        {trip.hours > 0 && <span style={{ fontSize: 12, color: T.muted, flexShrink: 0 }}>{formatHours(trip.hours)}</span>}
+      </div>
+      {trip.reason && <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>{trip.reason}</div>}
+
+      <div style={{ marginTop: 10 }}>
+        {entering ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 14, color: T.muted }}>$</span>
+            <input
+              autoFocus value={amt} inputMode="decimal" placeholder="Amount paid…"
+              onChange={e => setAmt(e.target.value.replace(/[^0-9.]/g, ''))}
+              onKeyDown={e => { if (e.key === 'Enter') savePaid(); if (e.key === 'Escape') setEntering(false); }}
+              style={{ flex: 1, minWidth: 0, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 8, padding: '8px 12px', color: T.text, fontSize: 15, outline: 'none' }}
+            />
+            <button onClick={() => setEntering(false)} aria-label="Cancel" style={{ padding: '8px 12px', borderRadius: 8, background: T.subtle, color: T.muted, fontSize: 14, fontWeight: 700 }}>✕</button>
+            <button onClick={savePaid} aria-label="Save trip pay" style={{ padding: '8px 14px', borderRadius: 8, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 700 }}>✓</button>
+          </div>
+        ) : trip.status ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: trip.status === 'paid' ? T.green : '#C9625B' }}>
+              {trip.status === 'paid' ? `Paid ${fmt(trip.amount)} ✓` : 'Not paid'}
+            </span>
+            <button onClick={() => setConfirmReopen(true)} style={{ fontSize: 12, color: T.muted, padding: '4px 8px' }}>Change</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ flex: 1, fontSize: 12, color: T.khaki }}>Pay not settled yet</span>
+            <button onClick={() => { setAmt(''); setEntering(true); }} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: T.green + '22', color: T.green, border: `1px solid ${T.green}44` }}>Paid…</button>
+            <button onClick={() => onSetTripPay(trip.id, 'unpaid')} style={{ padding: '6px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600, background: T.subtle, color: T.muted, border: `1px solid ${T.cardBorder}` }}>Not paid</button>
+          </div>
+        )}
+      </div>
+
+      {confirmReopen && (
+        <ConfirmSheet
+          title={`Reopen pay for the ${date} trip?`}
+          message={trip.status === 'paid' ? `It's marked paid (${fmt(trip.amount)}). Reopening clears that so you can mark it again.` : "It's marked not paid. Reopening lets you mark it again."}
+          confirmLabel="Reopen"
+          onConfirm={() => onSetTripPay(trip.id, null)}
+          onClose={() => setConfirmReopen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+export default function WorkPaySection({ days, weeks, crews, onSetPayment, onSetTripPay }) {
   const currentYear    = String(new Date().getFullYear());
   const currentMondayId = getMondayId((() => { const d = new Date(); const pad = n => String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; })());
   const [summaryYear, setSummaryYear] = useState(currentYear);
@@ -177,6 +240,15 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
     grouped[wk][cid].doors   += day.doors   || 0;
   });
 
+  // Trip-only days by week; their pay is settled per trip, not per crew-week
+  const tripsByWeek = {};
+  days.map(tripOf).filter(Boolean).forEach(t => {
+    const wk = getMondayId(t.id);
+    (tripsByWeek[wk] = tripsByWeek[wk] || []).push(t);
+  });
+  Object.values(tripsByWeek).forEach(list => list.sort((a, b) => a.id.localeCompare(b.id)));
+  const tripPaidIn = wk => (tripsByWeek[wk] || []).reduce((a, t) => a + t.amount, 0);
+
   // Earnings per year → crewId → sum of paid amounts
   const earnings = {};
   weeks.forEach(w => {
@@ -199,17 +271,23 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
     ? summaryYear
     : (availableYears[0] || currentYear);
 
-  const sortedWeekIds = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
+  const sortedWeekIds = [...new Set([...Object.keys(grouped), ...Object.keys(tripsByWeek)])].sort((a, b) => b.localeCompare(a));
 
   const yearData  = earnings[effectiveSummaryYear] || {};
-  const yearTotal = Object.values(yearData).reduce((s, v) => s + v, 0);
+  // Trip-only days this year: count, how they were settled, and pay (added to the total)
+  const yearTrips   = days.map(tripOf).filter(t => t && t.id.slice(0, 4) === effectiveSummaryYear);
+  const tripsPaid   = yearTrips.filter(t => t.status === 'paid');
+  const tripsUnpaid = yearTrips.filter(t => t.status === 'unpaid').length;
+  const tripsOpen   = yearTrips.filter(t => !t.status).length;
+  const tripPayYear = tripsPaid.reduce((a, t) => a + t.amount, 0);
+  const yearTotal = Object.values(yearData).reduce((s, v) => s + v, 0) + tripPayYear;
 
   // Days worked per crew for the selected year
   const yearDaysMap = {};
   days.filter(d => d.id.slice(0, 4) === effectiveSummaryYear).flatMap(dayEntries).filter(e => e.crewId)
     .forEach(e => { yearDaysMap[e.crewId] = (yearDaysMap[e.crewId] || 0) + 1; });
   // Calendar days worked (a split day is still one day)
-  const totalYearDays = days.filter(d => !d.isOff && d.crewId && d.id.slice(0, 4) === effectiveSummaryYear).length;
+  const totalYearDays = days.filter(d => d.id.slice(0, 4) === effectiveSummaryYear && dayEntries(d).length > 0).length;
   const uniqueDays = crewMap => new Set(Object.values(crewMap).flatMap(st => st.days.map(d => d.id))).size;
 
   // All crews that have days or earnings in selected year, sorted by days desc
@@ -231,7 +309,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
   const avgAmtPerWeek = fullyPaidWeeks.length > 0
     ? fullyPaidWeeks.reduce((s, [wk]) => {
         const wd = weeksMap[wk] || {};
-        return s + Object.entries(wd).filter(([k]) => k !== 'id').reduce((a, [, v]) => {
+        return s + tripPaidIn(wk) + Object.entries(wd).filter(([k]) => k !== 'id').reduce((a, [, v]) => {
           const { paid, amount } = parsePayEntry(v);
           return a + (paid ? amount : 0);
         }, 0);
@@ -255,9 +333,10 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
       const entry = dayById[id];
       if (id === todayStr && !entry) continue;
       const weekend = d.getDay() === 0 || d.getDay() === 6;
-      const worked  = entry && !entry.isOff;
-      if (!worked) { offTotal++; if (!weekend) offWeekdays++; }
-      else if (weekend) weekendWorked++;
+      // A trip-only day isn't a day off, but it isn't weekend work either
+      const notOff  = entry && !entry.isOff;
+      if (!notOff) { offTotal++; if (!weekend) offWeekdays++; }
+      else if (weekend && dayEntries(entry).length > 0) weekendWorked++;
     }
   }
 
@@ -317,6 +396,16 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
             })
           )}
 
+          {tripPayYear > 0 && (
+            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 14, color: TRIP_COLOR }}>Trip-only pay</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 12, color: T.muted }}>{tripsPaid.length} trip{tripsPaid.length !== 1 ? 's' : ''}</span>
+                <span style={{ fontSize: 15, fontWeight: 700, color: T.khaki, minWidth: 40, textAlign: 'right' }}>{fmt(tripPayYear)}</span>
+              </div>
+            </div>
+          )}
+
           {/* Total row */}
           <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: T.subtle + '55' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
@@ -361,6 +450,17 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
               </div>
             </div>
           )}
+          {yearTrips.length > 0 && (
+            <div style={{ padding: '0 16px 10px' }}>
+              <div style={{ background: T.subtle, borderRadius: 10, padding: '8px 12px', border: `1px dashed ${TRIP_COLOR}66` }}>
+                <div style={{ fontSize: 11, color: T.muted, marginBottom: 2 }}>Trip only</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: TRIP_COLOR }}>{yearTrips.length} day{yearTrips.length !== 1 ? 's' : ''}</div>
+                <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>
+                  {tripsPaid.length} paid · {tripsUnpaid} not paid{tripsOpen ? ` · ${tripsOpen} not settled` : ''}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -368,7 +468,9 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
       {sortedWeekIds.length > 0 && (
         <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, overflow: 'hidden' }}>
           {sortedWeekIds.map((mondayId, i) => {
-            const crewEntries = grouped[mondayId];
+            const crewEntries = grouped[mondayId] || {};
+            const weekTrips   = tripsByWeek[mondayId] || [];
+            const tripsOpenWk = weekTrips.filter(t => !t.status).length;
             const weekDoc     = weeksMap[mondayId] || {};
             const isOpen      = openWeeks.has(mondayId);
 
@@ -380,7 +482,9 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
               const { paid, amount } = parsePayEntry(weekDoc[cid]);
               if (paid) { paidCount++; paidAmt += amount; }
             });
-            const status = paidCount === crewIds.length ? 'paid' : paidCount > 0 ? 'partial' : 'unpaid';
+            paidAmt += tripPaidIn(mondayId);
+            const status = !crewIds.length ? (tripsOpenWk ? 'unpaid' : 'paid')
+              : paidCount === crewIds.length ? 'paid' : paidCount > 0 ? 'partial' : 'unpaid';
             const statusColor = status === 'paid' ? T.green : status === 'partial' ? T.khaki : '#C9625B'; // muted red
 
             return (
@@ -391,7 +495,7 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                   style={{ width: '100%', padding: '11px 16px', display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', background: isOpen ? T.subtle + '55' : 'transparent' }}
                 >
                   <div style={{ display: 'flex', gap: 3, flexShrink: 0 }}>
-                    {crewIds.map(cid => {
+                    {[...new Set([...crewIds, ...weekTrips.map(t => t.crewId || '__none__')])].map(cid => {
                       const c = crews.find(x => x.id === cid);
                       return <div key={cid} style={{ width: 7, height: 7, borderRadius: '50%', background: c?.color || T.muted }} />;
                     })}
@@ -403,12 +507,15 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                     </div>
                     <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
                       <b style={{ color: T.text, fontSize: 13 }}>{totalDays} day{totalDays !== 1 ? 's' : ''}</b> · {totalW} win · {totalD} door{totalD === 1 ? '' : 's'}
+                      {weekTrips.length > 0 && <span style={{ color: TRIP_COLOR }}> · {weekTrips.length} trip only</span>}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: paidAmt > 0 ? T.khaki : T.muted }}>{fmt(paidAmt)}</div>
                     <div style={{ fontSize: 11, color: statusColor, marginTop: 1 }}>
-                      {status === 'paid' ? 'Paid ✓' : status === 'partial' ? 'Partially paid' : 'Unpaid'}
+                      {!crewIds.length ? (tripsOpenWk ? 'Trip not settled' : 'Settled ✓')
+                        : status === 'paid' ? 'Paid ✓' : status === 'partial' ? 'Partially paid' : 'Unpaid'}
+                      {crewIds.length > 0 && tripsOpenWk > 0 && <span style={{ color: T.khaki }}> · trip open</span>}
                     </div>
                   </div>
                   <span style={{ fontSize: 12, color: T.muted, transform: isOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', flexShrink: 0 }}>›</span>
@@ -425,6 +532,9 @@ export default function WorkPaySection({ days, weeks, crews, onSetPayment }) {
                         crews={crews}
                         onSetPayment={onSetPayment}
                       />
+                    ))}
+                    {weekTrips.map(t => (
+                      <TripRow key={t.id} trip={t} crews={crews} onSetTripPay={onSetTripPay} />
                     ))}
                   </div>
                 )}

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { T } from '../../theme';
 import { formatWeekRange, parsePayEntry } from '../../utils/workUtils';
-import { previousMondayId, crewWeekEntries, buildWeekText, smsHref } from '../../utils/workText';
+import { previousMondayId, crewWeekEntries, crewWeekTrips, buildWeekText, smsHref } from '../../utils/workText';
 
 // Summaries for finished weeks, for each crew that has a text number. A week shows
 // from the Monday after it ends until that crew is marked paid for it (the last
@@ -13,22 +13,25 @@ export default function WeeklyTexts({ days, crews, members, weeks, today, onText
   const weekBefore = previousMondayId(lastWeek);
   const weekDoc = id => weeks.find(w => w.id === id) || {};
 
+  // A crew-week stays until its work is marked paid and every trip-only day in it
+  // is settled (paid or not paid)
   const rows = [lastWeek, weekBefore].flatMap(mondayId => crews
-    .filter(c => c.phone && !parsePayEntry(weekDoc(mondayId)[c.id]).paid)
-    .map(c => ({ crew: c, mondayId, entries: crewWeekEntries(days, c.id, mondayId) }))
-    .filter(r => r.entries.length > 0));
+    .filter(c => c.phone)
+    .map(c => ({ crew: c, mondayId, entries: crewWeekEntries(days, c.id, mondayId), trips: crewWeekTrips(days, c.id, mondayId) }))
+    .filter(r => (r.entries.length > 0 && !parsePayEntry(weekDoc(r.mondayId)[r.crew.id]).paid)
+              || r.trips.some(t => !t.status)));
   if (!rows.length) return null;
 
   return (
     <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '12px 14px' }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: T.khaki, textTransform: 'uppercase', letterSpacing: 0.6 }}>Weekly texts</span>
-        <span style={{ fontSize: 11, color: T.muted }}>Hides once the week is paid</span>
+        <span style={{ fontSize: 11, color: T.muted }}>Hides once the week is paid and trips settled</span>
       </div>
 
-      {rows.map(({ crew, mondayId, entries }, i) => {
+      {rows.map(({ crew, mondayId, entries, trips }, i) => {
         const key = crew.id + mondayId;
-        const text = buildWeekText(crew, entries, mondayId, members);
+        const text = buildWeekText(crew, entries, mondayId, members, trips);
         const sent = crew.lastTextedWeek === mondayId;
         const open = preview === key;
         return (
@@ -39,6 +42,7 @@ export default function WeeklyTexts({ days, crews, members, weeks, today, onText
                 <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>{crew.name}</div>
                 <div style={{ fontSize: 11, color: T.muted }}>
                   {formatWeekRange(mondayId)} · {entries.length} day{entries.length === 1 ? '' : 's'}
+                  {trips.length > 0 && ` · ${trips.length} trip only`}
                 </div>
                 {sent && <div style={{ fontSize: 11, color: T.green }}>Opened in Messages ✓</div>}
               </div>

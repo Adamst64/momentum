@@ -194,11 +194,15 @@ async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
     .where(FieldPath.documentId(), '>=', prevMon)
     .where(FieldPath.documentId(), '<=', prevSun)
     .get();
-  const worked = new Set();
+  // Trip-only days (nothing installed) aren't work; they need the text until
+  // their pay is settled (paid or not paid)
+  const worked = new Set(), openTrips = new Set();
   daysSnap.docs.forEach(d => {
     const day = d.data();
     if (day.isOff) return;
-    if (textCrews.has(day.crewId)) worked.add(day.crewId);
+    if (day.isTrip) {
+      if (textCrews.has(day.crewId) && !day.tripPay?.status) openTrips.add(day.crewId);
+    } else if (textCrews.has(day.crewId)) worked.add(day.crewId);
     if (textCrews.has(day.second?.crewId)) worked.add(day.second.crewId);
   });
 
@@ -209,6 +213,7 @@ async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
     const pay = week[crewId];
     if (pay === true || pay?.paid === true) worked.delete(crewId);
   }
+  openTrips.forEach(c => worked.add(c));
 
   await userDoc.ref.update({ 'preferences.workTexts.lastSentDate': now.today });
   if (!worked.size) return;

@@ -57,6 +57,18 @@ export function useWork(userId) {
   }, [userId, days]);
 
   // paidAt: when it was first marked paid (the budget uses it to file the pay on that day)
+  // Trip-only day pay: status 'paid' (with amount), 'unpaid', or null to reopen it
+  // paidAt: when it was marked paid (the budget files the pay on that day)
+  const setTripPay = useCallback(async (ds, status, amount = 0) => {
+    const prev = days.find(d => d.id === ds)?.tripPay;
+    const paidAt = status === 'paid' ? (prev?.status === 'paid' && prev.paidAt) || new Date().toISOString() : null;
+    await updateDoc(doc(db, 'users', userId, 'workDays', ds), {
+      tripPay: status
+        ? { status, amount: status === 'paid' ? Number(amount) || 0 : 0, ...(paidAt ? { paidAt } : {}) }
+        : deleteField(),
+    });
+  }, [userId, days]);
+
   const setWeekPayment = useCallback(async (mondayId, crewId, paid, amount) => {
     const prev = weeks.find(w => w.id === mondayId)?.[crewId];
     const wasPaid = parsePayEntry(prev).paid;
@@ -116,5 +128,5 @@ export function useWork(userId) {
 
   const loaded = !!(got.weeks && got.crews);
 
-  return { loaded, days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
+  return { loaded, days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, setTripPay, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers };
 }

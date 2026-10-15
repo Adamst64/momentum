@@ -1,4 +1,4 @@
-import { getMondayId, getWeekDates, formatWeekRange, dayEntries } from './workUtils';
+import { getMondayId, getWeekDates, formatWeekRange, dayEntries, tripOf, formatHours } from './workUtils';
 
 // Text messages have no formatting, so "bold" uses Unicode's mathematical bold
 // letters and digits, which phones display as bold text.
@@ -32,16 +32,29 @@ export function crewWeekEntries(days, crewId, mondayId) {
     .sort((a, b) => a.id.localeCompare(b.id));
 }
 
+// This crew's trip-only days for the week (went to the job, nothing installed)
+export function crewWeekTrips(days, crewId, mondayId) {
+  const week = new Set(getWeekDates(mondayId));
+  return days
+    .filter(d => week.has(d.id))
+    .map(tripOf)
+    .filter(t => t && t.crewId === crewId)
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+const shortDay = ds => new Date(ds + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+
 // Weekly summary for one crew: each day's windows, doors, crew leader and who was
-// on site, plus notes ticked for the text; the total is days and leader / not
-// leader. Other notes and pay status stay out.
-export function buildWeekText(crew, entries, mondayId, members = []) {
+// on site, plus notes ticked for the text; the total is days worked and leader /
+// not leader. Trip-only days follow, with hours and reason. Other notes and pay
+// status stay out.
+export function buildWeekText(crew, entries, mondayId, members = [], trips = []) {
   const nameOf = id => members.find(m => m.id === id)?.name;
   const lines = [bold(crew.name), `Week of ${formatWeekRange(mondayId)}`, ''];
   let leader = 0;
   entries.forEach(e => {
     if (e.isCrewLead) leader++;
-    const day = new Date(e.id + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' });
+    const day = shortDay(e.id);
     const onSite = (e.memberIds || []).map(nameOf).filter(Boolean);
     lines.push(
       bold(day),
@@ -53,12 +66,24 @@ export function buildWeekText(crew, entries, mondayId, members = []) {
       '',
     );
   });
-  lines.push(
-    '━━━━━━━━━━',
-    `${bold('TOTAL')}: ${bold(plural(entries.length, 'day'))}`,
-    `Crew leader: ${bold(plural(leader, 'day'))}`,
-    `Not crew leader: ${bold(plural(entries.length - leader, 'day'))}`,
-  );
+  lines.push('━━━━━━━━━━');
+  if (entries.length) {
+    lines.push(
+      `${bold('TOTAL')}: ${bold(plural(entries.length, 'day'))} worked`,
+      `Crew leader: ${bold(plural(leader, 'day'))}`,
+      `Not crew leader: ${bold(plural(entries.length - leader, 'day'))}`,
+    );
+  } else {
+    lines.push(`${bold('TOTAL')}: ${bold('0 days')} worked`);
+  }
+  // Trip-only days: listed separately, never counted as days worked
+  trips.forEach(t => {
+    lines.push(
+      '',
+      `🚫 ${bold(shortDay(t.id))} · ${bold('Trip only')}${t.hours ? ` (${formatHours(t.hours)})` : ''}`,
+      ...(t.reason ? [t.reason] : []),
+    );
+  });
   return lines.join('\n');
 }
 

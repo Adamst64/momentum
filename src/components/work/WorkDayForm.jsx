@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { T } from '../../theme';
+import { TRIP_COLOR } from '../../utils/workUtils';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 function Counter({ label, value, onChange }) {
@@ -122,7 +123,38 @@ function CommentCard({ value, onChange, inText, onToggleInText }) {
   );
 }
 
-const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', commentInText: false, isOff: false, second: null };
+// Trip only: hours spent, in half-hour steps
+function HoursCard({ value, onChange }) {
+  const btn = { width: 36, height: 36, borderRadius: 10, background: T.subtle, color: T.text, fontSize: 22, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+  return (
+    <div style={{ background: T.card, borderRadius: 14, padding: '11px 16px', border: `1px solid ${T.cardBorder}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <span style={{ fontSize: 15, color: T.text }}>Hours spent</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button onClick={() => onChange(Math.max(0, value - 0.5))} style={btn}>−</button>
+        <span style={{ minWidth: 34, textAlign: 'center', fontSize: 18, fontWeight: 700, color: T.text }}>{value}</span>
+        <button onClick={() => onChange(value + 0.5)} style={btn}>+</button>
+      </div>
+    </div>
+  );
+}
+
+// Trip only: why nothing got installed. Always goes in the weekly text.
+function ReasonCard({ value, onChange }) {
+  return (
+    <div style={{ background: T.card, borderRadius: 14, padding: '12px 16px', border: `1px solid ${T.cardBorder}` }}>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder="Reason, e.g. windows were mismeasured…"
+        rows={3}
+        style={{ width: '100%', background: 'transparent', border: 'none', outline: 'none', color: T.text, fontSize: 14, resize: 'none', fontFamily: 'inherit', lineHeight: 1.5 }}
+      />
+      <div style={{ fontSize: 12, color: T.muted, paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>Included in the weekly text</div>
+    </div>
+  );
+}
+
+const EMPTY = { windows: 0, doors: 0, crewId: null, memberIds: [], isCrewLead: false, comment: '', commentInText: false, isOff: false, isTrip: false, tripHours: 0, second: null };
 // Rare split day: part of the day with a second crew, with its own counts
 const EMPTY_SECOND = { crewId: null, windows: 0, doors: 0, isCrewLead: false, memberIds: [], comment: '', commentInText: false };
 const norm = (base) => ({ ...EMPTY, ...base });
@@ -152,9 +184,14 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
     setShowCrewPicker(false);
   };
 
+  const mode = form.isOff ? 'off' : form.isTrip ? 'trip' : 'work';
+  const setMode = m => setForm(f => ({ ...f, isOff: m === 'off', isTrip: m === 'trip' }));
+
   const handleSave = () => {
     // A second crew without a crew picked isn't a split day
-    const data = form.second?.crewId ? form : { ...form, second: null };
+    let data = form.second?.crewId ? form : { ...form, second: null };
+    // Nothing was installed on a trip, so no counts or leader for it
+    if (data.isTrip) data = { ...data, windows: 0, doors: 0, isCrewLead: false, commentInText: false };
     onSave(dateStr, data);
     setLastSaved({ ...form });
   };
@@ -172,29 +209,38 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-      {/* Day off toggle */}
-      <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${form.isOff ? T.red + '55' : T.cardBorder}` }}>
-        <Toggle
-          label="Day off"
-          value={form.isOff}
-          onChange={v => set('isOff', v)}
-          activeColor={T.red}
-        />
+      {/* Worked / Trip only / Day off */}
+      <div style={{ display: 'flex', background: T.subtle, borderRadius: 12, padding: 3, gap: 2 }}>
+        {[['work', 'Worked', T.olive], ['trip', 'Trip only', TRIP_COLOR], ['off', 'Day off', T.red]].map(([m, label, c]) => (
+          <button key={m} onClick={() => setMode(m)} style={{
+            flex: 1, padding: '9px 0', borderRadius: 10, fontSize: 14, fontWeight: 600,
+            background: mode === m ? c + '33' : 'transparent',
+            color: mode === m ? (m === 'work' ? T.oliveLight : c) : T.muted,
+            border: `1px solid ${mode === m ? c + '88' : 'transparent'}`,
+          }}>{label}</button>
+        ))}
       </div>
+      {mode === 'trip' && (
+        <div style={{ fontSize: 12, color: T.muted, margin: '-4px 4px 0', lineHeight: 1.4 }}>
+          Went to the job but nothing got installed. Not counted as a working day or a day off; its pay is settled on its own in Pay.
+        </div>
+      )}
 
       {!form.isOff && (
         <>
           {form.second && (
             <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, margin: '4px 0 -4px 4px' }}>
-              First crew{selectedCrew ? ` · ${selectedCrew.name}` : ''}
+              {form.isTrip ? 'Trip only' : 'First crew'}{selectedCrew ? ` · ${selectedCrew.name}` : ''}
             </div>
           )}
           {/* Windows & Doors */}
-          <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
-            <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
-            <div style={{ height: 1, background: T.cardBorder }} />
-            <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
-          </div>
+          {!form.isTrip && (
+            <div style={{ background: T.card, borderRadius: 14, padding: '0 16px', border: `1px solid ${T.cardBorder}` }}>
+              <Counter label="Windows" value={form.windows} onChange={v => set('windows', v)} />
+              <div style={{ height: 1, background: T.cardBorder }} />
+              <Counter label="Doors"   value={form.doors}   onChange={v => set('doors',   v)} />
+            </div>
+          )}
 
           {/* Crew & Leader */}
           <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
@@ -213,14 +259,22 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
                 <span style={{ color: T.muted, fontSize: 13 }}>›</span>
               </div>
             </button>
-            <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
-            <div style={{ padding: '0 16px' }}>
-              <Toggle label="Crew Leader" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
-            </div>
+            {!form.isTrip && (
+              <>
+                <div style={{ height: 1, background: T.cardBorder, marginLeft: 16 }} />
+                <div style={{ padding: '0 16px' }}>
+                  <Toggle label="Crew Leader" value={form.isCrewLead} onChange={v => set('isCrewLead', v)} />
+                </div>
+              </>
+            )}
           </div>
 
+          {form.isTrip && <HoursCard value={Number(form.tripHours) || 0} onChange={v => set('tripHours', v)} />}
+
           <MembersCard ids={form.memberIds} members={members} onAdd={() => setShowMemberPicker('first')} onRemove={id => set('memberIds', form.memberIds.filter(x => x !== id))} />
-          <CommentCard value={form.comment} onChange={v => set('comment', v)} inText={!!form.commentInText} onToggleInText={v => set('commentInText', v)} />
+          {form.isTrip
+            ? <ReasonCard value={form.comment} onChange={v => set('comment', v)} />
+            : <CommentCard value={form.comment} onChange={v => set('comment', v)} inText={!!form.commentInText} onToggleInText={v => set('commentInText', v)} />}
 
           {/* Second crew (rare split day), kept below everything for the first crew */}
           {form.second ? (
@@ -229,7 +283,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               border: `1.5px solid ${secondCrew?.color || T.subtle}`, background: (secondCrew?.color || T.subtle) + '10',
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: secondCrew?.color || T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginLeft: 4 }}>
-                Second crew{secondCrew ? ` · ${secondCrew.name}` : ''}
+                {form.isTrip ? 'Worked with' : 'Second crew'}{secondCrew ? ` · ${secondCrew.name}` : ''}
               </div>
               <div style={{ background: T.card, borderRadius: 14, border: `1px solid ${T.cardBorder}` }}>
                 <button
@@ -266,7 +320,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
               onClick={() => set('second', { ...EMPTY_SECOND })}
               style={{ padding: 12, borderRadius: 14, border: `1.5px dashed ${T.cardBorder}`, color: T.muted, fontSize: 14 }}
             >
-              + Worked with a second crew today
+              {form.isTrip ? '+ Worked with another crew after the trip' : '+ Worked with a second crew today'}
             </button>
           )}
         </>

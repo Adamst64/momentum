@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { toDateStr, parseDate } from '../utils/dateUtils';
-import { parsePayEntry } from '../utils/workUtils';
+import { parsePayEntry, tripOf } from '../utils/workUtils';
 
 // Keeps the budget in step with the Work and Investing tabs:
 // - Work pay: once a debit card is linked (workLink.since), every crew-week marked
 //   paid after that moment becomes a Salary entry on that card, dated the day it was
 //   marked paid. Marking it unpaid removes the entry; changing the amount updates it.
 //   Pay marked paid before the link is ignored (it's already in the starting balance).
+//   Paid trip-only days work the same way, one entry per trip.
 // - Investing: money moved between a bank account and investing is saved on both
 //   sides; when the investing side is deleted, the budget side goes too.
 export function useMoneySync(budget, work, investing) {
@@ -43,7 +44,36 @@ export function useMoneySync(budget, work, investing) {
         }
       }
     }
-  }, [loaded, work?.loaded, work?.weeks, work?.crews, accounts, txDocs, putSynced, removeSynced]);
+
+    // Trip-only days that were paid: the same, one Salary entry per trip
+    const paidTrips = new Set();
+    for (const day of work.days || []) {
+      const trip = tripOf(day);
+      if (!trip) continue;
+      if (trip.status === 'paid') paidTrips.add(day.id);
+      const id = `work-trip-${day.id}`;
+      const existing = byId[id];
+      const cents = Math.round(trip.amount * 100);
+      const paidAt = day.tripPay?.paidAt;
+      if (trip.status === 'paid' && cents > 0 && paidAt && linked && paidAt >= linked.workLink.since) {
+        if (!existing) {
+          const crew = crewName(trip.crewId);
+          const date = parseDate(day.id).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+          putSynced(id, {
+            type: 'income', amount: cents, date: toDateStr(new Date(paidAt)), accountId: linked.id, toAccountId: null,
+            category: 'salary', note: `${crew} · trip only ${date}`, source: 'work', crew, workTrip: day.id, workAmount: cents,
+            createdAt: new Date().toISOString(),
+          }).catch(() => {});
+        } else if (!existing.deleted && existing.workAmount !== cents) {
+          putSynced(id, { amount: cents, workAmount: cents }).catch(() => {});
+        }
+      }
+    }
+    // A trip reopened, marked not paid, switched back to a work day or deleted
+    for (const t of txDocs) {
+      if (t.source === 'work' && t.workTrip && !t.deleted && !paidTrips.has(t.workTrip)) removeSynced(t.id).catch(() => {});
+    }
+  }, [loaded, work?.loaded, work?.weeks, work?.days, work?.crews, accounts, txDocs, putSynced, removeSynced]);
 
   useEffect(() => {
     if (!loaded || !investing?.txsLoaded) return;

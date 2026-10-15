@@ -59,9 +59,28 @@ export function formatDayFull(ds) {
 // A work day can hold a second crew (day.second = { crewId, windows, doors, isCrewLead, memberIds, comment })
 // for the rare day split between two crews. Returns one entry per crew worked that day,
 // each shaped like a day ({ id, crewId, windows, doors, isCrewLead, comment }).
+// A "trip only" day (day.isTrip: went to the job, nothing installed) isn't work, so
+// only its second crew, if any, counts here; see tripOf() for the trip itself.
 export function dayEntries(day) {
   if (!day || day.isOff) return [];
-  const out = [day];
+  const out = day.isTrip ? [] : [day];
   if (day.second?.crewId) out.push({ comment: '', memberIds: [], ...day.second, id: day.id, isSecond: true });
   return out;
 }
+
+// Trip only: the job fell through (e.g. windows mismeasured). Not a working day and
+// not a day off. Its pay is decided on its own: tripPay = { status: 'paid' | 'unpaid', amount }
+// (no status yet = still open).
+export const TRIP_COLOR = '#E8875A';
+export function tripOf(day) {
+  if (!day || day.isOff || !day.isTrip) return null;
+  const pay = day.tripPay || {};
+  return {
+    id: day.id, crewId: day.crewId || null, memberIds: day.memberIds || [],
+    hours: Number(day.tripHours) || 0, reason: (day.comment || '').trim(),
+    status: pay.status === 'paid' || pay.status === 'unpaid' ? pay.status : null,
+    amount: pay.status === 'paid' ? Number(pay.amount) || 0 : 0,
+  };
+}
+
+export const formatHours = h => `${h} hour${h === 1 ? '' : 's'}`;

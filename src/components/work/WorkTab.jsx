@@ -17,7 +17,7 @@ function todayStr() {
 const VIEWS = ['today', 'calendar', 'pay'];
 
 export default function WorkTab({ hook, requestedView }) {
-  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
+  const { days, weeks, crews, members, saveDay, deleteDay, setWeekPayment, setTripPay, addCrew, updateCrewColor, updateCrewPhone, markCrewTexted, deleteCrew, addMember, deleteMember, reorderCrews, reorderMembers } = hook;
   const [view, setView]                 = useState(() => VIEWS.includes(requestedView?.view) ? requestedView.view : 'today');
   // A notification (e.g. the Friday weekly texts reminder) can ask for a view
   useEffect(() => {
@@ -96,6 +96,7 @@ export default function WorkTab({ hook, requestedView }) {
           weeks={weeks}
           crews={crews}
           onSetPayment={setWeekPayment}
+          onSetTripPay={setTripPay}
         />
       )}
 

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { T } from '../../theme';
 import { useSwipe, animateSlide } from '../../hooks/useSwipe';
-import { getMondayId, parsePayEntry, dayEntries } from '../../utils/workUtils';
+import { getMondayId, parsePayEntry, dayEntries, TRIP_COLOR } from '../../utils/workUtils';
 
 const MONTH_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const DAY_LABELS = ['Mo','Tu','We','Th','Fr','Sa','Su'];
@@ -71,14 +71,15 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
           const isToday   = ds === todayStr;
           const isSel     = ds === selected;
           const isOff     = entry?.isOff;
-          const isLead    = entry?.isCrewLead || entry?.second?.isCrewLead;
+          const isTrip    = !isOff && !!entry?.isTrip;
+          const isLead    = dayEntries(entry).some(e => e.isCrewLead);
           const crewColor = entry?.crewId ? crewColorMap[entry.crewId] : null;
           const color2    = entry?.second?.crewId ? crewColorMap[entry.second.crewId] : null;
           const totalW    = (entry?.windows || 0) + (entry?.second?.windows || 0);
           const totalD    = (entry?.doors || 0) + (entry?.second?.doors || 0);
           const hasEntry  = !!entry;
 
-          const isWorkDay = hasEntry && !isOff && entry?.crewId;
+          const isWorkDay = dayEntries(entry).some(e => e.crewId);
           let isPaid = false;
           if (isWorkDay) {
             const mondayId = getMondayId(ds);
@@ -95,7 +96,9 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
               ? crewColor + '28'
               : hasEntry ? T.olive + '18' : 'transparent';
 
-          const borderColor = isToday && !isWorkDay
+          const borderColor = isTrip && !isWorkDay
+            ? TRIP_COLOR
+            : isToday && !isWorkDay
             ? T.khaki + '88'
             : isWorkDay
               ? (isPaid ? T.green : T.red)
@@ -104,6 +107,8 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
                 : hasEntry ? T.olive + '33' : 'transparent';
 
           const borderWidth = isWorkDay ? 2 : 1;
+          // Trip only (nothing installed): dashed orange, unless a second crew made it a work day
+          const borderStyle = isTrip && !isWorkDay ? 'dashed' : 'solid';
           // Selection ring uses box-shadow so it sits outside the status border
           const selRing = isSel ? `0 0 0 2px ${T.khaki}` : 'none';
 
@@ -117,7 +122,7 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
             <button
               key={i}
               onClick={() => handleSelect(day)}
-              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px solid ${borderColor}`, boxShadow: selRing }}
+              style={{ minHeight: 52, padding: '5px 2px 4px', borderRadius: 8, textAlign: 'center', position: 'relative', background: bg, border: `${borderWidth}px ${borderStyle} ${borderColor}`, boxShadow: selRing }}
             >
               {/* Crew leader indicator */}
               {isLead && (
@@ -130,6 +135,9 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
                 <div style={{ fontSize: 8, color: crewColor || T.muted, marginTop: 3, lineHeight: 1.3, opacity: 0.9 }}>
                   {[totalW > 0 && `${totalW}w`, totalD > 0 && `${totalD}dr`].filter(Boolean).join(' ')}
                 </div>
+              )}
+              {isTrip && (
+                <div style={{ fontSize: 8, color: TRIP_COLOR, marginTop: 1, lineHeight: 1.3, fontWeight: 700 }}>trip</div>
               )}
               {isOff && (
                 <div style={{ fontSize: 8, color: T.red, marginTop: 3, lineHeight: 1.3, opacity: 0.8 }}>off</div>
@@ -157,6 +165,10 @@ export default function WorkCalendar({ days, weeks, crews, onSelectDay }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: 2, background: T.red + '44', border: `1px solid ${T.red + '55'}` }} />
           <span style={{ fontSize: 11, color: T.muted }}>Day off</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ width: 8, height: 8, borderRadius: 2, border: `1.5px dashed ${TRIP_COLOR}` }} />
+          <span style={{ fontSize: 11, color: T.muted }}>Trip only</span>
         </div>
       </div>
 
