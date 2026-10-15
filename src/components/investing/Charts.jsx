@@ -78,8 +78,18 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     .map(t => ({ ...t, i: points.findIndex(p => p.date >= t.date) }))
     .filter(t => t.i >= 0);
   const tradeVals = tradeDots.map(t => t.price);
-  const min = Math.min(...vals, ...refVals, ...tradeVals), max = Math.max(...vals, ...refVals, ...tradeVals);
+  // Scale to the prices (and trades) themselves, so the line's moves are readable.
+  // A reference line (avg cost, analyst target…) joins the scale only when it's near
+  // the prices; one far away is pinned to the top or bottom edge with an arrow.
+  const dLo = Math.min(...vals, ...tradeVals), dHi = Math.max(...vals, ...tradeVals);
+  const dSpan = dHi - dLo || Math.abs(dHi) * 0.02 || 1;
+  const near = v => v >= dLo - dSpan * 0.35 && v <= dHi + dSpan * 0.35;
+  const nearRefs = refVals.filter(near);
+  // Room at the top / bottom for the pinned labels so they don't sit on the line
+  const farUp = refVals.filter(v => !near(v) && v > dHi).length, farDown = refVals.filter(v => !near(v) && v < dLo).length;
+  const min = Math.min(dLo, ...nearRefs) - dSpan * (0.06 + farDown * 0.12), max = Math.max(dHi, ...nearRefs) + dSpan * (0.06 + farUp * 0.12);
   const span = max - min || 1;
+  const edgeCount = { top: 0, bottom: 0 };
   const x = i => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = v => PAD + (1 - (v - min) / span) * (H - PAD * 2);
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
@@ -203,14 +213,27 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >
         <path d={area} fill={color} opacity={0.12} />
-        {refs.filter(r => r.value > 0).map(r => (
-          <g key={r.label}>
-            <line x1={0} x2={W} y1={y(r.value)} y2={y(r.value)} stroke={r.color} strokeWidth={1} strokeDasharray="4 3" opacity={0.8} />
-            <text x={W - 2} y={y(r.value) + (y(r.value) < 14 ? 10 : -3)} textAnchor="end" fontSize="9" fill={r.color}>
-              {r.label} {hide ? '' : money(r.value)}
-            </text>
-          </g>
-        ))}
+        {refs.filter(r => r.value > 0).map(r => {
+          if (!near(r.value)) {
+            // Off the chart: a label at the edge, pointing where it is (stacked when several)
+            const above = r.value > max;
+            const n = above ? edgeCount.top++ : edgeCount.bottom++;
+            const yy = above ? 9 + n * 11 : H - 3 - n * 11;
+            return (
+              <text key={r.label} x={W - 2} y={yy} textAnchor="end" fontSize="9" fill={r.color} opacity={0.9}>
+                {above ? '↑' : '↓'} {r.label} {hide ? '' : money(r.value)}
+              </text>
+            );
+          }
+          return (
+            <g key={r.label}>
+              <line x1={0} x2={W} y1={y(r.value)} y2={y(r.value)} stroke={r.color} strokeWidth={1} strokeDasharray="4 3" opacity={0.8} />
+              <text x={W - 2} y={y(r.value) + (y(r.value) < 14 ? 10 : -3)} textAnchor="end" fontSize="9" fill={r.color}>
+                {r.label} {hide ? '' : money(r.value)}
+              </text>
+            </g>
+          );
+        })}
         {markers.map(m => {
           const i = points.findIndex(p => p.date >= m.date);
           if (i < 0) return null;
