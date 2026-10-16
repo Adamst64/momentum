@@ -156,9 +156,32 @@ const OLD_GROUPS = { frozen: 'prepared' };
 export const TAX_GROUP = { id: 'tax', label: 'Tax & fees', emoji: '🧾', color: '#5A5A5E' };
 export const lookupGroup = id => GROCERY_GROUPS.find(g => g.id === (OLD_GROUPS[id] || id)) || (id === 'tax' ? TAX_GROUP : GROCERY_GROUPS[GROCERY_GROUPS.length - 1]);
 
+// Spreads `extra` cents (a receipt's tax and fees) over items by price, so the items
+// add up exactly to what was paid. Only items with taxed: true share it when any are
+// taxed; otherwise every item with a positive price does. Rounding goes to the
+// biggest remainders so the shares sum to `extra` exactly.
+// prices: cents per item (before tax) → shares: cents per item
+export function shareTax(prices, taxedFlags, extra) {
+  const shares = prices.map(() => 0);
+  if (!extra) return shares;
+  let pool = prices.map((p, i) => (p > 0 && taxedFlags[i] ? i : -1)).filter(i => i >= 0);
+  if (!pool.length) pool = prices.map((p, i) => (p > 0 ? i : -1)).filter(i => i >= 0);
+  const base = pool.reduce((s, i) => s + prices[i], 0);
+  if (!base) return shares;
+  const sign = extra < 0 ? -1 : 1, abs = Math.abs(extra);
+  const exact = pool.map(i => (abs * prices[i]) / base);
+  pool.forEach((i, k) => { shares[i] = Math.floor(exact[k]); });
+  let left = abs - pool.reduce((s, i) => s + shares[i], 0);
+  const order = pool.map((i, k) => [i, exact[k] - Math.floor(exact[k])]).sort((a, b) => b[1] - a[1]);
+  for (let k = 0; left > 0; k = (k + 1) % order.length, left--) shares[order[k][0]]++;
+  return shares.map(s => s * sign);
+}
+
 // Spending by food group across expenses that carry receipt items
-// ({ items: [{ name, amount (cents), group }] }). Whatever the items don't cover
-// (tax, bag fees, rounding) counts as "Tax & fees".
+// ({ items: [{ name, amount (cents), group, tax? }] }). Receipts saved since tax is
+// shared out already have each item's tax in its amount; on older ones whatever the
+// items don't cover (tax, bag fees, rounding) is spread over the items by price here,
+// so the groups always add up to what was paid.
 // → { total, receipts, groups: [{ ...group, total, items: [{ name, amount, date }] }] } biggest first
 export function groceryBreakdown(txs) {
   const by = {};
@@ -176,12 +199,14 @@ export function groceryBreakdown(txs) {
     const paid = t.originalAmount ?? t.amount;
     receipts++;
     total += paid;
-    let covered = 0;
-    for (const i of t.items) {
-      add(OLD_GROUPS[i.group] || i.group, { name: i.name, amount: i.amount, date: t.date });
-      covered += i.amount;
-    }
-    if (paid - covered) add('tax', { name: t.note || 'Receipt', amount: paid - covered, date: t.date });
+    const covered = t.items.reduce((s, i) => s + i.amount, 0);
+    const shares = shareTax(t.items.map(i => i.amount), t.items.map(i => !!i.taxed), paid - covered);
+    // Nothing positive to spread it over: keep it as its own line
+    const spread = shares.some(Boolean) || paid === covered;
+    t.items.forEach((i, k) => {
+      add(OLD_GROUPS[i.group] || i.group, { name: i.name, amount: i.amount + (spread ? shares[k] : 0), date: t.date });
+    });
+    if (!spread) add('tax', { name: t.note || 'Receipt', amount: paid - covered, date: t.date });
   }
   const groups = Object.values(by).filter(g => g.total).sort((a, b) => b.total - a.total);
   groups.forEach(g => g.items.sort((a, b) => b.amount - a.amount));

@@ -23,8 +23,9 @@ const SCHEMA = {
           name: { type: 'string' },
           price: { type: 'number' },
           group: { type: 'string', enum: GROUPS },
+          taxed: { type: 'boolean', description: 'Sales tax was charged on this line' },
         },
-        required: ['name', 'price', 'group'],
+        required: ['name', 'price', 'group', 'taxed'],
         additionalProperties: false,
       },
     },
@@ -56,6 +57,8 @@ For each item give:
   health (medicine, pain relief, cold and allergy, vitamins and supplements, first aid, prescriptions, contact lens solution, anything pharmacy-only)
   tobacco (cigarettes — including brand names or codes like Marlboro, Newport, Camel, "CIGS", "CIG PK", "CTN" — cigars, cigarillos, rolling tobacco, papers, vapes and e-cigarettes, pods and e-liquid, nicotine pouches like Zyn, chewing tobacco, lighters)
   other (anything that fits none of these)
+
+- taxed: whether sales tax was charged on that line. Receipts usually mark this with a letter or code next to the price (like T, TX, X, or a tax-group code such as A/B that the receipt's tax lines explain), and often mark tax-free food lines with F, N, E or FS. Use those marks when the receipt has them. If it has no marks, decide by Pennsylvania sales tax rules: most food and grocery items, including candy, gum and bottled water, are not taxed; household and cleaning supplies, paper products other than toilet paper, pet supplies, soft drinks, alcohol, tobacco and vapes, and hot or prepared food are taxed. If the receipt shows no tax at all, every line is false.
 
 Also give the store name, the purchase date as YYYY-MM-DD (empty string if not printed), the grand total, and the tax (sum of all tax lines, 0 if none).
 Some stores print no item names (only item codes or prices). Don't guess items from codes: if no line has a readable product name, return an empty items list but still give the store, date, total and tax. A department line with a total (e.g. "PRODUCE 12.40", "DAIRY 6.98") counts as an item named after the department.
@@ -107,6 +110,7 @@ async function scanReceipt(db, request) {
       name: String(i.name || '').slice(0, 80),
       price: round(i.price),
       group: GROUPS.includes(i.group) ? i.group : 'other',
+      taxed: i.taxed === true,
     })),
   };
 }
