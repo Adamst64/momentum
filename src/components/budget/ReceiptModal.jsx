@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
-import { money, parseAmount, centsToInput } from '../../utils/budget';
+import { money, parseAmount, centsToInput, TOBACCO } from '../../utils/budget';
 import { inputStyle, Field, Chips, PrimaryButton } from '../investing/ui';
 import ReceiptItems, { rowsToItems, parseSigned } from './ReceiptItems';
 
@@ -22,7 +22,27 @@ async function prepareImage(file) {
   }
 }
 
+// Tobacco lines go to their own entry in the Tobacco category. Tax and fees (the
+// total minus the items) are shared by price: tobacco takes its items' share.
+// → { tobacco: { amount, rows } | null, rest: { amount, rows } | null } (cents)
+export function splitTobacco(rows, total, category) {
+  const tob = rows.filter(r => r.group === TOBACCO);
+  const other = rows.filter(r => r.group !== TOBACCO);
+  const sum = rs => rs.reduce((s, r) => s + parseSigned(r.price), 0);
+  const tobItems = sum(tob), allItems = sum(rows);
+  // Nothing to split: no tobacco, all tobacco, the whole receipt already filed as Tobacco, or odd totals
+  if (!tob.length || category === TOBACCO || tobItems <= 0 || allItems <= 0) {
+    return category !== TOBACCO && tob.length === rows.length && tob.length
+      ? { tobacco: { amount: total, rows }, rest: null }
+      : { tobacco: null, rest: { amount: total, rows } };
+  }
+  if (!other.length) return { tobacco: { amount: total, rows }, rest: null };
+  const tobacco = Math.min(total, tobItems + Math.round((total - allItems) * tobItems / allItems));
+  return { tobacco: { amount: tobacco, rows: tob }, rest: { amount: total - tobacco, rows: other } };
+}
+
 // Photo → items sorted into food groups → review → one expense with the items attached
+// (tobacco lines become a second expense in the Tobacco category; see splitTobacco)
 export default function ReceiptModal({ file, accounts, categories, defaultAccountId, scanReceipt, onSave, onClose }) {
   const [state, setState] = useState('reading'); // reading | review | error
   const [error, setError] = useState(null);
@@ -69,12 +89,15 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
   const rest = (cents || 0) - itemsCents;
   const cats = categories.filter(c => c.kind === 'expense' && !c.hidden);
   const canSave = !!cents && !!accountId && cats.some(c => c.id === category) && !saving;
+  const split = splitTobacco(rows, cents || 0, category);
 
   const save = async () => {
     if (!canSave) return;
     setSaving(true);
     try {
-      await onSave({ type: 'expense', amount: cents, category, accountId, date, note: store, items: rowsToItems(rows) });
+      const base = { type: 'expense', accountId, date, note: store };
+      if (split.tobacco) await onSave({ ...base, amount: split.tobacco.amount, category: TOBACCO, items: rowsToItems(split.tobacco.rows) });
+      if (split.rest) await onSave({ ...base, amount: split.rest.amount, category, items: rowsToItems(split.rest.rows) });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -116,6 +139,12 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
           {noNames && (
             <div style={{ fontSize: 13, color: T.khaki, lineHeight: 1.45, background: '#2A2616', borderRadius: 10, padding: '10px 12px' }}>
               This receipt doesn't list item names, so the whole amount is one row. Pick what kind it was below, or split it: change the price and add rows for each kind.
+            </div>
+          )}
+          {split.tobacco && split.rest && (
+            <div style={{ fontSize: 13, color: T.text, lineHeight: 1.45, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '10px 12px' }}>
+              🚬 Saved as two entries: <b>{money(split.tobacco.amount)}</b> in Tobacco and <b>{money(split.rest.amount)}</b> in the category above.
+              <span style={{ color: T.muted }}> Tax is shared by price.</span>
             </div>
           )}
           <Field label={`Items (${rows.length}) — fix any group that's wrong`}>

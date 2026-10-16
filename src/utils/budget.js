@@ -14,8 +14,12 @@ export const EXPENSE_CATEGORIES = [
   { id: 'fun',           label: 'Fun',           color: '#B79CF0', emoji: '🎉' },
   { id: 'subscriptions', label: 'Subscriptions', color: '#d95926', emoji: '🔁' },
   { id: 'gifts',         label: 'Gifts',         color: '#D9805F', emoji: '🎁' },
+  { id: 'tobacco',       label: 'Tobacco',       color: '#B98A5E', emoji: '🚬' },
   { id: 'other',         label: 'Other',         color: '#8E8E93', emoji: '📦' },
 ].map(c => ({ ...c, kind: 'expense' }));
+
+// Receipt lines in the tobacco group are saved as their own entry in this category
+export const TOBACCO = 'tobacco';
 
 export const INCOME_CATEGORIES = [
   { id: 'salary',       label: 'Salary',  color: '#32D74B', emoji: '💼' },
@@ -144,6 +148,7 @@ export const GROCERY_GROUPS = [
   { id: 'pets',       label: 'Pet food & supplies',  emoji: '🐾', color: '#5BA4E6' },
   { id: 'personal',   label: 'Personal care',        emoji: '🧴', color: '#5EC4A8' },
   { id: 'health',     label: 'Health & pharmacy',    emoji: '💊', color: '#2EC4B6' },
+  { id: 'tobacco',    label: 'Tobacco & vapes',      emoji: '🚬', color: '#B98A5E' },
   { id: 'other',      label: 'Other',                emoji: '📦', color: '#8E8E93' },
 ];
 // Groups that were merged away; items saved with them count under the new one
@@ -166,7 +171,8 @@ export function groceryBreakdown(txs) {
   for (const t of txs) {
     // Items describe the receipt as bought, so a refunded receipt counts at its original price;
     // a fully refunded one is left out
-    if (t.type !== 'expense' || !t.items?.length || !t.amount) continue;
+    // Tobacco has its own category, so it stays out of the groceries breakdown
+    if (t.type !== 'expense' || !t.items?.length || !t.amount || t.category === TOBACCO) continue;
     const paid = t.originalAmount ?? t.amount;
     receipts++;
     total += paid;

@@ -6,7 +6,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 // other API keys: clients can't read config/, only functions via the Admin SDK.
 
 // Keep in sync with GROCERY_GROUPS in src/utils/budget.js (frozen was merged into prepared)
-const GROUPS = ['fruits', 'vegetables', 'meat', 'dairy', 'bakery', 'pantry', 'snacks', 'sweets', 'drinks', 'alcohol', 'prepared', 'household', 'pets', 'personal', 'health', 'other'];
+const GROUPS = ['fruits', 'vegetables', 'meat', 'dairy', 'bakery', 'pantry', 'snacks', 'sweets', 'drinks', 'alcohol', 'prepared', 'household', 'pets', 'personal', 'health', 'tobacco', 'other'];
 
 const SCHEMA = {
   type: 'object',
@@ -54,6 +54,7 @@ For each item give:
   pets (pet food, treats, litter and pet supplies)
   personal (toiletries and cosmetics: shampoo, soap, toothpaste, deodorant, razors, makeup, diapers and wipes)
   health (medicine, pain relief, cold and allergy, vitamins and supplements, first aid, prescriptions, contact lens solution, anything pharmacy-only)
+  tobacco (cigarettes — including brand names or codes like Marlboro, Newport, Camel, "CIGS", "CIG PK", "CTN" — cigars, cigarillos, rolling tobacco, papers, vapes and e-cigarettes, pods and e-liquid, nicotine pouches like Zyn, chewing tobacco, lighters)
   other (anything that fits none of these)
 
 Also give the store name, the purchase date as YYYY-MM-DD (empty string if not printed), the grand total, and the tax (sum of all tax lines, 0 if none).

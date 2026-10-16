@@ -188,7 +188,7 @@ export default function TxForm({
             {!split ? (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
-                  {GROCERY_GROUPS.map(g => {
+                  {GROCERY_GROUPS.filter(g => g.id !== 'tobacco').map(g => {
                     const on = foodGroup === g.id;
                     return (
                       <button key={g.id} type="button" onClick={() => setFoodGroup(on ? null : g.id)}
