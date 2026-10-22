@@ -1,5 +1,6 @@
 // Budget: accounts hold money, transactions move it.
 // Amounts are stored as whole cents so sums never drift.
+import { emojiColor } from './emojiColor';
 
 // Built-in categories. The user can rename, re-emoji, recolor or hide these, and
 // add their own; see mergeCategories.
@@ -47,7 +48,8 @@ export function mergeCategories(saved) {
   const builtInIds = new Set(builtIn.map(c => c.id));
   const custom = saved.filter(c => !builtInIds.has(c.id) && c.id !== BALANCE_CATEGORY.id)
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-  return [...builtIn, ...custom, BALANCE_CATEGORY];
+  // Each category's color follows its emoji (the stored color is the fallback)
+  return [...builtIn, ...custom, BALANCE_CATEGORY].map(c => ({ ...c, color: emojiColor(c.emoji) || c.color }));
 }
 
 const MISSING = { id: 'missing', label: 'Uncategorized', color: '#8E8E93', emoji: '❔' };
@@ -150,7 +152,12 @@ export const GROCERY_GROUPS = [
   { id: 'health',     label: 'Health & pharmacy',    emoji: '💊', color: '#2EC4B6' },
   { id: 'tobacco',    label: 'Tobacco & vapes',      emoji: '🚬', color: '#B98A5E' },
   { id: 'other',      label: 'Other',                emoji: '📦', color: '#8E8E93' },
-];
+].map(g => ({
+  ...g,
+  base: g.color,
+  // Colors follow the emoji, worked out the first time they're needed
+  get color() { return emojiColor(this.emoji) || this.base; },
+}));
 // Groups that were merged away; items saved with them count under the new one
 const OLD_GROUPS = { frozen: 'prepared' };
 export const TAX_GROUP = { id: 'tax', label: 'Tax & fees', emoji: '🧾', color: '#5A5A5E' };

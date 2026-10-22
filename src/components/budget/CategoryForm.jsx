@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { CATEGORY_COLORS } from '../../utils/budget';
+import { emojiColor } from '../../utils/emojiColor';
 import { inputStyle, Field, PrimaryButton } from '../investing/ui';
 import DeleteCategoryDialog from './DeleteCategoryDialog';
 import ErrorBoundary from '../ErrorBoundary';
@@ -16,7 +17,7 @@ const BASIC_EMOJI = '🛒 🍔 ☕ 🍕 🍺 🚗 ⛽ 🚌 ✈️ 🏠 💡 📱
 export default function CategoryForm({ initial, kind, categories = [], txs = [], onSave, onRemove, onClose }) {
   const [label, setLabel]   = useState(initial?.label || '');
   const [emoji, setEmoji]   = useState(initial?.emoji || '🏷️');
-  const [color, setColor]   = useState(initial?.color || CATEGORY_COLORS[0]);
+  const color = initial?.color || CATEGORY_COLORS[0]; // fallback when the emoji can't be drawn
   const [picking, setPicking] = useState(!initial);
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
@@ -29,7 +30,7 @@ export default function CategoryForm({ initial, kind, categories = [], txs = [],
     setSaving(true);
     setError(null);
     try {
-      await onSave({ kind: initial?.kind || kind, label, emoji, color });
+      await onSave({ kind: initial?.kind || kind, label, emoji, color: emojiColor(emoji) || color });
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -47,7 +48,7 @@ export default function CategoryForm({ initial, kind, categories = [], txs = [],
             aria-label="Choose emoji"
             style={{
               width: 50, height: 46, flexShrink: 0, borderRadius: 12, fontSize: 26,
-              background: color + '2E', border: `1px solid ${picking ? color : T.cardBorder}`,
+              background: (emojiColor(emoji) || color) + '2E', border: `1px solid ${picking ? (emojiColor(emoji) || color) : T.cardBorder}`,
             }}
           >
             {emoji}
@@ -86,23 +87,10 @@ export default function CategoryForm({ initial, kind, categories = [], txs = [],
           </ErrorBoundary>
         )}
 
-        <Field label="Color">
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {CATEGORY_COLORS.map(c => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                aria-label={`Color ${c}`}
-                style={{
-                  width: 30, height: 30, borderRadius: 15, background: c,
-                  border: `2px solid ${color === c ? T.text : 'transparent'}`,
-                  boxShadow: color === c ? `0 0 0 2px ${T.card} inset` : 'none',
-                }}
-              />
-            ))}
-          </div>
-        </Field>
+        <div style={{ fontSize: 12, color: T.muted, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ width: 14, height: 14, borderRadius: 7, background: emojiColor(emoji) || color, flexShrink: 0 }} />
+          Its color in charts comes from the emoji.
+        </div>
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
 

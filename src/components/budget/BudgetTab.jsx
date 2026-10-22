@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
 import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary, categoryStats, refundedTotal } from '../../utils/budget';
-import { Card, SectionTitle, Chips } from '../investing/ui';
+import { Card, Chips } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
@@ -12,11 +12,94 @@ import ReceiptModal from './ReceiptModal';
 import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
 import SpendHighlights from './SpendHighlights';
+import BudgetPage from './BudgetPage';
+import Donut, { DonutLegend } from './Donut';
+import { SERIES } from '../investing/ui';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import TransferSheet from '../TransferSheet';
 import InvestTransferSheet from './InvestTransferSheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
+const ACCOUNT_EMOJI = { cash: '💵', debit: '💳', credit: '💳', savings: '🏦' };
+
+// A button on the overview that opens one of the detail pages
+function Tile({ title, value, sub, visual, onClick, wide }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        gridColumn: wide ? '1 / -1' : undefined, display: 'flex', flexDirection: wide ? 'row' : 'column', alignItems: wide ? 'center' : 'stretch',
+        gap: wide ? 12 : 8, minWidth: 0, padding: 14, borderRadius: 16, textAlign: 'left', background: T.card, border: `1px solid ${T.cardBorder}`,
+      }}
+    >
+      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <span style={{ width: 46, height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{visual}</span>
+        {!wide && <span style={{ color: T.muted, fontSize: 18 }} aria-hidden="true">›</span>}
+      </span>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', fontSize: 13, color: T.muted, fontWeight: 600 }}>{title}</span>
+        <span style={{ display: 'block', fontSize: 18, fontWeight: 800, color: T.text, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</span>
+        <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub}</span>
+      </span>
+      {wide && <span style={{ color: T.muted, fontSize: 18 }} aria-hidden="true">›</span>}
+    </button>
+  );
+}
+
+function MiniBars() {
+  return (
+    <svg width="40" height="34" viewBox="0 0 40 34" aria-hidden="true">
+      {[14, 22, 10, 28, 18, 24].map((h, i) => <rect key={i} x={i * 7} y={34 - h} width="5" height={h} rx="1.5" fill={i === 3 ? T.khaki : T.olive} />)}
+    </svg>
+  );
+}
+
+// Big donut + its list. Tapping a slice or row picks it (the middle shows it); with
+// onOpen a row opens instead; expandable rows show their items.
+function DonutBlock({ segments, total, totalLabel, onOpen, expandable, note }) {
+  const [picked, setPicked] = useState(null);
+  const sel = segments.find(s => s.id === picked);
+  return (
+    <>
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0 2px' }}>
+        <Donut
+          segments={segments} picked={picked} onPick={setPicked} size={230}
+          center={sel ? (
+            <>
+              <span style={{ fontSize: 24 }} aria-hidden="true">{sel.emoji}</span>
+              <span style={{ fontSize: 12, color: T.muted, marginTop: 2, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel.label}</span>
+              <span style={{ fontSize: 17, fontWeight: 800 }}>{sel.valueLabel}</span>
+              <span style={{ fontSize: 12, color: T.muted }}>{total ? Math.round((sel.value / total) * 100) : 0}%</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: 12, color: T.muted }}>{totalLabel}</span>
+              <span style={{ fontSize: 19, fontWeight: 800 }}>{money(total)}</span>
+              <span style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>Tap a slice</span>
+            </>
+          )}
+        />
+      </div>
+      <DonutLegend
+        segments={segments} total={total} picked={picked}
+        onPick={setPicked}
+        onOpen={onOpen}
+        renderExtra={expandable ? s => picked === s.id && s.items && (
+          <div style={{ padding: '0 0 10px 44px' }}>
+            {s.items.map((i, k) => (
+              <div key={k} style={{ display: 'flex', gap: 8, fontSize: 13, padding: '3px 0' }}>
+                <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
+                <span style={{ color: T.muted, fontSize: 12 }}>{dayLabel(i.date).replace(/^\w+, /, '')}</span>
+                <span style={{ color: T.text, minWidth: 64, textAlign: 'right' }}>{money(i.amount)}</span>
+              </div>
+            ))}
+          </div>
+        ) : undefined}
+      />
+      {note && <div style={{ fontSize: 12, color: T.muted, marginTop: -6 }}>{note}</div>}
+    </>
+  );
+}
 
 function dayLabel(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -93,14 +176,13 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [investTx, setInvestTx] = useState(null); // a bank ↔ investing transfer being looked at
   const [transfer, setTransfer] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
-  const [openGroup, setOpenGroup] = useState(null);
+  const [page, setPage] = useState(null); // null | 'where' | 'accounts' | 'groceries' | 'months' | 'list'
   const [scanMenu, setScanMenu] = useState(false);
   const [moneyMode, setMoneyMode] = useState(null); // 'in' | 'out' for the account being viewed
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
   const [month, setMonth]           = useState(todayYM);
   const [range, setRange]           = useState('month'); // 'month' | 'year' | 'all'
-  const [showList, setShowList]     = useState(false);  // year / all time: transactions folded away
   const [accountFilter, setAccountFilter] = useState(null);
   const [catFilter, setCatFilter]   = useState(null);
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
@@ -143,7 +225,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   // Never past this month (a year forward from last November stops at today)
   const changeMonth = n => {
     setMonth(m => { const next = shiftMonth(m, range === 'year' ? 12 * n : n); return next > todayYM() ? todayYM() : next; });
-    setCatFilter(null); setShowList(false);
+    setCatFilter(null);
   };
   const isCurrentMonth = range === 'year' ? month.slice(0, 4) >= todayYM().slice(0, 4) : month >= todayYM();
   const periodTitle = range === 'month' ? monthTitle(month) : range === 'year' ? month.slice(0, 4) : 'All time';
@@ -301,7 +383,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       {/* Period: a month, a year, or all time */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
-          value={range} onChange={v => { setRange(v); setCatFilter(null); setShowList(false); }} />
+          value={range} onChange={v => { setRange(v); setCatFilter(null); }} />
         <span style={{ flex: 1 }} />
         <button onClick={() => setShowCategories(true)} style={{ fontSize: 13, fontWeight: 600, color: T.khaki }}>Categories</button>
       </div>
@@ -329,161 +411,124 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           color={summary.net < 0 ? T.red : summary.net > 0 ? T.green : T.text} />
       </Card>
 
-      {range !== 'month' && (
-        <SpendHighlights
-          key={period}
-          txs={monthTxs} range={range} year={month.slice(0, 4)} currentYM={todayYM()}
-          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(null); }}
+      {/* Everything else opens as its own page (swipe back to return) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
+        {summary.categories.length > 0 && (
+          <Tile
+            title="Where it went" value={money(summary.spent)}
+            sub={`${summary.categories[0].emoji} ${summary.categories[0].label} ${Math.round((summary.categories[0].total / summary.spent) * 100)}%`}
+            visual={<Donut mini size={46} segments={summary.categories.map(c => ({ id: c.id, color: c.color, value: c.total }))} />}
+            onClick={() => setPage('where')}
+          />
+        )}
+        {!accountFilter && accounts.length > 1 && summary.spent > 0 && (
+          <Tile
+            title="By account" value={money(summary.spent)}
+            sub={`${accounts.length} accounts`}
+            visual={<Donut mini size={46} segments={perAccount.map(({ account: a, spent }, i) => ({ id: a.id, color: SERIES[i % SERIES.length], value: spent }))} />}
+            onClick={() => setPage('accounts')}
+          />
+        )}
+        {receipts.groups.length > 0 && (
+          <Tile
+            title="Groceries by type" value={money(receipts.total)}
+            sub={`${receipts.groups[0].emoji} ${receipts.groups[0].label}`}
+            visual={<Donut mini size={46} segments={receipts.groups.map(g => ({ id: g.id, color: g.color, value: g.total }))} />}
+            onClick={() => setPage('groceries')}
+          />
+        )}
+        {range !== 'month' && monthTxs.length > 0 && (
+          <Tile title="Month by month" value={periodTitle} sub="High, low, average"
+            visual={<MiniBars />} onClick={() => setPage('months')} />
+        )}
+        <Tile
+          // Full width unless it pairs up with an odd tile before it
+          wide={((summary.categories.length > 0) + (!accountFilter && accounts.length > 1 && summary.spent > 0) + (receipts.groups.length > 0) + (range !== 'month' && monthTxs.length > 0)) % 2 === 0}
+          title="Transactions"
+          value={`${monthTxs.length} entr${monthTxs.length === 1 ? 'y' : 'ies'}`}
+          sub={monthTxs.length ? `Latest ${dayLabel(monthTxs[0].date).replace(/^\w+, /, '')}` : `Nothing ${range === 'all' ? 'yet' : `in ${periodTitle}`}`}
+          visual={<span style={{ fontSize: 24 }} aria-hidden="true">🧾</span>}
+          onClick={() => setPage('list')}
         />
+      </div>
+
+      {page === 'where' && (
+        <BudgetPage title="Where it went" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
+          <DonutBlock
+            segments={summary.categories.map(c => ({ id: c.id, emoji: c.emoji, label: c.label, color: c.color, value: c.total, valueLabel: money(c.total) }))}
+            total={summary.spent} totalLabel="Spent"
+            onOpen={id => setDetailCat(id)}
+            note="Tap a category for its averages, yearly totals and more."
+          />
+        </BudgetPage>
       )}
 
-      {/* Each account this month (all-accounts view only) */}
-      {!accountFilter && accounts.length > 1 && (
-        <Card>
-          <SectionTitle right={<span style={{ fontSize: 12, color: T.muted }}>{range === 'month' ? 'this month' : range === 'year' ? `in ${periodTitle}` : 'all time'}</span>}>Spent by account</SectionTitle>
-          {/* What each account spent in the period on screen (changes with the month / year) */}
-          {perAccount.map(({ account: a, spent, income }) => (
-            <button
-              key={a.id}
-              onClick={() => { setAccountFilter(a.id); setCatFilter(null); }}
-              style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}
-            >
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: spent ? T.text : T.muted }}>
-                  {money(spent)} <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>spent</span>
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, fontSize: 12, color: T.muted, marginTop: 2 }}>
-                <span style={{ flex: 1 }}>{typeLabel(a.type)}</span>
-                {income > 0 && <span style={{ color: T.green }}>+{money(income)} came in</span>}
-              </div>
-              {summary.spent > 0 && spent > 0 && (
-                <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 6, overflow: 'hidden' }}>
-                  <div style={{ width: `${(spent / summary.spent) * 100}%`, height: '100%', background: T.olive }} />
-                </div>
-              )}
-            </button>
-          ))}
-          <div style={{ paddingTop: 8, borderTop: `1px solid ${T.cardBorder}` }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', fontSize: 14, fontWeight: 700, color: T.text }}>
-              <span style={{ flex: 1 }}>All accounts</span>
-              <span>{money(summary.spent)} <span style={{ fontSize: 11, fontWeight: 500, color: T.muted }}>spent</span></span>
+      {page === 'accounts' && (
+        <BudgetPage title="Spent by account" subtitle={`${periodTitle} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
+          <DonutBlock
+            segments={perAccount.filter(x => x.spent > 0).map(({ account: a, spent }) => ({
+              id: a.id, emoji: ACCOUNT_EMOJI[a.type] || '💳', label: a.name,
+              color: SERIES[accounts.findIndex(x => x.id === a.id) % SERIES.length], value: spent, valueLabel: money(spent),
+            }))}
+            total={summary.spent} totalLabel="Spent"
+            onOpen={id => { setAccountFilter(id); setCatFilter(null); setPage(null); }}
+            note={summary.income > 0 ? `+${money(summary.income)} came in across all accounts. Tap an account to open it.` : 'Tap an account to open it.'}
+          />
+        </BudgetPage>
+      )}
+
+      {page === 'groceries' && (
+        <BudgetPage title="Groceries by type" subtitle={`${periodTitle} · ${receipts.receipts} receipt${receipts.receipts === 1 ? '' : 's'} · tax included`} onClose={() => setPage(null)}>
+          <DonutBlock
+            segments={receipts.groups.map(g => ({ id: g.id, emoji: g.emoji, label: g.label, color: g.color, value: g.total, valueLabel: money(g.total), items: g.items }))}
+            total={receipts.total} totalLabel="On receipts"
+            expandable
+            note="Tap a type to see what you bought."
+          />
+        </BudgetPage>
+      )}
+
+      {page === 'months' && (
+        <BudgetPage title="Month by month" subtitle={periodTitle + (filteredAccount ? ` · ${filteredAccount.name}` : '')} onClose={() => setPage(null)}>
+          <SpendHighlights
+            key={period}
+            txs={monthTxs} range={range} year={month.slice(0, 4)} currentYM={todayYM()}
+            onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(null); setPage(null); }}
+          />
+        </BudgetPage>
+      )}
+
+      {page === 'list' && (
+        <BudgetPage title="Transactions" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${listed.length} entr${listed.length === 1 ? 'y' : 'ies'}`} onClose={() => { setPage(null); setCatFilter(null); }}>
+          {catFilter && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 12px', borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}` }}>
+              <span style={{ flex: 1, color: T.text }}>{lookupCategory(categories, catFilter).emoji} {lookupCategory(categories, catFilter).label} only</span>
+              <button onClick={() => setCatFilter(null)} style={{ color: T.khaki, fontWeight: 600 }}>Show all</button>
             </div>
-            {summary.income > 0 && (
-              <div style={{ fontSize: 12, color: T.green, marginTop: 2, textAlign: 'right' }}>+{money(summary.income)} came in</div>
-            )}
-          </div>
-        </Card>
-      )}
-
-      {/* Where it went */}
-      {summary.categories.length > 0 && (
-        <Card>
-          <SectionTitle right={catFilter && (
-            <button onClick={() => setCatFilter(null)} style={{ fontSize: 12, color: T.khaki, fontWeight: 600 }}>Clear filter</button>
-          )}>
-            Where it went
-          </SectionTitle>
-          <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 12, gap: 2 }}>
-            {summary.categories.map(c => (
-              <div key={c.id} style={{ flex: c.total, background: c.color, opacity: !catFilter || catFilter === c.id ? 1 : 0.3 }} />
-            ))}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {summary.categories.map(c => {
-              const pct = Math.round((c.total / summary.spent) * 100);
-              const on = catFilter === c.id;
-              return (
-                <button
-                  key={c.id}
-                  onClick={() => setDetailCat(c.id)}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', width: '100%', textAlign: 'left',
-                    opacity: !catFilter || on ? 1 : 0.5,
-                  }}
-                >
-                  <span style={{ width: 22, textAlign: 'center' }} aria-hidden="true">{c.emoji}</span>
-                  <span style={{ flex: 1, fontSize: 14, color: T.text, fontWeight: on ? 700 : 400 }}>{c.label}</span>
-                  <span style={{ fontSize: 12, color: T.muted }}>{pct}%</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text, minWidth: 80, textAlign: 'right' }}>{money(c.total)}</span>
-                  <span style={{ color: T.muted, fontSize: 16, marginLeft: -4 }} aria-hidden="true">›</span>
-                </button>
-              );
-            })}
-          </div>
-          <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Tap a category for its averages, yearly totals and more.</div>
-        </Card>
-      )}
-
-      {/* Scanned receipts, by food group */}
-      {receipts.groups.length > 0 && (
-        <Card>
-          <SectionTitle right={<span style={{ fontSize: 12, color: T.muted }}>{receipts.receipts} receipt{receipts.receipts === 1 ? '' : 's'}</span>}>
-            Groceries by type
-          </SectionTitle>
-          <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', marginBottom: 12, gap: 2 }}>
-            {receipts.groups.filter(g => g.total > 0).map(g => <div key={g.id} style={{ flex: g.total, background: g.color }} />)}
-          </div>
-          {receipts.groups.map(g => {
-            const on = openGroup === g.id;
-            return (
-              <div key={g.id}>
-                <button
-                  onClick={() => setOpenGroup(on ? null : g.id)}
-                  style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', width: '100%', textAlign: 'left' }}
-                >
-                  <span style={{ width: 22, textAlign: 'center' }} aria-hidden="true">{g.emoji}</span>
-                  <span style={{ flex: 1, fontSize: 14, color: T.text, fontWeight: on ? 700 : 400 }}>{g.label}</span>
-                  <span style={{ fontSize: 12, color: T.muted }}>{receipts.total ? Math.round((g.total / receipts.total) * 100) : 0}%</span>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: T.text, minWidth: 80, textAlign: 'right' }}>{money(g.total)}</span>
-                </button>
-                {on && (
-                  <div style={{ padding: '0 0 8px 32px' }}>
-                    {g.items.map((i, k) => (
-                      <div key={k} style={{ display: 'flex', gap: 8, fontSize: 13, padding: '3px 0' }}>
-                        <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.name}</span>
-                        <span style={{ color: T.muted, fontSize: 12 }}>{dayLabel(i.date).replace(/^\w+, /, '')}</span>
-                        <span style={{ color: T.text, minWidth: 64, textAlign: 'right' }}>{money(i.amount)}</span>
-                      </div>
+          )}
+          {listed.length === 0 ? (
+            <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
+              Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}{range === 'all' ? 'yet' : `in ${periodTitle}`}.
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: T.muted, marginBottom: -8 }}>Tap any entry to see, edit or delete it.</div>
+              {groups.map(g => (
+                <div key={g.date}>
+                  <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>
+                    {dayLabel(g.date)}
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${T.cardBorder}` }}>
+                    {g.txs.map(t => (
+                      <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories}
+                        onOpen={() => (t.source === 'investing' ? setInvestTx(t) : setEditingTx(t))} />
                     ))}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </Card>
-      )}
-
-      {/* Transactions */}
-      {range !== 'month' && monthTxs.length > 0 && (
-        <button onClick={() => setShowList(v => !v)} style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 600, color: T.khaki }}>
-          {showList ? 'Hide' : 'Show'} all {listed.length} entries {showList ? '▴' : '▾'}
-        </button>
-      )}
-      {monthTxs.length > 0 && (range === 'month' || showList) && (
-        <div style={{ fontSize: 12, color: T.muted, marginBottom: -8 }}>
-          Tap any entry to see, edit or delete it.
-        </div>
-      )}
-      {monthTxs.length === 0 ? (
-        <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
-          Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}{range === 'all' ? 'yet' : `in ${periodTitle}`}.
-        </div>
-      ) : (range === 'month' || showList) && (
-        groups.map(g => (
-          <div key={g.date}>
-            <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>
-              {dayLabel(g.date)}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', borderBottom: `1px solid ${T.cardBorder}` }}>
-              {g.txs.map(t => (
-                <TxRow key={t.id} tx={t} accountsById={accountsById} categories={categories}
-                  onOpen={() => (t.source === 'investing' ? setInvestTx(t) : setEditingTx(t))} />
+                </div>
               ))}
-            </div>
-          </div>
-        ))
+            </>
+          )}
+        </BudgetPage>
       )}
 
       {editingTx && (() => {
@@ -547,8 +592,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           scopeLabel={filteredAccount ? filteredAccount.name : null}
           currentYM={todayYM()}
           onOpenTx={t => setEditingTx(t)}
-          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(detailCat); setDetailCat(null); }}
-          onShowAll={() => { setCatFilter(detailCat); setShowList(true); setDetailCat(null); }}
+          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(detailCat); setDetailCat(null); setPage('list'); }}
+          onShowAll={() => { setCatFilter(detailCat); setDetailCat(null); setPage('list'); }}
           onEdit={detail.category.fixed || detail.category.id === 'missing' ? null : () => setEditingCat(detail.category)}
           onClose={() => setDetailCat(null)}
         />
