@@ -16,15 +16,21 @@ const SEASONS = [
 // this year, any past year, all time or your own months), the months as bars with
 // the average line, and averages by season. The current month is shown but not
 // averaged in, since it's still adding up.
-export default function CategoryDetail({ category: c, stats, scopeLabel, currentYM, onShowTransactions, onEdit, renderExtra, onClose }) {
+// view / onView: the chosen period kept by the parent, so coming back from the
+// transactions list shows the same period
+export default function CategoryDetail({ category: c, stats, scopeLabel, currentYM, onShowTransactions, onEdit, renderExtra, view, onView, onClose }) {
   const income = stats.kind === 'income';
   const first = stats.months[0];
   const lastFull = shiftMonth(currentYM, -1);
   const thisYear = currentYM.slice(0, 4);
   const pastYears = [...new Set(stats.months.map(m => m.slice(0, 4)))].filter(y => y < thisYear).reverse();
-  const [pick, setPick] = useState('all');
-  const [from, setFrom] = useState(shiftMonth(currentYM, -3));
-  const [to, setTo] = useState(lastFull);
+  const [own, setOwn] = useState({ pick: 'all', from: shiftMonth(currentYM, -3), to: lastFull });
+  const v = view || own;
+  const setV = patch => { const next = { ...v, ...patch }; (onView || setOwn)(next); };
+  const { pick, from, to } = v;
+  const setPick = p => setV({ pick: p });
+  const setFrom = f => setV({ from: f });
+  const setTo = t => setV({ to: t });
 
   // The chosen months, as [startYM, endYM] (end inclusive)
   const [start, end] = useMemo(() => {

@@ -4,7 +4,7 @@ import { db } from './firebase';
 import { T } from './theme';
 import { TAB_DEFS } from './components/BottomNav';
 import HomeMenu from './components/HomeMenu';
-import { runBack } from './hooks/useBackHandler';
+import { runBack, useBackDepth } from './hooks/useBackHandler';
 import RoutinesTab from './components/routines/RoutinesTab';
 import TasksTab from './components/tasks/TasksTab';
 import ShoppingTab from './components/shopping/ShoppingTab';
@@ -260,6 +260,9 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', check);
   }, [reviewSentAt]);
 
+  // One step back: the newest open screen (sheet, page, account…), else the main menu
+  const goBack = () => { if (!runBack() && tab !== 'home') setTab('home'); };
+
   const saveDailyReview = async (prefs) => {
     await setDoc(doc(db, 'users', userId), { preferences: { dailyReview: prefs } }, { merge: true });
     setDailyReview(d => ({ ...d, ...prefs }));
@@ -426,7 +429,8 @@ export default function App() {
 
       </main>
 
-      <SwipeBack onBack={() => { if (!runBack() && tab !== 'home') setTab('home'); }} />
+      <SwipeBack onBack={goBack} />
+      <BackButton show={tab !== 'home'} onBack={goBack} />
 
       {/* Main menu button: bottom-right, within thumb reach */}
       {tab !== 'home' && (
@@ -458,6 +462,30 @@ export default function App() {
 // Swipe in from the left edge to go back: closes the newest sheet or sub-screen,
 // otherwise returns to the main menu. An arrow follows the finger.
 const EDGE = 28, TRIGGER = 80;
+// Round ← in the top-left corner, above everything, whenever there's somewhere to go back to
+function BackButton({ show, onBack }) {
+  const depth = useBackDepth();
+  if (!show && depth === 0) return null;
+  return (
+    <button
+      onClick={onBack}
+      aria-label="Back"
+      style={{
+        position: 'fixed', zIndex: 2000,
+        top: 'calc(env(safe-area-inset-top) + 8px)', left: 'max(12px, calc(50vw - 203px))',
+        width: 40, height: 40, borderRadius: 20,
+        background: 'rgba(44,44,46,0.85)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        border: `1px solid ${T.subtle}`, boxShadow: '0 4px 14px rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M15 5l-7 7 7 7" stroke={T.khaki} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
+
 function SwipeBack({ onBack }) {
   const [dx, setDx] = useState(0);
   const back = React.useRef(onBack);

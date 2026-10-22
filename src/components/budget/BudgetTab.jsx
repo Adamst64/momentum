@@ -209,6 +209,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [showCategories, setShowCategories] = useState(false);
   const [showAccts, setShowAccts] = useState(false); // the accounts grid, folded under the total
   const [detailCat, setDetailCat]   = useState(null); // category id whose detail page is open
+  const [catView, setCatView]       = useState(null); // its chosen period, kept while you look at its transactions
+  const [listFromCat, setListFromCat] = useState(null); // the list was opened from this category: back returns there
   const [editingCat, setEditingCat] = useState(null); // category being edited from its detail page
   const [editingAcct, setEditingAcct] = useState(null); // null | 'new' | account
 
@@ -520,7 +522,11 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       )}
 
       {page === 'list' && (
-        <BudgetPage title="Transactions" subtitle={`${customDates ? 'Custom dates' : periodTitle} · ${listed.length} entr${listed.length === 1 ? 'y' : 'ies'}`} onClose={() => { setPage(null); setListF({ cat: null, acct: null, from: '', to: '' }); }}>
+        <BudgetPage title="Transactions" subtitle={`${customDates ? 'Custom dates' : periodTitle} · ${listed.length} entr${listed.length === 1 ? 'y' : 'ies'}`} onClose={() => {
+          // One step back: to the category it was opened from, else the overview
+          setListF({ cat: null, acct: null, from: '', to: '' });
+          if (listFromCat) { setDetailCat(listFromCat); setListFromCat(null); setPage('where'); } else setPage(null);
+        }}>
           {/* Filters: category, account, dates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 14, background: T.card, border: `1px solid ${T.cardBorder}` }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -640,7 +646,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             const [y, m] = endYM.split('-').map(Number);
             const lastDay = String(new Date(y, m, 0).getDate()).padStart(2, '0');
             setListF({ cat: detailCat, acct: null, from: `${startYM}-01`, to: `${endYM}-${lastDay}` });
-            setDetailCat(null); setPage('list');
+            setListFromCat(detailCat); setDetailCat(null); setPage('list');
           }}
           onEdit={detail.category.fixed || detail.category.id === 'missing' ? null : () => setEditingCat(detail.category)}
           // Groceries: what kind, from receipts and split entries, for the chosen months
@@ -657,7 +663,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               </div>
             );
           } : null}
-          onClose={() => setDetailCat(null)}
+          view={catView}
+          onView={setCatView}
+          onClose={() => { setDetailCat(null); setCatView(null); }}
         />
       )}
 

@@ -63,7 +63,7 @@ export default function Modal({ title, onClose, children, full = false }) {
           background: T.card,
           borderRadius: full ? 0 : '20px 20px 0 0',
           padding: full
-            ? `calc(16px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`
+            ? `calc(60px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`
             : `20px 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`,
           // Never taller than the space above the keyboard, or its top goes off-screen
           ...(full ? { height: '100%' } : { maxHeight: 'min(85vh, calc(100% - 24px))' }),
