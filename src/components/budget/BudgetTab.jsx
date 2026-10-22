@@ -191,6 +191,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const setCatFilter = cat => setListF(f => ({ ...f, cat }));
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
   const [showCategories, setShowCategories] = useState(false);
+  const [showAccts, setShowAccts] = useState(false); // the accounts grid, folded under the total
   const [detailCat, setDetailCat]   = useState(null); // category id whose detail page is open
   const [editingCat, setEditingCat] = useState(null); // category being edited from its detail page
   const [editingAcct, setEditingAcct] = useState(null); // null | 'new' | account
@@ -208,7 +209,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const perAccount = useMemo(
     () => accountMonthSummary(accounts, txs.filter(t => t.date.startsWith(period))),
     [accounts, txs, period]);
-  const receipts = useMemo(() => groceryBreakdown(monthTxs), [monthTxs]);
   // The open category's numbers, across all time (and only the open account, if one is)
   const detail = useMemo(() => {
     if (!detailCat) return null;
@@ -300,16 +300,19 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         );
       })() : (
         <>
-      {/* Balances */}
-          <div>
-            <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Total balance</div>
-            <div style={{ fontSize: 32, fontWeight: 800, color: total < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
-              {money(total)}
-            </div>
-          </div>
+      {/* Balances: the total; tap to show every account */}
+          <button onClick={() => setShowAccts(v => !v)} style={{ display: 'flex', alignItems: 'flex-end', gap: 10, width: '100%', textAlign: 'left' }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Total balance</span>
+              <span style={{ display: 'block', fontSize: 32, fontWeight: 800, color: total < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>{money(total)}</span>
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: T.khaki, paddingBottom: 8, whiteSpace: 'nowrap' }}>
+              {accounts.length} account{accounts.length === 1 ? '' : 's'} {showAccts ? '▴' : '▾'}
+            </span>
+          </button>
 
           {/* Every account at a glance: a grid, no sideways scrolling */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 8 }}>
+          {showAccts && <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(104px, 1fr))', gap: 8 }}>
             {accounts.map(a => {
               const on = accountFilter === a.id;
               const bal = balances[a.id] || 0;
@@ -344,7 +347,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             >
               +
             </button>
-          </div>
+          </div>}
         </>
       )}
 
@@ -396,8 +399,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
           value={range} onChange={v => { setRange(v); setCatFilter(null); }} />
-        <span style={{ flex: 1 }} />
-        <button onClick={() => setShowCategories(true)} style={{ fontSize: 13, fontWeight: 600, color: T.khaki }}>Categories</button>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -6 }}>
         {range !== 'all' ? (
@@ -441,21 +442,13 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             onClick={() => setPage('accounts')}
           />
         )}
-        {receipts.groups.length > 0 && (
-          <Tile
-            title="Groceries by type" value={money(receipts.total)}
-            sub={`${receipts.groups[0].emoji} ${receipts.groups[0].label}`}
-            visual={<Donut mini size={46} segments={receipts.groups.map(g => ({ id: g.id, color: g.color, value: g.total }))} />}
-            onClick={() => setPage('groceries')}
-          />
-        )}
         {range !== 'month' && monthTxs.length > 0 && (
           <Tile title="Month by month" value={periodTitle} sub="High, low, average"
             visual={<MiniBars />} onClick={() => setPage('months')} />
         )}
         <Tile
           // Full width unless it pairs up with an odd tile before it
-          wide={((summary.categories.length > 0) + (!accountFilter && accounts.length > 1 && summary.spent > 0) + (receipts.groups.length > 0) + (range !== 'month' && monthTxs.length > 0)) % 2 === 0}
+          wide={((summary.categories.length > 0) + (!accountFilter && accounts.length > 1 && summary.spent > 0) + (range !== 'month' && monthTxs.length > 0)) % 2 === 0}
           title="Transactions"
           value={`${monthTxs.length} entr${monthTxs.length === 1 ? 'y' : 'ies'}`}
           sub={monthTxs.length ? `Latest ${dayLabel(monthTxs[0].date).replace(/^\w+, /, '')}` : `Nothing ${range === 'all' ? 'yet' : `in ${periodTitle}`}`}
@@ -470,8 +463,12 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             segments={summary.categories.map(c => ({ id: c.id, emoji: c.emoji, label: c.label, color: c.color, value: c.total, valueLabel: money(c.total) }))}
             total={summary.spent} totalLabel="Spent"
             onOpen={id => setDetailCat(id)}
-            note="Tap a category for its averages, yearly totals and more."
+            note="Tap a category for its averages and seasons."
           />
+          <button onClick={() => setShowCategories(true)}
+            style={{ padding: 12, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
+            Manage categories (add, edit, delete)
+          </button>
         </BudgetPage>
       )}
 
@@ -489,16 +486,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         </BudgetPage>
       )}
 
-      {page === 'groceries' && (
-        <BudgetPage title="Groceries by type" subtitle={`${periodTitle} · ${receipts.receipts} receipt${receipts.receipts === 1 ? '' : 's'} · tax included`} onClose={() => setPage(null)}>
-          <DonutBlock
-            segments={receipts.groups.map(g => ({ id: g.id, emoji: g.emoji, label: g.label, color: g.color, value: g.total, valueLabel: money(g.total), items: g.items }))}
-            total={receipts.total} totalLabel="On receipts"
-            expandable
-            note="Tap a type to see what you bought."
-          />
-        </BudgetPage>
-      )}
 
       {page === 'months' && (
         <BudgetPage title="Month by month" subtitle={periodTitle + (filteredAccount ? ` · ${filteredAccount.name}` : '')} onClose={() => setPage(null)}>
@@ -634,6 +621,20 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             setDetailCat(null); setPage('list');
           }}
           onEdit={detail.category.fixed || detail.category.id === 'missing' ? null : () => setEditingCat(detail.category)}
+          // Groceries: what kind, from receipts and split entries, for the chosen months
+          renderExtra={detailCat === 'groceries' ? (startYM, endYM) => {
+            const g = groceryBreakdown(txs.filter(t => t.category === 'groceries' && t.date.slice(0, 7) >= startYM && t.date.slice(0, 7) <= endYM
+              && (!accountFilter || t.accountId === accountFilter)));
+            if (!g.groups.length) return <div style={{ fontSize: 12, color: T.muted }}>Groceries by type appear here once you scan a receipt or pick a kind for an entry.</div>;
+            return (
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Groceries by type · these months</div>
+                <DonutBlock
+                  segments={g.groups.map(x => ({ id: x.id, emoji: x.emoji, label: x.label, color: x.color, value: x.total, valueLabel: money(x.total), items: x.items }))}
+                  total={g.total} totalLabel="By type" expandable note="Tap a type to see what you bought." />
+              </div>
+            );
+          } : null}
           onClose={() => setDetailCat(null)}
         />
       )}

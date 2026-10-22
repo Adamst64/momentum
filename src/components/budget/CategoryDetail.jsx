@@ -16,21 +16,22 @@ const SEASONS = [
 // this year, any past year, all time or your own months), the months as bars with
 // the average line, and averages by season. The current month is shown but not
 // averaged in, since it's still adding up.
-export default function CategoryDetail({ category: c, stats, scopeLabel, currentYM, onShowTransactions, onEdit, onClose }) {
+export default function CategoryDetail({ category: c, stats, scopeLabel, currentYM, onShowTransactions, onEdit, renderExtra, onClose }) {
   const income = stats.kind === 'income';
   const first = stats.months[0];
   const lastFull = shiftMonth(currentYM, -1);
   const thisYear = currentYM.slice(0, 4);
   const pastYears = [...new Set(stats.months.map(m => m.slice(0, 4)))].filter(y => y < thisYear).reverse();
-  const [pick, setPick] = useState('l12');
+  const [pick, setPick] = useState('all');
   const [from, setFrom] = useState(shiftMonth(currentYM, -3));
   const [to, setTo] = useState(lastFull);
 
   // The chosen months, as [startYM, endYM] (end inclusive)
   const [start, end] = useMemo(() => {
-    if (pick === 'l3') return [shiftMonth(lastFull, -2), lastFull];
-    if (pick === 'l6') return [shiftMonth(lastFull, -5), lastFull];
-    if (pick === 'l12') return [shiftMonth(lastFull, -11), lastFull];
+    // The last N finished months, plus this month so far (shown, not averaged)
+    if (pick === 'l3') return [shiftMonth(lastFull, -2), currentYM];
+    if (pick === 'l6') return [shiftMonth(lastFull, -5), currentYM];
+    if (pick === 'l12') return [shiftMonth(lastFull, -11), currentYM];
     if (pick === 'ytd') return [`${thisYear}-01`, currentYM];
     if (pick === 'all') return [first, currentYM];
     if (pick === 'custom') return from <= to ? [from, to] : [to, from];
@@ -53,9 +54,10 @@ export default function CategoryDetail({ category: c, stats, scopeLabel, current
   const seasonMax = Math.max(...seasons.map(s => s.avg || 0));
 
   const options = [
+    { value: 'all', label: 'All time' },
     { value: 'l3', label: '3 mo' }, { value: 'l6', label: '6 mo' }, { value: 'l12', label: '12 mo' },
     { value: 'ytd', label: thisYear }, ...pastYears.map(y => ({ value: y, label: y })),
-    { value: 'all', label: 'All' }, { value: 'custom', label: 'Custom' },
+    { value: 'custom', label: 'Custom' },
   ];
   const periodText = pick === 'l3' ? 'last 3 months' : pick === 'l6' ? 'last 6 months' : pick === 'l12' ? 'last 12 months'
     : pick === 'ytd' ? `${thisYear} so far` : pick === 'all' ? 'all time' : pick === 'custom' ? `${monthTitle(start)} – ${monthTitle(end)}` : pick;
@@ -101,6 +103,8 @@ export default function CategoryDetail({ category: c, stats, scopeLabel, current
             </div>
           </div>
         )}
+
+        {renderExtra && renderExtra(start, end)}
 
         <button onClick={() => onShowTransactions(start, end)}
           style={{ padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 700 }}>
