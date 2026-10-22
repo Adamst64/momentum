@@ -1,205 +1,162 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { parseDate } from '../../utils/dateUtils';
-import { money, monthTitle } from '../../utils/budget';
-import { SectionTitle } from '../investing/ui';
+import { money, monthTitle, shiftMonth } from '../../utils/budget';
+import { Chips, inputStyle } from '../investing/ui';
 
 const MON = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
-const shortDate = ds => parseDate(ds).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const SEASONS = [
+  { label: 'Winter', months: ['12', '01', '02'] },
+  { label: 'Spring', months: ['03', '04', '05'] },
+  { label: 'Summer', months: ['06', '07', '08'] },
+  { label: 'Fall',   months: ['09', '10', '11'] },
+];
 
-function Tile({ label, value, sub }) {
-  return (
-    <div style={{ flex: 1, minWidth: 0, padding: '9px 10px', borderRadius: 10, background: T.bg, border: `1px solid ${T.cardBorder}` }}>
-      <div style={{ fontSize: 11, color: T.muted }}>{label}</div>
-      <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: T.muted, marginTop: 1 }}>{sub}</div>}
-    </div>
-  );
-}
+// One category: the average per month for a period you pick (last 3/6/12 months,
+// this year, any past year, all time or your own months), the months as bars with
+// the average line, and averages by season. The current month is shown but not
+// averaged in, since it's still adding up.
+export default function CategoryDetail({ category: c, stats, scopeLabel, currentYM, onShowTransactions, onEdit, onClose }) {
+  const income = stats.kind === 'income';
+  const first = stats.months[0];
+  const lastFull = shiftMonth(currentYM, -1);
+  const thisYear = currentYM.slice(0, 4);
+  const pastYears = [...new Set(stats.months.map(m => m.slice(0, 4)))].filter(y => y < thisYear).reverse();
+  const [pick, setPick] = useState('l12');
+  const [from, setFrom] = useState(shiftMonth(currentYM, -3));
+  const [to, setTo] = useState(lastFull);
 
-function Line({ left, sub, right, onClick }) {
-  const Tag = onClick ? 'button' : 'div';
+  // The chosen months, as [startYM, endYM] (end inclusive)
+  const [start, end] = useMemo(() => {
+    if (pick === 'l3') return [shiftMonth(lastFull, -2), lastFull];
+    if (pick === 'l6') return [shiftMonth(lastFull, -5), lastFull];
+    if (pick === 'l12') return [shiftMonth(lastFull, -11), lastFull];
+    if (pick === 'ytd') return [`${thisYear}-01`, currentYM];
+    if (pick === 'all') return [first, currentYM];
+    if (pick === 'custom') return from <= to ? [from, to] : [to, from];
+    return [`${pick}-01`, `${pick}-12`]; // a past year
+  }, [pick, from, to, first, lastFull, currentYM, thisYear]);
+
+  const months = [];
+  for (let m = start; m <= end && months.length < 600; m = shiftMonth(m, 1)) months.push(m);
+  const val = m => stats.byMonth[m] || 0;
+  // Averaged: finished months you were tracking (not before this category's first entry)
+  const counted = months.filter(m => m < currentYM && m >= first);
+  const total = months.reduce((s, m) => s + val(m), 0);
+  const avg = counted.length ? Math.round(counted.reduce((s, m) => s + val(m), 0) / counted.length) : null;
+  const inProgress = months.includes(currentYM);
+
+  const seasons = SEASONS.map(s => {
+    const ms = stats.months.filter(m => m < currentYM && s.months.includes(m.slice(5)));
+    return { ...s, n: ms.length, avg: ms.length ? Math.round(ms.reduce((t, m) => t + val(m), 0) / ms.length) : null };
+  });
+  const seasonMax = Math.max(...seasons.map(s => s.avg || 0));
+
+  const options = [
+    { value: 'l3', label: '3 mo' }, { value: 'l6', label: '6 mo' }, { value: 'l12', label: '12 mo' },
+    { value: 'ytd', label: thisYear }, ...pastYears.map(y => ({ value: y, label: y })),
+    { value: 'all', label: 'All' }, { value: 'custom', label: 'Custom' },
+  ];
+  const periodText = pick === 'l3' ? 'last 3 months' : pick === 'l6' ? 'last 6 months' : pick === 'l12' ? 'last 12 months'
+    : pick === 'ytd' ? `${thisYear} so far` : pick === 'all' ? 'all time' : pick === 'custom' ? `${monthTitle(start)} – ${monthTitle(end)}` : pick;
+
   return (
-    <Tag onClick={onClick} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{left}</div>
-        {sub && <div style={{ fontSize: 12, color: T.muted, marginTop: 1 }}>{sub}</div>}
+    <Modal title={`${c.emoji} ${c.label}`} onClose={onClose} full>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <Chips small options={options} value={pick} onChange={setPick} />
+        {pick === 'custom' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: -8 }}>
+            <input type="month" value={from} max={currentYM} onChange={e => e.target.value && setFrom(e.target.value)} style={{ ...inputStyle, flex: 1 }} aria-label="From month" />
+            <span style={{ color: T.muted }}>–</span>
+            <input type="month" value={to} max={currentYM} onChange={e => e.target.value && setTo(e.target.value)} style={{ ...inputStyle, flex: 1 }} aria-label="To month" />
+          </div>
+        )}
+
+        {/* The headline: average per month for the period */}
+        <div style={{ padding: '16px 16px 14px', borderRadius: 16, background: c.color + '22', border: `1px solid ${c.color}66` }}>
+          <div style={{ fontSize: 13, color: T.muted }}>Average {income ? 'received' : 'spent'} per month · {periodText}{scopeLabel ? ` · ${scopeLabel}` : ''}</div>
+          <div style={{ fontSize: 36, fontWeight: 800, color: T.text, letterSpacing: -0.8, marginTop: 2 }}>{avg !== null ? money(avg) : '—'}</div>
+          <div style={{ fontSize: 13, color: T.muted, marginTop: 2 }}>
+            {money(total)} total{counted.length ? ` · averaged over ${counted.length} month${counted.length === 1 ? '' : 's'}` : ''}
+            {inProgress && <> · {monthTitle(currentYM)} so far {money(val(currentYM))} (not averaged yet)</>}
+          </div>
+          {!counted.length && <div style={{ fontSize: 12, color: T.khaki, marginTop: 4 }}>No finished months in this period yet.</div>}
+        </div>
+
+        <PeriodBars months={months} val={val} avg={avg} color={c.color} currentYM={currentYM} />
+
+        {seasons.some(s => s.avg !== null) && (
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Average month by season · all time</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+              {seasons.map(s => {
+                const top = s.avg !== null && s.avg === seasonMax && seasons.filter(x => x.avg !== null).length > 1;
+                return (
+                  <div key={s.label} style={{ padding: '9px 8px', borderRadius: 12, background: T.card, border: `1px solid ${top ? c.color : T.cardBorder}`, textAlign: 'center' }}>
+                    <div style={{ fontSize: 12, color: top ? T.text : T.muted, fontWeight: top ? 700 : 400 }}>{s.label}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: s.avg !== null ? T.text : T.muted, marginTop: 2 }}>{s.avg !== null ? money(s.avg) : '—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <button onClick={() => onShowTransactions(start, end)}
+          style={{ padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 700 }}>
+          🧾 Transactions in {c.label} ›
+        </button>
+        {onEdit && (
+          <button onClick={onEdit} style={{ padding: 10, fontSize: 13, color: T.muted }}>Edit category (name, emoji, color)</button>
+        )}
       </div>
-      <div style={{ fontSize: 14, fontWeight: 600, color: T.text, flexShrink: 0 }}>{right}</div>
-    </Tag>
+    </Modal>
   );
 }
 
-// Month by month for this category, with the monthly average as a dashed line.
-// Tap a bar for its amount.
-function MonthBars({ stats, color, currentYM, onOpenMonth }) {
-  const { months, byMonth, avgMonth, highMonth, lowMonth } = stats;
+// The period's months as bars, with the average as a dashed line. Tap a bar for its amount.
+function PeriodBars({ months, val, avg, color, currentYM }) {
   const [picked, setPicked] = useState(null);
   const scroller = useRef(null);
-  useEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, []);
-  // At least a year of slots so a new category doesn't draw one giant bar
-  const shown = months.length >= 12 ? months : [...Array.from({ length: 12 - months.length }, () => null), ...months];
-  const max = Math.max(...months.map(m => byMonth[m]), avgMonth || 0, 1);
-  const H = 96;
-  const wide = shown.length > 12;
-  const width = wide ? shown.length * 22 : '100%';
-
+  useEffect(() => { const el = scroller.current; if (el) el.scrollLeft = el.scrollWidth; }, [months.length]);
+  if (!months.length) return null;
+  const max = Math.max(...months.map(val), avg || 0, 1);
+  const H = 110;
+  const wide = months.length > 12;
   return (
     <div>
-      <div style={{ minHeight: 34, fontSize: 13, color: T.muted, display: 'flex', alignItems: 'center', gap: 8 }}>
-        {picked ? (
-          <>
-            <span style={{ flex: 1 }}><b style={{ color: T.text }}>{monthTitle(picked)}</b> · {money(byMonth[picked])}{picked === currentYM ? ' so far' : ''}</span>
-            <button onClick={() => onOpenMonth(picked)} style={{ fontSize: 12, fontWeight: 600, color: T.khaki }}>Open month ›</button>
-          </>
-        ) : <span>Tap a bar to see that month.</span>}
+      <div style={{ minHeight: 22, fontSize: 13, color: T.muted, marginBottom: 4 }}>
+        {picked ? <><b style={{ color: T.text }}>{monthTitle(picked)}</b> · {money(val(picked))}{picked === currentYM ? ' so far' : ''}{avg ? ` · ${val(picked) >= avg ? 'above' : 'below'} average` : ''}</> : 'Tap a bar for that month.'}
       </div>
       <div ref={scroller} style={{ overflowX: wide ? 'auto' : 'visible', scrollbarWidth: 'none' }}>
-        <div style={{ position: 'relative', width }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: H + 14 }}>
-            {shown.map((m, i) => {
-              if (!m) return <span key={'pad' + i} style={{ flex: 1, height: 1, alignSelf: 'flex-end', background: T.subtle }} />;
-              const v = byMonth[m];
-              const on = picked === m;
-              const mark = m === highMonth && highMonth !== lowMonth ? 'High' : m === lowMonth && highMonth !== lowMonth ? 'Low' : null;
+        <div style={{ position: 'relative', width: wide ? months.length * 24 : '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: H }}>
+            {months.map(m => {
+              const v = val(m), on = picked === m;
               return (
                 <button key={m} onClick={() => setPicked(on ? null : m)} aria-label={`${monthTitle(m)}: ${money(v)}`}
-                  style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center', padding: 0 }}>
-                  {mark && <span style={{ fontSize: 9, color: T.muted, marginBottom: 2 }}>{mark}</span>}
-                  <span style={{
-                    width: '100%', maxWidth: 22, height: v ? Math.max(3, (v / max) * H) : 1,
-                    borderRadius: '4px 4px 0 0', background: v ? color : T.subtle,
-                    opacity: picked && !on ? 0.45 : m === currentYM ? 0.6 : 1,
-                  }} />
+                  style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', alignItems: 'flex-end', padding: 0 }}>
+                  <span style={{ width: '100%', height: v ? Math.max(3, (v / max) * H) : 1, borderRadius: '4px 4px 0 0',
+                    background: v ? color : T.subtle, opacity: picked && !on ? 0.4 : m === currentYM ? 0.55 : 1 }} />
                 </button>
               );
             })}
           </div>
-          {avgMonth !== null && avgMonth > 0 && (
-            <div style={{
-              position: 'absolute', left: 0, right: 0, bottom: (avgMonth / max) * H, borderTop: `1.5px dashed ${T.khaki}`,
-              pointerEvents: 'none', opacity: 0.8,
-            }} />
-          )}
-          <div style={{ display: 'flex', gap: 2, marginTop: 4 }}>
-            {shown.map((m, i) => (
-              <span key={m || 'l' + i} style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 10, color: T.muted }}>
-                {m ? (wide && !m.endsWith('-01') ? '' : wide ? `’${m.slice(2, 4)}` : MON[Number(m.slice(5)) - 1]) : ''}
+          {avg > 0 && <div style={{ position: 'absolute', left: 0, right: 0, bottom: 18 + (avg / max) * H, borderTop: `2px dashed ${T.khaki}`, pointerEvents: 'none' }} />}
+          <div style={{ display: 'flex', gap: 3, marginTop: 4, height: 14 }}>
+            {months.map(m => (
+              <span key={m} style={{ flex: 1, minWidth: 0, textAlign: 'center', fontSize: 10, color: T.muted }}>
+                {wide && !m.endsWith('-01') ? '' : m.endsWith('-01') && months.length > 12 ? `’${m.slice(2, 4)}` : MON[Number(m.slice(5)) - 1]}
               </span>
             ))}
           </div>
         </div>
       </div>
-      {avgMonth !== null && avgMonth > 0 && (
+      {avg > 0 && (
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ width: 14, borderTop: `1.5px dashed ${T.khaki}` }} /> Monthly average · this month is paler while it's still adding up
+          <span style={{ width: 14, borderTop: `2px dashed ${T.khaki}` }} /> Average {money(avg)} a month
         </div>
       )}
     </div>
-  );
-}
-
-export default function CategoryDetail({
-  category: c, stats, share, accountsById, scopeLabel, currentYM, onOpenTx, onOpenMonth, onShowAll, onEdit, onClose,
-}) {
-  const income = stats.kind === 'income';
-  const verb = income ? 'received' : 'spent';
-  const often = stats.perMonthCount;
-
-  return (
-    <Modal title={`${c.emoji} ${c.label}`} onClose={onClose}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-        <div style={{ marginTop: -8 }}>
-          <div style={{ fontSize: 12, color: T.muted }}>Total {verb}{scopeLabel ? ` · ${scopeLabel}` : ''} since {monthTitle(stats.months[0])}</div>
-          <div style={{ fontSize: 30, fontWeight: 800, color: T.text, letterSpacing: -0.5 }}>{money(stats.total)}</div>
-          <div style={{ fontSize: 12, color: T.muted }}>
-            {stats.count} entr{stats.count === 1 ? 'y' : 'ies'}
-            {share !== null && !income && <> · {Math.round(share * 100)}% of all your spending</>}
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 6 }}>
-          {/* The month isn't over, so no % change against a full month; just last month's total beside it */}
-          <Tile label="This month" value={money(stats.thisMonth)}
-            sub={stats.lastMonth !== null ? `so far · last month ${money(stats.lastMonth)}` : 'so far'} />
-          <Tile label="Monthly average" value={stats.avgMonth !== null ? money(stats.avgMonth) : '—'}
-            sub={stats.done.length ? `over ${stats.done.length} month${stats.done.length === 1 ? '' : 's'}` : 'after this month'} />
-          <Tile label="Per year" value={stats.yearly ? money(stats.yearly.value) : '—'}
-            sub={!stats.yearly ? 'needs a full month' : stats.yearly.estimate ? 'estimate' : 'last 12 months'} />
-        </div>
-
-        <div>
-          <SectionTitle>Month by month</SectionTitle>
-          <MonthBars stats={stats} color={c.color} currentYM={currentYM} onOpenMonth={onOpenMonth} />
-          {stats.highMonth && stats.highMonth !== stats.lowMonth && (
-            <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-              <Tile label={income ? 'Best month' : 'Most spent'} value={money(stats.byMonth[stats.highMonth])} sub={monthTitle(stats.highMonth)} />
-              <Tile label={income ? 'Lowest month' : 'Least spent'} value={money(stats.byMonth[stats.lowMonth])} sub={monthTitle(stats.lowMonth)} />
-            </div>
-          )}
-        </div>
-
-        <div>
-          <SectionTitle>By year</SectionTitle>
-          {stats.years.map(y => (
-            <Line key={y.year} left={y.year}
-              sub={y.perMonth !== null ? `${money(y.perMonth)} a month${y.partial ? ' · so far' : y.months < 12 ? ` · ${y.months} month${y.months === 1 ? '' : 's'} tracked` : ''}` : 'this month so far'}
-              right={money(y.total)} />
-          ))}
-        </div>
-
-        <div>
-          <SectionTitle>Habits</SectionTitle>
-          <Line left={income ? 'Average payment' : 'Average purchase'} right={money(stats.perPurchase)} />
-          {often !== null && (
-            <Line left="How often" right={often >= 1 ? `about ${Math.round(often)}× a month` : `about once every ${Math.max(2, Math.round(1 / often))} months`} />
-          )}
-        </div>
-
-        {stats.places.length > 0 && (
-          <div>
-            <SectionTitle>Top places</SectionTitle>
-            {stats.places.map(p => (
-              <Line key={p.name} left={p.name} sub={`${p.count} time${p.count === 1 ? '' : 's'}`} right={money(p.total)} />
-            ))}
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 4 }}>From the note on each entry.</div>
-          </div>
-        )}
-
-        <div>
-          <SectionTitle>{income ? 'Biggest payments' : 'Biggest purchases'}</SectionTitle>
-          {stats.biggest.map(t => (
-            <Line key={t.id} left={t.note || c.label} sub={`${shortDate(t.date)} · ${accountsById[t.accountId]?.name || 'Deleted account'}`}
-              right={money(t.amount)} onClick={() => onOpenTx(t)} />
-          ))}
-        </div>
-
-        {stats.byAccount.length > 1 && (
-          <div>
-            <SectionTitle>By account</SectionTitle>
-            {stats.byAccount.map(a => (
-              <Line key={a.id} left={accountsById[a.id]?.name || 'Deleted account'}
-                sub={`${Math.round((a.total / stats.total) * 100)}%`} right={money(a.total)} />
-            ))}
-          </div>
-        )}
-
-        <div>
-          <SectionTitle right={<button onClick={onShowAll} style={{ fontSize: 12, fontWeight: 600, color: T.khaki }}>Show in list ›</button>}>
-            Latest
-          </SectionTitle>
-          {stats.recent.map(t => (
-            <Line key={t.id} left={t.note || c.label} sub={shortDate(t.date)} right={money(t.amount)} onClick={() => onOpenTx(t)} />
-          ))}
-        </div>
-
-        {onEdit && (
-          <button onClick={onEdit} style={{ padding: 11, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
-            Edit category (name, emoji, color)
-          </button>
-        )}
-      </div>
-    </Modal>
   );
 }

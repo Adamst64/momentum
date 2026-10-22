@@ -101,6 +101,8 @@ function DonutBlock({ segments, total, totalLabel, onOpen, expandable, note }) {
   );
 }
 
+const selectStyle = { background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, color: T.text, fontSize: 14, padding: '9px 10px', outline: 'none', colorScheme: 'dark', minWidth: 0 };
+
 function dayLabel(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
@@ -184,7 +186,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [month, setMonth]           = useState(todayYM);
   const [range, setRange]           = useState('month'); // 'month' | 'year' | 'all'
   const [accountFilter, setAccountFilter] = useState(null);
-  const [catFilter, setCatFilter]   = useState(null);
+  // Transactions page filters: category, account, and a date range ('' = the period on screen)
+  const [listF, setListF] = useState({ cat: null, acct: null, from: '', to: '' });
+  const setCatFilter = cat => setListF(f => ({ ...f, cat }));
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
   const [showCategories, setShowCategories] = useState(false);
   const [detailCat, setDetailCat]   = useState(null); // category id whose detail page is open
@@ -214,7 +218,15 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
     const allSpent = scoped.reduce((sum, t) => sum + (t.type === 'expense' ? t.amount : 0), 0);
     return { stats, share: allSpent ? stats.total / allSpent : null, category: lookupCategory(categories, detailCat) };
   }, [detailCat, txs, accountFilter, categories]);
-  const listed = catFilter ? monthTxs.filter(t => t.category === catFilter) : monthTxs;
+  const customDates = !!(listF.from || listF.to);
+  const listed = useMemo(() => txs.filter(t => {
+    if (customDates ? (listF.from && t.date < listF.from) || (listF.to && t.date > listF.to) : !t.date.startsWith(period)) return false;
+    const acct = listF.acct || accountFilter;
+    if (acct && t.accountId !== acct && t.toAccountId !== acct) return false;
+    return !listF.cat || t.category === listF.cat;
+  }), [txs, listF, customDates, period, accountFilter]);
+  const listSpent = listed.reduce((s, t) => s + (t.type === 'expense' ? t.amount : 0), 0);
+  const listIn = listed.reduce((s, t) => s + (t.type === 'income' && t.category !== 'balance' ? t.amount : 0), 0);
 
   const groups = [];
   for (const t of listed) {
@@ -499,16 +511,42 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       )}
 
       {page === 'list' && (
-        <BudgetPage title="Transactions" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${listed.length} entr${listed.length === 1 ? 'y' : 'ies'}`} onClose={() => { setPage(null); setCatFilter(null); }}>
-          {catFilter && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '8px 12px', borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}` }}>
-              <span style={{ flex: 1, color: T.text }}>{lookupCategory(categories, catFilter).emoji} {lookupCategory(categories, catFilter).label} only</span>
-              <button onClick={() => setCatFilter(null)} style={{ color: T.khaki, fontWeight: 600 }}>Show all</button>
+        <BudgetPage title="Transactions" subtitle={`${customDates ? 'Custom dates' : periodTitle} · ${listed.length} entr${listed.length === 1 ? 'y' : 'ies'}`} onClose={() => { setPage(null); setListF({ cat: null, acct: null, from: '', to: '' }); }}>
+          {/* Filters: category, account, dates */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 14, background: T.card, border: `1px solid ${T.cardBorder}` }}>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <select value={listF.cat || ''} onChange={e => setListF(f => ({ ...f, cat: e.target.value || null }))} aria-label="Category"
+                style={{ ...selectStyle, flex: 1, color: listF.cat ? T.text : T.muted }}>
+                <option value="">All categories</option>
+                {categories.filter(c => !c.hidden || txs.some(t => t.category === c.id)).map(c => <option key={c.id} value={c.id}>{c.emoji} {c.label}</option>)}
+              </select>
+              <select value={listF.acct || accountFilter || ''} onChange={e => setListF(f => ({ ...f, acct: e.target.value || null }))} aria-label="Account"
+                style={{ ...selectStyle, flex: 1, color: listF.acct || accountFilter ? T.text : T.muted }}>
+                <option value="">All accounts</option>
+                {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
             </div>
-          )}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="date" value={listF.from} onChange={e => setListF(f => ({ ...f, from: e.target.value }))} aria-label="From date" style={{ ...selectStyle, flex: 1 }} />
+              <span style={{ color: T.muted }}>–</span>
+              <input type="date" value={listF.to} onChange={e => setListF(f => ({ ...f, to: e.target.value }))} aria-label="To date" style={{ ...selectStyle, flex: 1 }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+              <span style={{ flex: 1, color: T.muted }}>
+                {customDates ? 'Your dates' : `Dates: ${periodTitle} (pick dates above to change)`}
+              </span>
+              {(listF.cat || listF.acct || customDates) && (
+                <button onClick={() => setListF({ cat: null, acct: null, from: '', to: '' })} style={{ color: T.khaki, fontWeight: 600 }}>Clear filters</button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: 14, fontSize: 14, fontWeight: 700, paddingTop: 6, borderTop: `1px solid ${T.cardBorder}` }}>
+              <span style={{ color: T.text }}>{money(listSpent)} <span style={{ fontSize: 12, fontWeight: 500, color: T.muted }}>spent</span></span>
+              {listIn > 0 && <span style={{ color: T.green }}>+{money(listIn)} <span style={{ fontSize: 12, fontWeight: 500, color: T.muted }}>in</span></span>}
+            </div>
+          </div>
           {listed.length === 0 ? (
             <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px' }}>
-              Nothing logged {filteredAccount ? `for ${filteredAccount.name} ` : ''}{range === 'all' ? 'yet' : `in ${periodTitle}`}.
+              Nothing matches these filters.
             </div>
           ) : (
             <>
@@ -587,13 +625,14 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         <CategoryDetail
           category={detail.category}
           stats={detail.stats}
-          share={detail.share}
-          accountsById={accountsById}
           scopeLabel={filteredAccount ? filteredAccount.name : null}
           currentYM={todayYM()}
-          onOpenTx={t => setEditingTx(t)}
-          onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(detailCat); setDetailCat(null); setPage('list'); }}
-          onShowAll={() => { setCatFilter(detailCat); setDetailCat(null); setPage('list'); }}
+          onShowTransactions={(startYM, endYM) => {
+            const [y, m] = endYM.split('-').map(Number);
+            const lastDay = String(new Date(y, m, 0).getDate()).padStart(2, '0');
+            setListF({ cat: detailCat, acct: null, from: `${startYM}-01`, to: `${endYM}-${lastDay}` });
+            setDetailCat(null); setPage('list');
+          }}
           onEdit={detail.category.fixed || detail.category.id === 'missing' ? null : () => setEditingCat(detail.category)}
           onClose={() => setDetailCat(null)}
         />
