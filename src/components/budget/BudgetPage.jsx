@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
-// A full-screen page opened from the Budget overview (Where it went, Transactions…).
+// A full-screen page opened from the Budget overview (Categories, Transactions…).
 // ← or swiping in from the left edge goes back. Sits below sheets (Modal is 100),
 // so editing an entry from here opens on top of it.
 export default function BudgetPage({ title, subtitle, onClose, children }) {

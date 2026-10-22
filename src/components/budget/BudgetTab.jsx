@@ -101,6 +101,22 @@ function DonutBlock({ segments, total, totalLabel, onOpen, expandable, note }) {
   );
 }
 
+// A date filter with its own × to clear it. (iPhone's own "Reset" in the date picker
+// goes back to the date the field started with, so it can't empty a field React fills in.)
+function DateField({ label, value, onChange }) {
+  return (
+    <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+      <input type="date" value={value} onChange={e => onChange(e.target.value)} aria-label={`${label} date`}
+        style={{ ...selectStyle, width: '100%', boxSizing: 'border-box', paddingRight: value ? 30 : 10, color: value ? T.text : T.muted }} />
+      {!value && <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: T.muted, pointerEvents: 'none' }}>{label}</span>}
+      {value && (
+        <button type="button" onClick={() => onChange('')} aria-label={`Clear ${label.toLowerCase()} date`}
+          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 12, background: T.subtle, color: T.text, fontSize: 13, lineHeight: '24px' }}>×</button>
+      )}
+    </div>
+  );
+}
+
 const selectStyle = { background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, color: T.text, fontSize: 14, padding: '9px 10px', outline: 'none', colorScheme: 'dark', minWidth: 0 };
 
 function dayLabel(dateStr) {
@@ -306,8 +322,14 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               <span style={{ display: 'block', fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Total balance</span>
               <span style={{ display: 'block', fontSize: 32, fontWeight: 800, color: total < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>{money(total)}</span>
             </span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: T.khaki, paddingBottom: 8, whiteSpace: 'nowrap' }}>
-              {accounts.length} account{accounts.length === 1 ? '' : 's'} {showAccts ? '▴' : '▾'}
+            <span style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, padding: '8px 12px', borderRadius: 20, whiteSpace: 'nowrap',
+              background: showAccts ? '#2A3A1A' : T.card, border: `1px solid ${showAccts ? T.olive : T.cardBorder}`,
+              fontSize: 13, fontWeight: 700, color: T.khaki,
+            }}>
+              <span aria-hidden="true">💳</span>
+              {accounts.length} account{accounts.length === 1 ? '' : 's'}
+              <span style={{ fontSize: 10, color: T.muted, transform: showAccts ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}>▼</span>
             </span>
           </button>
 
@@ -428,7 +450,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
         {summary.categories.length > 0 && (
           <Tile
-            title="Where it went" value={money(summary.spent)}
+            title="Categories" value={money(summary.spent)}
             sub={`${summary.categories[0].emoji} ${summary.categories[0].label} ${Math.round((summary.categories[0].total / summary.spent) * 100)}%`}
             visual={<Donut mini size={46} segments={summary.categories.map(c => ({ id: c.id, color: c.color, value: c.total }))} />}
             onClick={() => setPage('where')}
@@ -458,7 +480,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       </div>
 
       {page === 'where' && (
-        <BudgetPage title="Where it went" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
+        <BudgetPage title="Categories" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
           <DonutBlock
             segments={summary.categories.map(c => ({ id: c.id, emoji: c.emoji, label: c.label, color: c.color, value: c.total, valueLabel: money(c.total) }))}
             total={summary.spent} totalLabel="Spent"
@@ -514,9 +536,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               </select>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="date" value={listF.from} onChange={e => setListF(f => ({ ...f, from: e.target.value }))} aria-label="From date" style={{ ...selectStyle, flex: 1 }} />
+              <DateField label="From" value={listF.from} onChange={v => setListF(f => ({ ...f, from: v }))} />
               <span style={{ color: T.muted }}>–</span>
-              <input type="date" value={listF.to} onChange={e => setListF(f => ({ ...f, to: e.target.value }))} aria-label="To date" style={{ ...selectStyle, flex: 1 }} />
+              <DateField label="To" value={listF.to} onChange={v => setListF(f => ({ ...f, to: v }))} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
               <span style={{ flex: 1, color: T.muted }}>
