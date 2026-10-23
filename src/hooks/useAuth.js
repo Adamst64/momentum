@@ -6,10 +6,22 @@ export function useAuth() {
   const [user, setUser] = useState(undefined); // undefined = loading
 
   useEffect(() => {
-    // Last resort if Firebase auth never resolves: fall through to the login
-    // screen rather than hang on the loading dot. Startup auth requests are
-    // capped at 3s (see firebase.js), so this shouldn't fire on a weak signal.
-    const timeout = setTimeout(() => setUser(u => u === undefined ? null : u), 10000);
+    // Last resort if Firebase auth never resolves. Startup auth requests are
+    // capped at 3s (see firebase.js), so this means the saved session itself
+    // couldn't be read: iPhone sometimes leaves the app's storage stuck after the
+    // app is reopened. A fresh load clears that, so try one reload before falling
+    // through to the login screen (which would look like being signed out).
+    const timeout = setTimeout(() => {
+      try {
+        const last = Number(sessionStorage.getItem('momentum_auth_reload_at') || 0);
+        if (Date.now() - last > 60000) {
+          sessionStorage.setItem('momentum_auth_reload_at', String(Date.now()));
+          window.location.reload();
+          return;
+        }
+      } catch { /* storage unavailable: show the login screen */ }
+      setUser(u => u === undefined ? null : u);
+    }, 10000);
     const unsub = onAuthStateChanged(auth, u => { clearTimeout(timeout); setUser(u); });
     return () => { clearTimeout(timeout); unsub(); };
   }, []);

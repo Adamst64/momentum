@@ -28,6 +28,10 @@ document.addEventListener('focusin', e => {
   setTimeout(() => { if (document.activeElement === el) el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 350);
 });
 
+// Ask the browser to keep the app's saved data (your sign-in, offline copy) even
+// when the phone runs low on space, instead of clearing it as it can for websites
+navigator.storage?.persist?.().catch(() => {});
+
 // Updates: an installed iPhone app rarely checks for a new version and keeps running
 // the old code until it's fully restarted. Check whenever the app comes to the front;
 // once a new version has taken over, reload the next time the app goes to the
