@@ -676,12 +676,13 @@ async function maybeSnapshot(db, userDoc, key, et) {
   });
 }
 
-// Price alerts: every 15 minutes, 4:00–20:00 ET on market days. The regular session
-// uses Finnhub; pre-market and after hours use the extended price.
+// Price alerts, 4:00–20:00 ET on market days. The regular session (checked every
+// 5 minutes) uses Finnhub; pre-market and after hours (every 15) the extended price.
 async function maybeCheckAlerts(db, userDoc, key, et, notify) {
   if (!isTradingDay(et)) return;
-  if (et.minutes % 15 >= 5) return;
   const regular = isRegularSession(et);
+  // Every run (5 min) while the market is open; every 15 min before and after
+  if (!regular && et.minutes % 15 >= 5) return;
   if (regular && !key) return;
 
   const alertsSnap = await userDoc.ref.collection('invAlerts').where('enabled', '==', true).get();
@@ -713,7 +714,6 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
   }
 }
 
-// Evening before a holding reports earnings (7:00–8:00 PM ET), one push per day
 // ── Automatic calendar events (earnings, dividends, splits) ─────────────────
 // Kept on each invAssets doc as autoEvents [{ id, date, label, kind, note? }],
 // shown in yellow on the stock's calendar beside your own (green) dates.
@@ -807,6 +807,7 @@ async function maybeRefreshEvents(userDoc, key) {
   for (const d of docs) await refreshAutoEvents(d.ref, d.id, key);
 }
 
+// Evening before a holding reports earnings (7:00–8:00 PM ET), one push per day
 async function maybeEarningsReminder(userDoc, et, notify) {
   if (et.minutes < 19 * 60 || et.minutes >= 20 * 60) return;
   if (userDoc.data().investing?.lastEarningsReminder === et.today) return;
