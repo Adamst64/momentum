@@ -105,21 +105,33 @@ function DonutBlock({ segments, total, totalLabel, onOpen, expandable, note }) {
 
 // A date filter with its own × to clear it. (iPhone's own "Reset" in the date picker
 // goes back to the date the field started with, so it can't empty a field React fills in.)
+// iPhone draws date inputs at its own size whatever the styles say, so the box is ours:
+// the date shows as text and an invisible native input over that text opens the picker.
+// The × sits beside the text, never on top of it.
 function DateField({ label, value, onChange }) {
+  const shown = value
+    ? parseDate(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(value.slice(0, 4) !== String(new Date().getFullYear()) ? { year: 'numeric' } : {}) })
+    : label;
   return (
-    <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-      <input type="date" value={value} onChange={e => onChange(e.target.value)} aria-label={`${label} date`}
-        style={{ ...selectStyle, width: '100%', boxSizing: 'border-box', paddingRight: value ? 30 : 10, color: value ? T.text : T.muted }} />
-      {!value && <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', fontSize: 14, color: T.muted, pointerEvents: 'none' }}>{label}</span>}
-      {value && (
+    <div style={{ ...selectStyle, flex: 1, display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px 0 10px', boxSizing: 'border-box' }}>
+      <span style={{ position: 'relative', flex: 1, minWidth: 0, height: '100%', display: 'flex', alignItems: 'center' }}>
+        <span style={{ color: value ? T.text : T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{shown}</span>
+        <input type="date" value={value} onChange={e => onChange(e.target.value)} aria-label={`${label} date`}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0, margin: 0, padding: 0, border: 'none',
+            fontSize: 16, WebkitAppearance: 'none', appearance: 'none', cursor: 'pointer', colorScheme: 'dark' }} />
+      </span>
+      {value ? (
         <button type="button" onClick={() => onChange('')} aria-label={`Clear ${label.toLowerCase()} date`}
-          style={{ position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)', width: 24, height: 24, borderRadius: 12, background: T.subtle, color: T.text, fontSize: 13, lineHeight: '24px' }}>×</button>
+          style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 11, background: T.subtle, color: T.text, fontSize: 13, lineHeight: '22px', padding: 0 }}>×</button>
+      ) : (
+        <span aria-hidden="true" style={{ flexShrink: 0, fontSize: 13, color: T.muted, pointerEvents: 'none' }}>📅</span>
       )}
     </div>
   );
 }
 
-const selectStyle = { background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, color: T.text, fontSize: 14, padding: '9px 10px', outline: 'none', colorScheme: 'dark', minWidth: 0 };
+// Same height for the dropdowns and the date boxes, so the filter rows line up
+const selectStyle = { background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, color: T.text, fontSize: 14, height: 38, padding: '0 10px', outline: 'none', colorScheme: 'dark', minWidth: 0 };
 
 function dayLabel(dateStr) {
   return parseDate(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
