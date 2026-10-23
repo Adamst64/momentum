@@ -139,6 +139,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
   const [msg, setMsg]             = useState(null);
   const [ask, setAsk]             = useState(null); // { title, message, action } for "are you sure?"
   const [editing, setEditing]     = useState(null); // { ids, init } of the transaction being edited
+  const [showTx, setShowTx]       = useState(false); // the transactions page
   const editTx = t => { const e = txEditInit(t, txs); if (e) setEditing(e); };
 
   const where = scoped ? ` from ${scoped.name}` : multi ? ' from all accounts' : '';
@@ -165,6 +166,13 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
 
   return (
     <Modal title={symbol} onClose={onClose} full>
+      {showTx && (
+        <Modal title={`${symbol} transactions${scoped ? ` · ${scoped.name}` : ''}`} onClose={() => setShowTx(false)}>
+          {scopeTx.length > 0
+            ? <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => deleteTx(id)} onEdit={editTx} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
+            : <div style={{ fontSize: 13, color: T.muted }}>No transactions.</div>}
+        </Modal>
+      )}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {asset.name && <div style={{ fontSize: 13, color: T.muted, marginTop: -12 }}>{asset.name}</div>}
 
@@ -258,10 +266,14 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
         </div>
 
         {scopeTx.length > 0 && (
-          <div>
-            <SectionTitle>Transactions{scoped ? ` · ${scoped.name}` : ''}</SectionTitle>
-            <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => deleteTx(id)} onEdit={editTx} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
-          </div>
+          <button
+            onClick={() => setShowTx(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px', borderRadius: 12, background: T.bg, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 14, fontWeight: 600, textAlign: 'left' }}
+          >
+            <span style={{ flex: 1 }}>🧾 Transactions{scoped ? ` · ${scoped.name}` : ''}</span>
+            <span style={{ color: T.muted, fontWeight: 500 }}>{scopeTx.length}</span>
+            <span style={{ color: T.muted }}>›</span>
+          </button>
         )}
 
         {asset.source === 'finnhub' && (

@@ -388,6 +388,128 @@ const analystStale = a => {
 
 // ── Callable: details for one stock (stats, past earnings, analysts) ─────────
 
+// ── Company / fund details for the holding screen ───────────────────────────
+// Bump to refetch cached docs after adding fields
+const METRICS_V = 2;
+const ABOUT_V = 1;
+
+// Today's open / high / low / volume and the 30-day average volume, from
+// Yahoo's chart endpoint (keyless; also works for ETFs and funds)
+async function yahooDayStats(sym) {
+  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=3mo`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  if (!res.ok) return null;
+  const r = (await res.json())?.chart?.result?.[0];
+  const q = r?.indicators?.quote?.[0] || {};
+  const n = (r?.timestamp || []).length;
+  if (!n) return null;
+  const last = n - 1;
+  const vols = (q.volume || []).slice(-31, -1).filter(v => v > 0);
+  return {
+    open: q.open?.[last] ?? null,
+    high: q.high?.[last] ?? r.meta?.regularMarketDayHigh ?? null,
+    low: q.low?.[last] ?? r.meta?.regularMarketDayLow ?? null,
+    volume: q.volume?.[last] ?? r.meta?.regularMarketVolume ?? null,
+    avgVolume: vols.length ? Math.round(vols.reduce((a, b) => a + b, 0) / vols.length) : null,
+  };
+}
+
+// Yahoo quoteSummary: business summary, employees, HQ, CEO; for funds also the
+// expense ratio, net assets, fund family and category
+async function yahooAbout(sym) {
+  const s = await getYahooSession();
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}?modules=assetProfile,summaryProfile,fundProfile,summaryDetail,defaultKeyStatistics,price&crumb=${encodeURIComponent(s.crumb)}`;
+  const res = await fetch(url, { headers: { ...s.UA, Cookie: s.cookie } });
+  if (res.status === 401 || res.status === 403) { yahooSession = null; throw new Error(`Yahoo ${res.status}`); }
+  if (!res.ok) throw new Error(`Yahoo ${res.status}`);
+  const r = (await res.json())?.quoteSummary?.result?.[0] || {};
+  const a = r.assetProfile || r.summaryProfile || {};
+  const f = r.fundProfile || {};
+  const k = r.defaultKeyStatistics || {};
+  const d = r.summaryDetail || {};
+  const ceo = (a.companyOfficers || []).find(o => /chief executive|ceo/i.test(o.title || ''));
+  const inception = raw(k.fundInceptionDate);
+  return {
+    description: a.longBusinessSummary || null,
+    employees: a.fullTimeEmployees ?? null,
+    hq: [a.city, a.state || a.country].filter(Boolean).join(', ') || null,
+    ceo: ceo?.name || null,
+    sector: a.sector || null,
+    industry: a.industry || null,
+    website: a.website || null,
+    fundFamily: f.family || null,
+    category: f.categoryName || null,
+    expenseRatio: raw(f.feesExpensesInvestment?.annualReportExpenseRatio) ?? raw(k.annualReportExpenseRatio) ?? null, // fraction
+    netAssets: raw(d.totalAssets) ?? raw(k.totalAssets) ?? null,
+    fundInception: inception ? new Date(inception * 1000).getUTCFullYear() : null,
+    forwardPE: raw(d.forwardPE) ?? raw(k.forwardPE) ?? null,
+    sharesOutstanding: raw(k.sharesOutstanding) ?? null,
+    shortPercentFloat: raw(k.shortPercentOfFloat) ?? null, // fraction
+  };
+}
+
+// Wikidata (by ticker on NYSE / Nasdaq) for the founding year, and its English
+// Wikipedia intro as a fallback description
+async function wikiAbout(sym) {
+  if (!/^[A-Z0-9.\-]{1,10}$/.test(sym)) return null;
+  const q = `SELECT ?item ?inception ?emp ?ceoLabel ?hqLabel ?article WHERE {
+    ?item p:P414 ?st . ?st pq:P249 "${sym}" . ?st ps:P414 ?ex . VALUES ?ex { wd:Q13677 wd:Q82059 }
+    OPTIONAL { ?item wdt:P571 ?inception } OPTIONAL { ?item wdt:P1128 ?emp }
+    OPTIONAL { ?item wdt:P169 ?ceo } OPTIONAL { ?item wdt:P159 ?hq }
+    OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 10`;
+  const UA = { 'User-Agent': 'MomentumApp/1.0 (personal finance app)' };
+  const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(q)}`, { headers: { ...UA, Accept: 'application/sparql-results+json' } });
+  if (!res.ok) throw new Error(`Wikidata ${res.status}`);
+  const rows = (await res.json())?.results?.bindings || [];
+  if (!rows.length) return null;
+  const val = k => rows.map(r => r[k]?.value).find(v => v && !/^Q\d+$/.test(v)) || null; // skip unlabeled items
+  const years = rows.map(r => r.inception?.value).filter(Boolean).map(v => parseInt(v.replace(/^\+/, '').slice(0, 4), 10)).filter(y => y > 1600);
+  const emps = rows.map(r => Number(r.emp?.value)).filter(n => n > 0);
+  const out = {
+    founded: years.length ? Math.min(...years) : null,
+    employees: emps.length ? Math.max(...emps) : null,
+    ceo: val('ceoLabel'),
+    hq: val('hqLabel'),
+    description: null,
+    wikiUrl: val('article'),
+  };
+  if (out.wikiUrl) {
+    try {
+      const title = out.wikiUrl.split('/wiki/')[1];
+      const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`, { headers: UA });
+      if (w.ok) out.description = (await w.json())?.extract || null;
+    } catch { /* optional */ }
+  }
+  return out;
+}
+
+async function fetchAbout(sym) {
+  const [y, w] = await Promise.all([yahooAbout(sym).catch(() => null), wikiAbout(sym).catch(() => null)]);
+  if (!y && !w) throw new Error('No company details');
+  const pick = (...v) => v.find(x => x !== null && x !== undefined && x !== '') ?? null;
+  return {
+    description: pick(y?.description, w?.description),
+    descriptionSource: y?.description ? 'Yahoo Finance' : w?.description ? 'Wikipedia' : null,
+    founded: pick(w?.founded, y?.fundInception),
+    employees: pick(y?.employees, w?.employees),
+    ceo: pick(y?.ceo, w?.ceo),
+    hq: pick(y?.hq, w?.hq),
+    sector: pick(y?.sector),
+    industry: pick(y?.industry),
+    website: pick(y?.website),
+    wikiUrl: pick(w?.wikiUrl),
+    fundFamily: pick(y?.fundFamily),
+    category: pick(y?.category),
+    expenseRatio: pick(y?.expenseRatio),
+    netAssets: pick(y?.netAssets),
+    forwardPE: pick(y?.forwardPE),
+    sharesOutstanding: pick(y?.sharesOutstanding),
+    shortPercentFloat: pick(y?.shortPercentFloat),
+    partial: !y,
+  };
+}
+
 async function stockInfo(db, request) {
   const uid = request.auth?.uid;
   if (!uid) throw new HttpsError('unauthenticated', 'Must be signed in');
@@ -401,7 +523,7 @@ async function stockInfo(db, request) {
   const update = {};
 
   // Key stats and past earnings change at most daily, so cache them
-  if (isStale(cached.metricsAt, HOURS(20))) {
+  if (isStale(cached.metricsAt, HOURS(20)) || cached.metricsV !== METRICS_V) {
     try {
       const m = (await finnhub(`stock/metric?symbol=${encodeURIComponent(sym)}&metric=all`, key))?.metric || {};
       update.metrics = {
@@ -411,7 +533,17 @@ async function stockInfo(db, request) {
         marketCap: m.marketCapitalization ?? null, // millions of USD
         dividendYield: m.currentDividendYieldTTM ?? m.dividendYieldIndicatedAnnual ?? null, // percent
         beta: m.beta ?? null,
+        eps: m.epsTTM ?? m.epsBasicExclExtraItemsTTM ?? null,
+        pb: m.pbQuarterly ?? m.pbAnnual ?? null,
+        ps: m.psTTM ?? m.psAnnual ?? null,
+        dividendPerShare: m.dividendPerShareTTM ?? m.dividendPerShareAnnual ?? null,
+        revenueGrowth: m.revenueGrowthTTMYoy ?? null, // percent
+        netMargin: m.netProfitMarginTTM ?? null,      // percent
+        roe: m.roeTTM ?? null,                        // percent
+        avgVolume10d: m['10DayAverageTradingVolume'] ?? null, // millions of shares
+        return52w: m['52WeekPriceReturnDaily'] ?? null,       // percent
       };
+      update.metricsV = METRICS_V;
       const e = await finnhub(`stock/earnings?symbol=${encodeURIComponent(sym)}`, key);
       update.earningsHistory = (Array.isArray(e) ? e : []).slice(0, 4).map(x => ({
         period: x.period, actual: x.actual ?? null, estimate: x.estimate ?? null, surprisePercent: x.surprisePercent ?? null,
@@ -430,7 +562,14 @@ async function stockInfo(db, request) {
   if (analystStale(cached)) {
     try { Object.assign(update, await fetchAnalyst(db, sym, key)); } catch { /* optional */ }
   }
+  // Weekly; a day when only part of it came through (Yahoo was down)
+  if (isStale(cached.aboutAt, HOURS(cached.about?.partial ? 24 : 24 * 7)) || cached.aboutV !== ABOUT_V) {
+    try { update.about = await fetchAbout(sym); update.aboutAt = new Date().toISOString(); update.aboutV = ABOUT_V; }
+    catch { /* optional */ }
+  }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
+  let day = null;
+  try { day = await yahooDayStats(sym); } catch { /* optional */ }
 
   const merged = { ...cached, ...update };
   return {
@@ -439,6 +578,8 @@ async function stockInfo(db, request) {
     nextEarnings: merged.nextEarnings || null,
     analyst: merged.analyst || null,
     profile: { name: merged.name || null, industry: merged.industry || null, logo: merged.logo || null, weburl: merged.weburl || null },
+    about: merged.about || null,
+    day,
   };
 }
 

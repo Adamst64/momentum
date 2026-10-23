@@ -14,6 +14,75 @@ function bigMoney(millions) {
   return `$${(n / 1e6).toFixed(0)}M`;
 }
 
+const bigNum = n => {
+  if (n == null) return null;
+  if (n >= 1e12) return `${(n / 1e12).toFixed(2)}T`;
+  if (n >= 1e9)  return `${(n / 1e9).toFixed(2)}B`;
+  if (n >= 1e6)  return `${(n / 1e6).toFixed(2)}M`;
+  if (n >= 1e3)  return `${(n / 1e3).toFixed(1)}K`;
+  return String(Math.round(n));
+};
+const fix = (v, d = 2) => (v == null || !Number.isFinite(v) ? null : v.toFixed(d));
+const pctOf = (v, d = 2) => (fix(v, d) == null ? null : `${fix(v, d)}%`);
+
+// What the company (or fund) is: description, then a few facts
+function About({ about, profile, name }) {
+  const [more, setMore] = useState(false);
+  const a = about || {};
+  const facts = [
+    ['CEO', a.ceo],
+    ['Employees', a.employees ? a.employees.toLocaleString('en-US') : null],
+    ['Headquarters', a.hq],
+    ['Founded', a.founded],
+    ['Sector', a.sector],
+    ['Industry', a.industry || profile.industry],
+    ['Fund family', a.fundFamily],
+    ['Category', a.category],
+    ['Expense ratio', a.expenseRatio != null ? `${(a.expenseRatio * 100).toFixed(2)}%` : null],
+    ['Net assets', a.netAssets ? `$${bigNum(a.netAssets)}` : null],
+  ].filter(([, v]) => v != null && v !== '');
+  const website = [a.website, profile.weburl].find(u => /^https?:\/\//.test(u || ''));
+  if (!a.description && !facts.length && !website) return null;
+  const long = (a.description || '').length > 280;
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+        {/^https:\/\//.test(profile.logo || '') && (
+          <img src={profile.logo} alt="" width={28} height={28} style={{ borderRadius: 6, background: '#fff' }} />
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}><SectionTitle>About{name ? ` ${name}` : ''}</SectionTitle></div>
+      </div>
+      {a.description && (
+        <div style={{ fontSize: 14, color: T.text, lineHeight: 1.5 }}>
+          <div style={more || !long ? {} : { display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {a.description}
+          </div>
+          {long && (
+            <button onClick={() => setMore(m => !m)} style={{ color: T.khaki, fontSize: 13, fontWeight: 600, marginTop: 4 }}>
+              {more ? 'Show less' : 'Show more'}
+            </button>
+          )}
+        </div>
+      )}
+      {facts.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 16px', marginTop: 14 }}>
+          {facts.map(([label, value]) => (
+            <div key={label} style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11, color: T.muted }}>{label}</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, marginTop: 2, overflowWrap: 'anywhere' }}>{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 14, marginTop: 12, fontSize: 12 }}>
+        {website && <a href={website} target="_blank" rel="noopener noreferrer" style={{ color: T.khaki }}>Website ↗</a>}
+        {a.wikiUrl && <a href={a.wikiUrl} target="_blank" rel="noopener noreferrer" style={{ color: T.khaki }}>Wikipedia ↗</a>}
+        {a.descriptionSource && <span style={{ color: T.muted, marginLeft: 'auto' }}>From {a.descriptionSource}</span>}
+      </div>
+    </div>
+  );
+}
+
 export function earningsLabel(next) {
   if (!next) return null;
   const d = new Date(next.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -144,29 +213,46 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
   if (!data) return <div style={{ fontSize: 13, color: T.muted }}>Loading details…</div>;
 
   const m = data.metrics || {};
+  const a = data.about || {};
+  const d = data.day || {};
   const range = m.high52 && m.low52 && price ? Math.min(1, Math.max(0, (price - m.low52) / (m.high52 - m.low52))) : null;
+  const usd = v => (v == null ? null : money(v, hide));
+  const stats = [
+    ['Market cap', m.marketCap != null ? bigMoney(m.marketCap) : null],
+    ['P/E ratio', fix(m.pe)],
+    ['Forward P/E', fix(a.forwardPE)],
+    ['Div. yield', pctOf(m.dividendYield)],
+    ['Div. / share', usd(m.dividendPerShare)],
+    ['EPS (TTM)', usd(m.eps)],
+    ['Open', usd(d.open)],
+    ['High today', usd(d.high)],
+    ['Low today', usd(d.low)],
+    ['Volume', bigNum(d.volume)],
+    ['Avg. volume', bigNum(d.avgVolume ?? (m.avgVolume10d != null ? m.avgVolume10d * 1e6 : null))],
+    ['52-wk high', usd(m.high52)],
+    ['52-wk low', usd(m.low52)],
+    ['1-yr return', pctOf(m.return52w, 1)],
+    ['Beta', fix(m.beta)],
+    ['P/B ratio', fix(m.pb)],
+    ['P/S ratio', fix(m.ps)],
+    ['Revenue growth', pctOf(m.revenueGrowth, 1)],
+    ['Net margin', pctOf(m.netMargin, 1)],
+    ['ROE', pctOf(m.roe, 1)],
+    ['Shares out.', bigNum(a.sharesOutstanding)],
+    ['Short % float', a.shortPercentFloat != null ? `${(a.shortPercentFloat * 100).toFixed(2)}%` : null],
+  ].filter(([, v]) => v != null);
   const stat = (label, value) => (
-    <div style={{ background: T.bg, borderRadius: 10, padding: '8px 10px' }}>
-      <div style={{ fontSize: 10, color: T.muted }}>{label}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginTop: 2 }}>{value}</div>
+    <div key={label} style={{ background: T.bg, borderRadius: 10, padding: '8px 10px', minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: T.text, marginTop: 2, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
     </div>
   );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {(data.profile.industry || data.profile.weburl) && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          {/^https:\/\//.test(data.profile.logo || '') && (
-            <img src={data.profile.logo} alt="" width={28} height={28} style={{ borderRadius: 6, background: '#fff' }} />
-          )}
-          <div style={{ fontSize: 13, color: T.muted, flex: 1 }}>{data.profile.industry}</div>
-          {/^https?:\/\//.test(data.profile.weburl || '') && (
-            <a href={data.profile.weburl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: T.khaki }}>Website ↗</a>
-          )}
-        </div>
-      )}
+      <About about={data.about} profile={data.profile} name={data.profile.name} />
 
-      {data.metrics && (
+      {(stats.length > 0 || range !== null) && (
         <div>
           <SectionTitle>Key stats</SectionTitle>
           {range !== null && (
@@ -182,11 +268,8 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
               </div>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {stat('P/E', m.pe != null ? m.pe.toFixed(1) : '—')}
-            {stat('Market cap', bigMoney(m.marketCap))}
-            {stat('Div. yield', m.dividendYield != null ? `${m.dividendYield.toFixed(2)}%` : '—')}
-            {stat('Beta', m.beta != null ? m.beta.toFixed(2) : '—')}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 6 }}>
+            {stats.map(([label, value]) => stat(label, value))}
           </div>
         </div>
       )}
