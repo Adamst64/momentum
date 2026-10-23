@@ -8,7 +8,7 @@ import { ValueChart, NOTE_COLOR, DIV_COLOR } from './Charts';
 const RANGES = [
   { value: 'i1d', label: '1D' },
   { value: 'i5d', label: '1W' },
-  { value: '1mo', label: '1M' },
+  { value: 'i1m', label: '1M' },
   { value: '3mo', label: '3M' },
   { value: '6mo', label: '6M' },
   { value: 'ytd', label: 'YTD' },
@@ -20,7 +20,8 @@ const RANGES = [
 
 // Price chart for one stock (trading days only), with optional reference lines
 // (avg cost, sell price, your target) and markers (when you sold).
-// livePrice replaces the last close so the chart ends at the current quote.
+// livePrice replaces the last close so the chart ends at the current quote
+// (daily ranges only: the intraday ones are already live, after-hours included).
 // notes: your own marks [{ id, date, label, auto? }] (auto = from a watch list, not deletable here)
 export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = '6mo' }) {
   const [adding, setAdding] = useState(false);
@@ -55,7 +56,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   }, [symbol, range, priceHistory]);
 
   let pts = points || [];
-  if (pts.length && livePrice) pts = [...pts.slice(0, -1), { ...pts[pts.length - 1], value: livePrice }];
+  if (pts.length && livePrice && !range.startsWith('i')) pts = [...pts.slice(0, -1), { ...pts[pts.length - 1], value: livePrice }];
   // Marks sit on the price of their day (or the next trading day)
   const noteDots = notes.map(n => {
     // A mark newer than the last candle (today before close, a weekend) sits on the latest point

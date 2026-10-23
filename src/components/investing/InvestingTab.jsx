@@ -140,7 +140,8 @@ export default function InvestingTab({ hook, userId, budget }) {
   }, [cashSteps]);
 
   // 1D / 1W: the portfolio through the day, rebuilt from intraday prices of what's
-  // held now (5-minute steps for 1D, 30-minute for 1W). Funds without intraday
+  // held now (5-minute steps for 1D, 15-minute for 1W; regular session only, since
+  // "Now" is valued at the official prices). Funds without intraday
   // prices count at their current price. Daily history is shown until these load.
   const intraRange = period === '1D' ? 'i1d' : period === '1W' ? 'i5d' : null;
   const heldKey = portfolio.holdings.filter(h => h.qty > 0).map(h => `${h.symbol}:${h.qty}`).join(',');
@@ -150,7 +151,7 @@ export default function InvestingTab({ hook, userId, budget }) {
     let live = true;
     const key = `${intraRange}|${heldKey}`;
     const held = heldKey.split(',').map(x => { const [symbol, q] = x.split(':'); return { symbol, qty: Number(q) }; });
-    Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts]).catch(() => [h.symbol, []])))
+    Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts.filter(p => !p.ext && !p.prev)]).catch(() => [h.symbol, []])))
       .then(pairs => {
         if (!live) return;
         const series = Object.fromEntries(pairs);
