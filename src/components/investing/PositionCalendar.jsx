@@ -5,22 +5,33 @@ import { genId } from '../../utils/id';
 import { Chips, ConfirmDialog, inputStyle } from './ui';
 
 export const EVENT_KINDS = [
-  { value: 'earnings', label: 'Earnings', color: '#FFD60A' },
-  { value: 'dividend', label: 'Dividend', color: '#BF5AF2' },
-  { value: 'other',    label: 'Other',    color: '#5AC8FA' },
+  { value: 'earnings', label: 'Earnings' },
+  { value: 'dividend', label: 'Dividend' },
+  { value: 'other',    label: 'Other' },
 ];
-const kindOf = k => EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2];
+// Colored by who added it: your own dates green, automatic ones (Yahoo Finance
+// and the earnings calendar) yellow
+export const OWN_COLOR = '#30D158';
+export const AUTO_COLOR = '#FFD60A';
+const colorOf = e => (e.own ? OWN_COLOR : AUTO_COLOR);
+const kindLabel = k => (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label;
 const WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const pad = n => String(n).padStart(2, '0');
 
-// Every date to watch for one stock: your own (earnings call, ex-dividend day,
-// product launch…) plus the next earnings report when it's known automatically.
+// Every date to watch for one stock: your own (earnings call, investor day,
+// product launch…) plus the automatic ones (earnings reports, dividends, splits)
+// the server fetches daily. An automatic date you also added yourself shows once.
 // A month calendar with a dot on each, and the list of what's coming.
 export function stockEvents(asset) {
   const own = (asset?.events || []).map(e => ({ ...e, own: true }));
-  const auto = asset?.nextEarnings?.date && !own.some(e => e.kind === 'earnings' && e.date === asset.nextEarnings.date)
-    ? [{ id: 'auto-earnings', date: asset.nextEarnings.date, label: 'Earnings report', kind: 'earnings', auto: true }]
-    : [];
+  const near = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 6 * 864e5;
+  const fetched = (asset?.autoEvents || []).map(e => ({ ...e, auto: true }));
+  // Before the first daily fetch: the next earnings date already known
+  const ne = asset?.nextEarnings?.date;
+  if (ne && !fetched.some(e => e.kind === 'earnings' && near(e.date, ne))) {
+    fetched.push({ id: 'auto-earnings', date: ne, label: 'Earnings report', kind: 'earnings', auto: true });
+  }
+  const auto = fetched.filter(a => !own.some(o => o.kind === a.kind && o.date === a.date));
   return [...own, ...auto].sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -59,16 +70,15 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
   };
 
   const row = e => {
-    const k = kindOf(e.kind);
     const daysAway = Math.round((new Date(e.date + 'T12:00:00') - new Date(today + 'T12:00:00')) / 864e5);
     const when = daysAway === 0 ? 'today' : daysAway === 1 ? 'tomorrow' : daysAway > 0 ? `in ${daysAway} days` : `${-daysAway} days ago`;
     return (
       <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: `1px solid ${T.cardBorder}` }}>
-        <span style={{ width: 8, height: 8, borderRadius: 4, background: k.color, flexShrink: 0 }} />
+        <span style={{ width: 8, height: 8, borderRadius: 4, background: colorOf(e), flexShrink: 0 }} />
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: T.text }}>{e.label}</span>
           <span style={{ display: 'block', fontSize: 12, color: T.muted }}>
-            {formatDateYear(e.date)} · {when}{e.auto ? ' · from the earnings calendar' : ''}
+            {formatDateYear(e.date)} · {when} · {kindLabel(e.kind)}{e.auto ? ' · automatic' : ''}
           </span>
           {e.note && <span style={{ display: 'block', fontSize: 12, color: T.text, marginTop: 2, whiteSpace: 'pre-wrap' }}>{e.note}</span>}
         </span>
@@ -129,7 +139,7 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
               style={{ padding: '5px 0 4px', borderRadius: 8, background: on ? '#2A3A1A' : 'transparent', border: `1px solid ${isToday ? T.olive : 'transparent'}` }}>
               <span style={{ display: 'block', fontSize: 12, color: ds < today ? T.muted : T.text, fontWeight: evs.length ? 700 : 400 }}>{i + 1}</span>
               <span style={{ display: 'flex', justifyContent: 'center', gap: 2, height: 5, marginTop: 2 }}>
-                {evs.slice(0, 3).map(e => <span key={e.id} style={{ width: 5, height: 5, borderRadius: 3, background: kindOf(e.kind).color }} />)}
+                {evs.slice(0, 3).map(e => <span key={e.id} style={{ width: 5, height: 5, borderRadius: 3, background: colorOf(e) }} />)}
               </span>
             </button>
           );
@@ -162,6 +172,10 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
             </div>
           </div>
         )}
+        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.muted, padding: '4px 0 6px' }}>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: OWN_COLOR, marginRight: 5 }} />Yours</span>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: AUTO_COLOR, marginRight: 5 }} />Automatic (Yahoo Finance)</span>
+        </div>
         {shown.map(row)}
         {!shown.length && !form && (
           <div style={{ fontSize: 12, color: T.muted, padding: '6px 0' }}>

@@ -568,6 +568,9 @@ async function stockInfo(db, request) {
     catch { /* optional */ }
   }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
+  if (eventsStale({ ...cached, ...update })) {
+    try { await refreshAutoEvents(ref, sym, key); } catch { /* optional */ }
+  }
   let day = null;
   try { day = await yahooDayStats(sym); } catch { /* optional */ }
 
@@ -711,6 +714,99 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
 }
 
 // Evening before a holding reports earnings (7:00–8:00 PM ET), one push per day
+// ── Automatic calendar events (earnings, dividends, splits) ─────────────────
+// Kept on each invAssets doc as autoEvents [{ id, date, label, kind, note? }],
+// shown in yellow on the stock's calendar beside your own (green) dates.
+//  - Yahoo chart (keyless): past dividends (ex-dates, amount) and splits, 2 years
+//  - Yahoo quoteSummary calendarEvents: next earnings, ex-dividend and pay dates
+//  - Finnhub earnings calendar: past and upcoming report dates with EPS
+const EVENTS_V = 1;
+const fmtEps = v => (v == null ? '—' : `$${Number(v).toFixed(2)}`);
+const etDate = ts => easternNow(new Date(ts * 1000)).today;
+
+async function fetchAutoEvents(sym, key) {
+  const out = [];
+  const add = (date, kind, label, note) => {
+    if (!date) return;
+    out.push({ id: `auto-${kind}-${date}-${label.length}`, date, kind, label, ...(note ? { note } : {}) });
+  };
+
+  // Past dividends and splits
+  try {
+    const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2y&events=div%2Csplit`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } });
+    const ev = res.ok ? (await res.json())?.chart?.result?.[0]?.events || {} : {};
+    for (const d of Object.values(ev.dividends || {})) add(etDate(d.date), 'dividend', `Ex-dividend · $${Number(d.amount).toFixed(d.amount < 0.1 ? 4 : 2)}/share`);
+    for (const sp of Object.values(ev.splits || {})) add(etDate(sp.date), 'other', `Stock split ${sp.numerator}-for-${sp.denominator}`);
+  } catch { /* optional */ }
+
+  // Coming up: earnings, ex-dividend and payment dates
+  let yahooEarnings = [];
+  try {
+    const s = await getYahooSession();
+    const res = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}?modules=calendarEvents&crumb=${encodeURIComponent(s.crumb)}`,
+      { headers: { ...s.UA, Cookie: s.cookie } });
+    if (res.status === 401 || res.status === 403) yahooSession = null;
+    const c = res.ok ? (await res.json())?.quoteSummary?.result?.[0]?.calendarEvents || {} : {};
+    const e = c.earnings || {};
+    const dates = (e.earningsDate || []).map(raw).filter(Boolean);
+    if (dates.length) {
+      const est = e.isEarningsDateEstimate || dates.length > 1;
+      yahooEarnings = [{ date: etDate(dates[0]), est, epsEstimate: raw(e.earningsAverage) }];
+    }
+    const ex = raw(c.exDividendDate), pay = raw(c.dividendDate);
+    if (ex) add(etDate(ex), 'dividend', 'Ex-dividend date');
+    if (pay) add(etDate(pay), 'dividend', 'Dividend paid');
+  } catch { /* optional */ }
+
+  // Report dates with results (about a year back) and the next ones
+  let finnhubEarnings = [];
+  if (key) {
+    try {
+      const from = ymd(new Date(Date.now() - 400 * 864e5)), to = ymd(new Date(Date.now() + 120 * 864e5));
+      const res = await finnhub(`calendar/earnings?from=${from}&to=${to}&symbol=${encodeURIComponent(sym)}`, key);
+      finnhubEarnings = (res?.earningsCalendar || []).filter(e => e.symbol === sym && e.date);
+    } catch { /* optional */ }
+  }
+  const HOUR = { bmo: 'before the open', amc: 'after the close', dmh: 'during market hours' };
+  const near = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 6 * 864e5;
+  for (const e of finnhubEarnings) {
+    const bits = [HOUR[e.hour]];
+    if (e.epsActual != null) bits.push(`EPS ${fmtEps(e.epsActual)} vs ${fmtEps(e.epsEstimate)} est.`);
+    else if (e.epsEstimate != null) bits.push(`est. EPS ${fmtEps(e.epsEstimate)}`);
+    add(e.date, 'earnings', 'Earnings report', bits.filter(Boolean).join(' · '));
+  }
+  for (const y of yahooEarnings) {
+    if (finnhubEarnings.some(e => near(e.date, y.date))) continue;
+    add(y.date, 'earnings', y.est ? 'Earnings report (expected)' : 'Earnings report', y.epsEstimate != null ? `est. EPS ${fmtEps(y.epsEstimate)}` : null);
+  }
+
+  // One per day and kind (the same ex-date can come from two places)
+  const seen = new Set();
+  const cutoff = ymd(new Date(Date.now() - 2 * 365 * 864e5));
+  return out
+    .filter(e => e.date >= cutoff)
+    .sort((a, b) => a.date.localeCompare(b.date) || b.label.length - a.label.length)
+    .filter(e => { const k = `${e.date}|${e.kind}`; if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+async function refreshAutoEvents(ref, sym, key) {
+  const autoEvents = await fetchAutoEvents(sym, key);
+  const update = { autoEvents, autoEventsAt: new Date().toISOString(), autoEventsV: EVENTS_V };
+  await ref.set(update, { merge: true });
+  return update;
+}
+const eventsStale = a => isStale(a.autoEventsAt, HOURS(20)) || a.autoEventsV !== EVENTS_V;
+
+// A few stale stocks per run (the job runs every 5 minutes), so every stock in
+// the portfolio and watch lists is refreshed about once a day
+async function maybeRefreshEvents(userDoc, key) {
+  const docs = (await userDoc.ref.collection('invAssets').where('source', '==', 'finnhub').get()).docs
+    .filter(d => { const a = d.data(); return !(a.benchmark && !a.watch) && eventsStale(a); })
+    .slice(0, 3);
+  for (const d of docs) await refreshAutoEvents(d.ref, d.id, key);
+}
+
 async function maybeEarningsReminder(userDoc, et, notify) {
   if (et.minutes < 19 * 60 || et.minutes >= 20 * 60) return;
   if (userDoc.data().investing?.lastEarningsReminder === et.today) return;
@@ -739,6 +835,8 @@ async function runInvestingJobs(db, userDoc, notify) {
   catch (e) { console.error(`Snapshot for ${userDoc.id} failed:`, e.message); }
   try { await maybeRefreshExtended(userDoc, et); }
   catch (e) { console.error(`Extended prices for ${userDoc.id} failed:`, e.message); }
+  try { await maybeRefreshEvents(userDoc, key); }
+  catch (e) { console.error(`Calendar events for ${userDoc.id} failed:`, e.message); }
   if (notify) {
     try { await maybeCheckAlerts(db, userDoc, key, et, notify); }
     catch (e) { console.error(`Alerts for ${userDoc.id} failed:`, e.message); }
