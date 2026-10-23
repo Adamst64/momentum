@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 export default function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenerate, onRename }) {
   useBackHandler(true, onClose);
@@ -42,11 +43,9 @@ export default function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDel
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         background: T.card, borderRadius: '20px 20px 0 0',
-        padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.85)', overflowY: 'auto',
-      }}>
+        padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.85)', overflowY: 'auto', ...FULL_PAGE }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Manage List</span>
-          <button onClick={onClose} style={{ color: T.muted, fontSize: 24, padding: '0 4px', background: 'none', border: 'none', lineHeight: 1 }}>×</button>
         </div>
 
         {renaming ? (

@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { TAG_COLORS } from '../../hooks/useShoppingLists';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
   useBackHandler(true, onClose);
@@ -55,8 +56,7 @@ export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTa
       <div style={{
         position: 'absolute', bottom: 0, left: 0, right: 0,
         background: T.card, borderRadius: '20px 20px 0 0',
-        padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.75)', overflowY: 'auto',
-      }}>
+        padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.75)', overflowY: 'auto', ...FULL_PAGE }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Tags</span>
           <button

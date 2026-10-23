@@ -6,11 +6,14 @@ import { useLongPress } from '../../hooks/useLongPress';
 import { commitmentStats, streakLabel } from '../../utils/commitments';
 import CommitmentCalendarModal from './CommitmentCalendarModal';
 import { SlipSheet, ConfirmSheet } from './CommitmentSheets';
+import { FULL_PAGE } from '../../utils/pageStyle';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon first
 
 function NameSheet({ initial = '', initialDays = null, title, onSave, onClose, showLastFailed = false }) {
+  useBackHandler(true, onClose);
   const [name, setName]             = useState(initial);
   const [lastFailed, setLastFailed] = useState('');
   const [days, setDays]             = useState(initialDays || ALL_DAYS);
@@ -27,7 +30,7 @@ function NameSheet({ initial = '', initialDays = null, title, onSave, onClose, s
   };
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
-      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))' }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', ...FULL_PAGE }}>
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>{title}</div>
 
         <input

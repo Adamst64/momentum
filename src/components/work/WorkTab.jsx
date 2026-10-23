@@ -7,6 +7,7 @@ import CrewManager from './CrewManager';
 import WeeklyTexts from './WeeklyTexts';
 import { formatDayFull } from '../../utils/workUtils';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function todayStr() {
@@ -104,12 +105,11 @@ export default function WorkTab({ hook, requestedView }) {
       {showDaySheet && selectedDay && (
         <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 90, background: '#000000AA' }} onClick={() => setShowDaySheet(false)}>
           <div
-            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.bg, borderRadius: '20px 20px 0 0', padding: '20px 20px 0', maxHeight: 'calc(var(--vv-height, 100vh) * 0.9)', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)' }}
+            style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.bg, borderRadius: '20px 20px 0 0', padding: '20px 20px 0', maxHeight: 'calc(var(--vv-height, 100vh) * 0.9)', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)', ...FULL_PAGE }}
             onClick={e => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{formatDayFull(selectedDay)}</span>
-              <button onClick={() => setShowDaySheet(false)} style={{ color: T.muted, fontSize: 24, lineHeight: 1, padding: '0 4px' }}>×</button>
             </div>
             <WorkDayForm
               dateStr={selectedDay}

@@ -6,6 +6,8 @@ import ShoppingItem from './ShoppingItem';
 import TagPickerSheet from './TagPickerSheet';
 import ShareSheet from './ShareSheet';
 import InventoryTab from './InventoryTab';
+import { FULL_PAGE } from '../../utils/pageStyle';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 // Inventory items where every typed word is the start of some word in the
 // item's name ("bacon" → "Crumbled bacon"). Full-name prefix matches first.
@@ -62,6 +64,8 @@ export default function ShoppingTab({ hook, userId }) {
 
   const closeNewList = () => { setShowNewList(false); setNewListName(''); setNewListInventory(false); };
   const closeMenu = () => { setMenuList(null); setMenuRenaming(false); setMenuNewName(''); setMenuConfirmDelete(false); };
+  useBackHandler(showNewList, closeNewList);
+  useBackHandler(!!menuList, closeMenu);
 
   const handleTabTouchStart = (list) => {
     longPressTimer.current = setTimeout(() => {
@@ -379,8 +383,7 @@ export default function ShoppingTab({ hook, userId }) {
             style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
-            background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 20px 32px',
-          }}>
+            background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 20px 32px', ...FULL_PAGE }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 16 }}>New List</div>
             <input
               value={newListName}
@@ -445,8 +448,7 @@ export default function ShoppingTab({ hook, userId }) {
           <div onClick={closeMenu} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
           <div style={{
             position: 'absolute', bottom: 0, left: 0, right: 0,
-            background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 20px 32px',
-          }}>
+            background: T.card, borderRadius: '20px 20px 0 0', padding: '20px 20px 32px', ...FULL_PAGE }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 16 }}>{menuList.name}</div>
 
             {menuRenaming ? (

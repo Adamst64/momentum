@@ -98,7 +98,7 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfi
     catch (e) { setErr(e.message || 'Something went wrong. Try again.'); setBusy(false); }
   };
   return (
-    <Modal title={title} onClose={onClose}>
+    <Modal title={title} onClose={onClose} full={false}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {message && <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5 }}>{message}</div>}
         {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}

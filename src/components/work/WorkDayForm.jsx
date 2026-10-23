@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { T } from '../../theme';
 import { TRIP_COLOR } from '../../utils/workUtils';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 function Counter({ label, value, onChange }) {
   const [editing, setEditing] = useState(false);
@@ -370,7 +371,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
       {/* Crew picker sheet */}
       {showCrewPicker && (
         <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200, background: '#000000AA' }} onClick={() => setShowCrewPicker(false)}>
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)', ...FULL_PAGE }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, padding: '20px 20px 10px' }}>Select Crew</div>
             <button
               onClick={() => pickCrew(null)}
@@ -394,7 +395,7 @@ export default function WorkDayForm({ dateStr, initial, crews, members, onSave, 
       {/* Member picker sheet */}
       {showMemberPicker && (
         <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200, background: '#000000AA' }} onClick={() => setShowMemberPicker(false)}>
-          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)' }} onClick={e => e.stopPropagation()}>
+          <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.card, borderRadius: '20px 20px 0 0', paddingBottom: 'env(safe-area-inset-bottom)', ...FULL_PAGE }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 13, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6, padding: '20px 20px 10px' }}>Add Members</div>
             {availableMembers.length === 0 ? (
               <div style={{ padding: '8px 20px 16px', fontSize: 14, color: T.muted }}>

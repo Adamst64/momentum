@@ -7,9 +7,9 @@ import { useBackHandler } from '../hooks/useBackHandler';
 // with the sheet and show through underneath). Counted, since sheets stack.
 let openSheets = 0;
 
-// full: a whole-screen page (a holding's details) instead of a sheet that's only
-// as tall as its content
-export default function Modal({ title, onClose, children, full = false }) {
+// Every screen opened this way is a whole page (back with the round button or a
+// swipe). full={false}: a small sheet at the bottom, only for quick confirmations.
+export default function Modal({ title, onClose, children, full = true }) {
   useBackHandler(true, onClose);
   const [kbHeight, setKbHeight] = useState(0);
 

@@ -8,6 +8,7 @@ import { TAB_DEFS } from './BottomNav';
 import { registerPushToken } from '../utils/pushNotifications';
 import { RESET_CATEGORIES, resetData } from '../utils/resetData';
 import { useBackHandler } from '../hooks/useBackHandler';
+import { FULL_PAGE } from '../utils/pageStyle';
 
 
 export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork, notes, personalLists, dailyReview, onSaveDailyReview, userId }) {
@@ -156,12 +157,10 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
           width: '100%', background: T.card,
           borderRadius: '20px 20px 0 0',
           padding: '20px 0 calc(20px + env(safe-area-inset-bottom))',
-          maxHeight: 'calc(var(--vv-height, 100dvh) * 0.88)', overflowY: 'auto',
-        }}
+          maxHeight: 'calc(var(--vv-height, 100dvh) * 0.88)', overflowY: 'auto', ...FULL_PAGE }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 20px 20px' }}>
           <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Settings</span>
-          <button onClick={onClose} style={{ color: T.muted, fontSize: 22, lineHeight: 1, padding: '2px 6px' }}>×</button>
         </div>
 
         <Group>

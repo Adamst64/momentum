@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -30,14 +31,12 @@ export default function BirthdayForm({ initial, onSave, onClose }) {
           width: '100%', background: T.card,
           borderRadius: '20px 20px 0 0',
           padding: '20px 20px calc(20px + env(safe-area-inset-bottom))',
-          display: 'flex', flexDirection: 'column', gap: 12,
-        }}
+          display: 'flex', flexDirection: 'column', gap: 12, ...FULL_PAGE }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>
             {initial ? 'Edit Birthday' : 'Add Birthday'}
           </span>
-          <button onClick={onClose} style={{ color: T.muted, fontSize: 22, padding: '2px 6px' }}>×</button>
         </div>
 
         <input

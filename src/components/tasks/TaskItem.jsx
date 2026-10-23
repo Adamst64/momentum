@@ -3,8 +3,11 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useLongPress } from '../../hooks/useLongPress';
 import { todayStr, formatShortDate } from '../../utils/dateUtils';
+import { FULL_PAGE } from '../../utils/pageStyle';
+import { useBackHandler } from '../../hooks/useBackHandler';
 
 function RescheduleSheet({ task, onReschedule, onClose }) {
+  useBackHandler(true, onClose);
   const [date, setDate] = useState(todayStr());
   return ReactDOM.createPortal(
     <div
@@ -13,7 +16,7 @@ function RescheduleSheet({ task, onReschedule, onClose }) {
     >
       <div
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))' }}
+        style={{ width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', ...FULL_PAGE }}
       >
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>Reschedule "{task.name}"</div>
         <input

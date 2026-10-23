@@ -472,7 +472,8 @@ function BackButton({ show, onBack }) {
       aria-label="Back"
       style={{
         position: 'fixed', zIndex: 2000,
-        top: 'calc(env(safe-area-inset-top) + 8px)', left: 'max(12px, calc(50vw - 203px))',
+        // Pinned to the visible screen, so the keyboard never pushes it out of reach
+        top: 'calc(var(--vv-top, 0px) + env(safe-area-inset-top) + 8px)', left: 'max(12px, calc(50vw - 203px))',
         width: 40, height: 40, borderRadius: 20,
         background: 'rgba(44,44,46,0.85)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         border: `1px solid ${T.subtle}`, boxShadow: '0 4px 14px rgba(0,0,0,0.45)',

@@ -3,6 +3,7 @@ import { T } from '../../theme';
 import { CREW_COLORS } from '../../utils/workUtils';
 import SortableList, { DragHandle } from '../SortableList';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import { FULL_PAGE } from '../../utils/pageStyle';
 
 function AddInput({ placeholder, onAdd, nextColor }) {
   const [val, setVal] = useState('');
@@ -130,7 +131,7 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
   return (
     <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 100, background: '#000000AA' }} onClick={onClose}>
       <div
-        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.bg, borderRadius: '20px 20px 0 0', padding: '20px 20px 0', maxHeight: 'calc(var(--vv-height, 100vh) * 0.8)', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.bg, borderRadius: '20px 20px 0 0', padding: '20px 20px 0', maxHeight: 'calc(var(--vv-height, 100vh) * 0.8)', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)', ...FULL_PAGE }}
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -138,7 +139,6 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
             <span style={{ display: 'block', fontSize: 17, fontWeight: 700, color: T.text }}>Crews & Members</span>
             <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>Hold ≡ and drag to reorder · tap the bubble to add a number for weekly texts</span>
           </span>
-          <button onClick={onClose} style={{ color: T.muted, fontSize: 24, lineHeight: 1, padding: '0 4px' }}>×</button>
         </div>
 
         <div style={{ marginBottom: 24 }}>
