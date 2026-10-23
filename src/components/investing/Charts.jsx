@@ -68,7 +68,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     );
   }
 
-  const W = 340, H = 120, PAD = 4;
+  const W = 340, H = 200, PAD = 4;
   const vals = points.map(p => p.value);
   const refVals = refs.filter(r => r.value > 0).map(r => r.value);
   // Trades inside the chart's dates, each placed on its day (or the next point)
