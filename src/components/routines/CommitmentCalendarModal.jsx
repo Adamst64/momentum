@@ -51,7 +51,6 @@ export default function CommitmentCalendarModal({ commitment, onMarkSlip, onClea
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
         borderBottom: `1px solid ${T.cardBorder}`,
       }}>
-        <button onClick={onClose} style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
         <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>{commitment.name}</span>
       </div>
 

@@ -943,7 +943,6 @@ function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold, 
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={onBack} style={{ fontSize: 15, color: T.khaki, padding: '6px 0', fontWeight: 600 }}>‹ Portfolio</button>
         <span style={{ flex: 1 }} />
         <button onClick={onAdd} aria-label="Add transaction" style={{ width: 32, height: 32, borderRadius: 16, background: T.olive, color: '#fff', fontSize: 22, lineHeight: '30px' }}>+</button>
       </div>
@@ -1200,7 +1199,6 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button onClick={onBack} style={{ fontSize: 15, color: T.khaki, padding: '6px 0', fontWeight: 600 }}>‹ Watchlist</button>
         <span style={{ flex: 1 }} />
         {!isLoose && <button onClick={() => { setNewName(list.name); setRenaming(r => !r); }} style={{ fontSize: 13, color: T.khaki }}>Rename</button>}
         {!isLoose && (

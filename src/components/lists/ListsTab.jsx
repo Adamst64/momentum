@@ -111,12 +111,6 @@ export default function ListsTab({ hook }) {
 
       {active && (
         <>
-          <button
-            onClick={() => setActiveId(null)}
-            style={{ alignSelf: 'flex-start', fontSize: 14, color: T.khaki, padding: '4px 0', marginBottom: -6 }}
-          >
-            ‹ All lists
-          </button>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <div style={{ fontSize: 17, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 8 }}>

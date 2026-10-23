@@ -4,7 +4,7 @@ import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 // A full-screen page opened from the Budget overview (Categories, Transactions…).
-// ← or swiping in from the left edge goes back. Sits below sheets (Modal is 100),
+// The round back button (top left) or swiping in from the left edge goes back. Sits below sheets (Modal is 100),
 // so editing an entry from here opens on top of it.
 export default function BudgetPage({ title, subtitle, onClose, children }) {
   useBackHandler(true, onClose);
@@ -15,7 +15,6 @@ export default function BudgetPage({ title, subtitle, onClose, children }) {
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
         borderBottom: `1px solid ${T.cardBorder}`, maxWidth: 430, width: '100%', margin: '0 auto', boxSizing: 'border-box',
       }}>
-        <button onClick={onClose} aria-label="Back" style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>{title}</div>
           {subtitle && <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{subtitle}</div>}

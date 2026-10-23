@@ -34,7 +34,6 @@ export default function MonthlyTaskHistoryModal({ task, onClose }) {
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
         borderBottom: `1px solid ${T.cardBorder}`,
       }}>
-        <button onClick={onClose} style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 700, color: T.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {task.name}

@@ -17,6 +17,8 @@ import Donut, { DonutLegend } from './Donut';
 import { SERIES } from '../investing/ui';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import TransferSheet from '../TransferSheet';
+import Modal from '../Modal';
+import SortableList, { DragHandle } from '../SortableList';
 import InvestTransferSheet from './InvestTransferSheet';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
@@ -189,7 +191,7 @@ function Row({ onOpen, emoji, color, title, sub, amount, amountColor }) {
 export default function BudgetTab({ hook, workEnabled, investing }) {
   const {
     accounts, txs, balances, categories, addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
-    addCategory, updateCategory, removeCategory, scanReceipt, setRecurring, linkWork, addRefund, removeRefund,
+    addCategory, updateCategory, removeCategory, scanReceipt, reorderAccounts, setRecurring, linkWork, addRefund, removeRefund,
   } = hook;
   const [investTx, setInvestTx] = useState(null); // a bank ↔ investing transfer being looked at
   const [transfer, setTransfer] = useState(false);
@@ -208,6 +210,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [editingTx, setEditingTx]   = useState(null); // null | 'new' | { preset } | tx
   const [showCategories, setShowCategories] = useState(false);
   const [showAccts, setShowAccts] = useState(false); // the accounts grid, folded under the total
+  const [sorting, setSorting] = useState(false);     // the reorder-accounts sheet
   const [detailCat, setDetailCat]   = useState(null); // category id whose detail page is open
   const [catView, setCatView]       = useState(null); // its chosen period, kept while you look at its transactions
   const [listFromCat, setListFromCat] = useState(null); // the list was opened from this category: back returns there
@@ -296,9 +299,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         const pill = { padding: '8px 14px', borderRadius: 18, fontSize: 13, fontWeight: 600, border: `1px solid ${T.cardBorder}`, background: T.card };
         return (
           <>
-            <button onClick={() => { setAccountFilter(null); setCatFilter(null); }} style={{ alignSelf: 'flex-start', color: T.khaki, fontSize: 14, fontWeight: 600, padding: '2px 0' }}>
-              ‹ All accounts
-            </button>
             <div style={{ marginTop: -6 }}>
               <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>{a.name} · {typeLabel(a.type)}</div>
               <div style={{ fontSize: 32, fontWeight: 800, color: bal < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
@@ -372,6 +372,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               +
             </button>
           </div>}
+          {showAccts && accounts.length > 1 && (
+            <button onClick={() => setSorting(true)} style={{ alignSelf: 'flex-end', fontSize: 13, fontWeight: 600, color: T.khaki, marginTop: -6 }}>↕ Reorder accounts</button>
+          )}
         </>
       )}
 
@@ -499,7 +502,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       {page === 'accounts' && (
         <BudgetPage title="Spent by account" subtitle={`${periodTitle} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
           <DonutBlock
-            segments={perAccount.filter(x => x.spent > 0).map(({ account: a, spent }) => ({
+            segments={perAccount.filter(x => x.spent > 0).sort((a, b) => b.spent - a.spent).map(({ account: a, spent }) => ({
               id: a.id, emoji: ACCOUNT_EMOJI[a.type] || '💳', label: a.name,
               color: SERIES[accounts.findIndex(x => x.id === a.id) % SERIES.length], value: spent, valueLabel: money(spent),
             }))}
@@ -622,6 +625,22 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
       {investTx && (
         <InvestTransferSheet tx={investTx} accountsById={accountsById} investing={investing} budget={hook} onClose={() => setInvestTx(null)} />
       )}
+      {sorting && (
+        <Modal title="Reorder accounts" onClose={() => setSorting(false)}>
+          <div style={{ fontSize: 12, color: T.muted, marginBottom: 10 }}>Drag the handle to move an account. The order is saved right away.</div>
+          <SortableList items={accounts} onReorder={ids => reorderAccounts(ids)} renderItem={(a, handle) => (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: '10px 12px' }}>
+              <DragHandle color={T.muted} {...handle} />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 15, fontWeight: 600, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</span>
+                <span style={{ display: 'block', fontSize: 12, color: T.muted }}>{typeLabel(a.type)}</span>
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: (balances[a.id] || 0) < 0 ? T.red : T.text }}>{money(balances[a.id] || 0)}</span>
+            </div>
+          )} />
+        </Modal>
+      )}
+
       {transfer && investing && <TransferSheet investing={investing} budget={hook} onClose={() => setTransfer(false)} />}
 
       {receiptFile && (

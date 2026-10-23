@@ -68,7 +68,6 @@ export default function NoteViewer({ note: n, onSaveText, onEdit, onClose }) {
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
         borderBottom: `1px solid ${T.cardBorder}`,
       }}>
-        <button onClick={close} aria-label="Back" style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, color: accent, fontWeight: 700 }}>
             {parseDate(n.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}

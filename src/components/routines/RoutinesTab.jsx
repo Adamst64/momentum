@@ -213,7 +213,6 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
             padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
             borderBottom: `1px solid ${T.cardBorder}`,
           }}>
-            <button onClick={() => setShowAllRoutines(false)} style={{ color: T.khaki, fontSize: 22, lineHeight: 1, padding: '2px 0' }}>←</button>
             <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>All Routines</span>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', paddingTop: 16, paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)` }}>

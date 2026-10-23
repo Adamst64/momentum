@@ -75,7 +75,8 @@ export default function Modal({ title, onClose, children, full = false }) {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <span style={{ fontSize: 17, fontWeight: 600, color: T.text }}>{title}</span>
-          <button onClick={onClose} style={{ color: T.muted, fontSize: 20, lineHeight: 1, padding: '4px 8px' }}>✕</button>
+          {/* Full-screen pages go back with the round button in the corner; sheets keep their ✕ */}
+          {!full && <button onClick={onClose} style={{ color: T.muted, fontSize: 20, lineHeight: 1, padding: '4px 8px' }}>✕</button>}
         </div>
         {children}
       </div>

@@ -72,6 +72,13 @@ export function useBudget(userId) {
     await updateDoc(ref('budgetAccounts', id), { name: name.trim(), type });
   }, [ref]);
 
+  // Saves the order you dragged the accounts into
+  const reorderAccounts = useCallback(async (ids) => {
+    const batch = writeBatch(db);
+    ids.forEach((id, i) => batch.update(ref('budgetAccounts', id), { order: i }));
+    await batch.commit();
+  }, [ref]);
+
   // Repeating income on an account (rules replace the whole list)
   const setRecurring = useCallback(async (id, recurring) => {
     await updateDoc(ref('budgetAccounts', id), { recurring });
@@ -217,7 +224,7 @@ export function useBudget(userId) {
   }, []);
 
   return {
-    scanReceipt, loaded: ready, txDocs, setRecurring, linkWork, putSynced, removeSynced,
+    scanReceipt, reorderAccounts, loaded: ready, txDocs, setRecurring, linkWork, putSynced, removeSynced,
     accounts, txs, balances, categories,
     addAccount, updateAccount, deleteAccount, addTx, updateTx, deleteTx,
     addCategory, updateCategory, removeCategory, addRefund, removeRefund,
