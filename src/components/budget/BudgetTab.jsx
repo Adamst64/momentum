@@ -300,8 +300,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         return (
           <>
             <div style={{ marginTop: -6 }}>
-              <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>{a.name} · {typeLabel(a.type)}</div>
-              <div style={{ fontSize: 32, fontWeight: 800, color: bal < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 2 }}>
+              <div style={{ fontSize: 24, color: T.khaki, fontWeight: 800, letterSpacing: -0.3, lineHeight: 1.2 }}>{ACCOUNT_EMOJI[a.type] || '💳'} {a.name}</div>
+              <div style={{ fontSize: 13, color: T.muted, fontWeight: 600, marginTop: 2 }}>{typeLabel(a.type)}</div>
+              <div style={{ fontSize: 32, fontWeight: 800, color: bal < 0 ? T.red : T.text, letterSpacing: -0.5, marginTop: 6 }}>
                 {credit ? money(Math.abs(bal)) : money(bal)}
                 {credit && <span style={{ fontSize: 15, fontWeight: 600, color: T.muted }}> {bal < 0 ? 'owed' : bal > 0 ? 'credit' : ''}</span>}
               </div>
