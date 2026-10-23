@@ -4,7 +4,8 @@ import TaskItem from './TaskItem';
 import CreateTaskModal from './CreateTaskModal';
 import TaskCalendar from './TaskCalendar';
 import MonthlyTaskHistoryModal from './MonthlyTaskHistoryModal';
-import { formatLongDate, formatMonthYear, todayStr } from '../../utils/dateUtils';
+import { formatLongDate, formatMonthYear, todayStr, addDays, getDOW, DAYS_FULL, DAYS_SHORT } from '../../utils/dateUtils';
+import { weeklyDueOn } from '../../hooks/useTasks';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
 
@@ -14,9 +15,10 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
   const [showMenu, setShowMenu] = useState(false);
   const longPressRef = useLongPress(() => setShowMenu(true));
   const ym = today.slice(0, 7);
-  const isDone = task.type === 'recurring-monthly'
-    ? !!task.completedOccurrences?.[ym]
+  const isDone = task.type === 'recurring-monthly' ? !!task.completedOccurrences?.[ym]
+    : task.type === 'recurring-weekly' ? !!task.completedOccurrences?.[today]
     : task.completedAt === today;
+  const repeat = task.type === 'recurring-monthly' ? 'Monthly' : task.type === 'recurring-weekly' ? 'Weekly' : null;
 
   return (
     <>
@@ -46,17 +48,17 @@ function TodayItem({ task, today, onToggle, onEdit, onDelete }) {
             textDecoration: isDone ? 'line-through' : 'none',
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{task.name}</div>
-          {task.type === 'recurring-monthly' && (
-            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>Monthly</div>
+          {repeat && (
+            <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{repeat}</div>
           )}
         </div>
 
-        {task.type === 'recurring-monthly' && !isDone && (
+        {repeat && !isDone && (
           <div style={{
             fontSize: 9, padding: '2px 6px', borderRadius: 4,
             background: '#2A3A1A', color: T.oliveLight, fontWeight: 600,
             textTransform: 'uppercase', letterSpacing: 0.3, flexShrink: 0,
-          }}>Monthly</div>
+          }}>{repeat}</div>
         )}
       </div>
 
@@ -158,12 +160,7 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete, onShow
           </div>
         </div>
 
-        {task.notify?.enabled && (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <path d="M13.73 21a2 2 0 01-3.46 0" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        )}
+        {task.notify?.enabled && <Bell />}
 
         <div style={{ fontSize: 12, color: statusColor, fontWeight: 600, flexShrink: 0, textAlign: 'right', maxWidth: 110 }}>
           {statusText}
@@ -179,6 +176,75 @@ function MonthlyItem({ task, viewYM, todayYM, todayDom, onEdit, onDelete, onShow
             width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
             color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
           }}>View History</button>
+          <button onClick={() => { onEdit(task); setShowMenu(false); }} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
+            color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
+          }}>Edit</button>
+          <button onClick={() => { onDelete(task.id); setShowMenu(false); }} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.red, borderBottom: `1px solid ${T.cardBorder}`,
+          }}>Delete</button>
+          <button onClick={() => setShowMenu(false)} style={{
+            width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14, color: T.muted,
+          }}>Cancel</button>
+        </div>
+      )}
+    </>
+  );
+}
+
+const Bell = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+    <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M13.73 21a2 2 0 01-3.46 0" stroke={T.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+// This week (Monday–Sunday): where the task falls and whether it's done
+function WeeklyItem({ task, today, onEdit, onDelete }) {
+  const [showMenu, setShowMenu] = useState(false);
+  const longPressRef = useLongPress(() => setShowMenu(true));
+  const monday = addDays(today, -((getDOW(today) + 6) % 7));
+  const due = Array.from({ length: 7 }, (_, i) => addDays(monday, i)).find(d => weeklyDueOn(task, d));
+  const isDone = !!(due && task.completedOccurrences?.[due]);
+
+  let statusColor = T.muted, statusText = '—';
+  if (isDone) { statusColor = T.green; statusText = 'Done ✓'; }
+  else if (due === today) { statusColor = T.khaki; statusText = 'Due today'; }
+  else if (due && due < today) { statusColor = T.red; statusText = 'Missed'; }
+  else if (due) statusText = `Due ${DAYS_SHORT[getDOW(due)]}`;
+
+  return (
+    <>
+      <div ref={longPressRef} style={{
+        background: T.card,
+        border: `1px solid ${isDone ? T.olive + '44' : T.cardBorder}`,
+        borderRadius: 12, padding: '12px 14px',
+        display: 'flex', alignItems: 'center', gap: 12,
+        opacity: isDone ? 0.75 : 1,
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontSize: 15, color: T.text, fontWeight: 500,
+            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+          }}>{task.name}</div>
+          <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
+            Every {DAYS_FULL[task.dayOfWeek]}
+            {task.notify?.enabled && task.notify.time && ` · ${task.notify.time}`}
+          </div>
+        </div>
+
+        {task.notify?.enabled && <Bell />}
+
+        <div style={{ fontSize: 12, color: statusColor, fontWeight: 600, flexShrink: 0, textAlign: 'right', maxWidth: 110 }}>
+          {statusText}
+        </div>
+      </div>
+
+      {showMenu && (
+        <div style={{
+          background: '#252527', border: `1px solid ${T.cardBorder}`,
+          borderRadius: 10, overflow: 'hidden', marginTop: -6,
+        }}>
           <button onClick={() => { onEdit(task); setShowMenu(false); }} style={{
             width: '100%', padding: '11px 14px', textAlign: 'left', fontSize: 14,
             color: T.text, borderBottom: `1px solid ${T.cardBorder}`,
@@ -217,7 +283,7 @@ export default function TasksTab({ hook, userId }) {
   const {
     addTask, deleteTask, rescheduleTask, updateTask,
     toggleTaskForDate, tasksForDate,
-    todayTasks, backlogTasks, scheduledTasks, monthlyTasks,
+    todayTasks, backlogTasks, scheduledTasks, monthlyTasks, weeklyTasks,
   } = hook;
 
   const [showCreate, setShowCreate]     = useState(false);
@@ -250,11 +316,14 @@ export default function TasksTab({ hook, userId }) {
   const backlog   = backlogTasks();
   const scheduled = scheduledTasks();
   const monthly   = monthlyTasks();
+  const weekly    = weeklyTasks();
 
   const overdue = backlog.filter(b => b.missed);
   const undated = backlog.filter(b => !b.missed);
   const ym = today.slice(0, 7);
-  const isDoneToday = t => (t.type === 'recurring-monthly' ? !!t.completedOccurrences?.[ym] : t.completedAt === today);
+  const isDoneToday = t => (t.type === 'recurring-monthly' ? !!t.completedOccurrences?.[ym]
+    : t.type === 'recurring-weekly' ? !!t.completedOccurrences?.[today]
+    : t.completedAt === today);
   const todayOpen = todays.filter(t => !isDoneToday(t));
   const todayDone = todays.filter(isDoneToday);
 
@@ -395,6 +464,19 @@ export default function TasksTab({ hook, userId }) {
           />
         ))}
       </Section>
+
+      {weekly.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+            Weekly <span style={{ color: T.subtle }}>({weekly.length})</span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {weekly.map(t => (
+              <WeeklyItem key={t.id} task={t} today={today} onEdit={setEditing} onDelete={deleteTask} />
+            ))}
+          </div>
+        </div>
+      )}
 
       {monthly.length > 0 && (
         <div>

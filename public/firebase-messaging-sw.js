@@ -10,8 +10,6 @@ firebase.initializeApp({
   appId: '1:737833970070:web:c7963a9ec9b219b5e0d5b7',
 });
 
-const messaging = firebase.messaging();
-
 const iconBase = self.location.hostname === 'localhost' ? '' : '/momentum';
 
 // Where a notification should take the app, kept in Cache Storage for the app to
@@ -23,9 +21,24 @@ async function savePending(entry) {
   await cache.put('pending-url', new Response(JSON.stringify({ ...entry, at: Date.now() })));
 }
 
-messaging.onBackgroundMessage((payload) => {
-  // Older pushes carried a notification that Firebase shows itself; don't double it
-  if (payload.notification) return;
+// Our pushes are data-only, and we show them ourselves. Registered before
+// Firebase's handler, which shows nothing whenever a Momentum window counts as
+// visible (the app open on another screen, or iOS still reporting a backgrounded
+// app as visible): the reminder was silently dropped, and iOS ends the push
+// subscription of apps that receive pushes without showing them.
+self.addEventListener('push', (event) => {
+  let payload;
+  try { payload = event.data?.json(); } catch { return; }
+  // Older pushes carried a notification that Firebase shows itself
+  if (!payload?.data || payload.notification) return;
+  event.stopImmediatePropagation();
+  event.waitUntil(showPush(payload));
+});
+
+// Still set up: Firebase keeps the push subscription fresh and shows older pushes
+firebase.messaging();
+
+function showPush(payload) {
   const d = payload.data || {};
   const url = d.url || payload.fcmOptions?.link;
   return Promise.all([
@@ -39,7 +52,7 @@ messaging.onBackgroundMessage((payload) => {
     // The app opens this once the notification is gone from Notification Center (tapped)
     url && d.tag ? savePending({ url, tag: d.tag, fromPush: true }).catch(() => {}) : null,
   ]);
-});
+}
 
 self.addEventListener('notificationclick', (event) => {
   // Notifications Firebase displayed itself are handled by Firebase

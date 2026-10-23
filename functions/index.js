@@ -225,8 +225,55 @@ async function maybeSendWorkTexts(db, messaging, userDoc, tokens) {
 
 // ── Task push notifications (every 5 minutes) ─────────────────────────────────
 
+// Is a task due on the given local day (and not checked off yet)? Mirrors
+// src/hooks/useTasks.js.
+function taskDueToday(task, { ym, dom, today }) {
+  if (task.createdAt && today < task.createdAt) return false;
+  if (task.type === 'one-time') return task.date === today && !task.completedAt;
+  if (task.type === 'recurring-monthly') {
+    const effectiveDay = task.monthOverrides?.[ym] ?? task.dayOfMonth;
+    return effectiveDay === dom && !task.completedOccurrences?.[ym];
+  }
+  if (task.type === 'recurring-weekly') {
+    const moved = task.moved || {};
+    const dow = new Date(today + 'T12:00:00Z').getUTCDay();
+    const due = Object.values(moved).includes(today) || (dow === task.dayOfWeek && !moved[today]);
+    return due && !task.completedOccurrences?.[today];
+  }
+  return false;
+}
+
+const TASK_BODY = {
+  'recurring-monthly': 'Monthly task due today',
+  'recurring-weekly':  'Weekly task due today',
+};
+
+async function sendTaskReminders(db, messaging, userDoc, tokens) {
+  const tasksSnap = await userDoc.ref.collection('tasks').get();
+  for (const taskDoc of tasksSnap.docs) {
+    const task = taskDoc.data();
+    if (!task.notify?.enabled || !task.notify?.time) continue;
+
+    const now = localNow(task.notify.timezone || 'UTC');
+    if (!isDue(task.notify.time, now.minutes)) continue;
+    if (task.notify.lastSentDate === now.today) continue;
+    if (!taskDueToday(task, now)) continue;
+
+    // Mark first so an overlapping run can't double-send
+    await taskDoc.ref.update({ 'notify.lastSentDate': now.today });
+    await sendPush(db, messaging, userDoc.id, tokens, task.name, TASK_BODY[task.type] || 'Task due today', APP_URL + '?tab=tasks');
+  }
+}
+
+// One job failing (or a price service hanging) mustn't take the others down
+async function guarded(label, uid, fn) {
+  try { await fn(); }
+  catch (e) { console.error(`${label} for ${uid} failed:`, e); }
+}
+
 exports.sendTaskNotifications = onSchedule(
-  { schedule: 'every 5 minutes' },
+  // Price lookups can be slow; the default 60s timeout cut runs short
+  { schedule: 'every 5 minutes', timeoutSeconds: 240 },
   async () => {
     const db        = getFirestore();
     const messaging = getMessaging();
@@ -236,47 +283,17 @@ exports.sendTaskNotifications = onSchedule(
     await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
       const uid    = userDoc.id;
       const tokens = userDoc.data().fcmTokens || [];
+      const push   = tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body, APP_URL + '?tab=investing') : null;
+
+      // Time-sensitive reminders first, before anything that calls outside services
+      if (tokens.length) {
+        await guarded('Task reminders', uid, () => sendTaskReminders(db, messaging, userDoc, tokens));
+        await guarded('Daily review', uid, () => maybeSendDailyReview(db, messaging, userDoc, tokens));
+        await guarded('Work texts', uid, () => maybeSendWorkTexts(db, messaging, userDoc, tokens));
+      }
 
       // Portfolio snapshots run even without notifications set up
-      await investing.runInvestingJobs(db, userDoc,
-        tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body, APP_URL + '?tab=investing') : null);
-
-      if (!tokens.length) return;
-
-      await maybeSendDailyReview(db, messaging, userDoc, tokens);
-      await maybeSendWorkTexts(db, messaging, userDoc, tokens);
-
-      const tasksSnap = await db.collection('users').doc(uid).collection('tasks').get();
-
-      for (const taskDoc of tasksSnap.docs) {
-        const task = taskDoc.data();
-        if (!task.notify?.enabled || !task.notify?.time) continue;
-
-        const { minutes, ym: ymLocal, dom: domLocal, today: todayLocal } = localNow(task.notify.timezone || 'UTC');
-        if (!isDue(task.notify.time, minutes)) continue;
-
-        // Check if task is due today
-        let dueToday = false;
-        if (task.type === 'one-time') {
-          dueToday = task.date === todayLocal;
-        } else if (task.type === 'recurring-monthly') {
-          const effectiveDay = task.monthOverrides?.[ymLocal] ?? task.dayOfMonth;
-          dueToday = effectiveDay === domLocal;
-        }
-        if (!dueToday) continue;
-
-        // Avoid duplicate sends
-        if (task.notify.lastSentDate === todayLocal) continue;
-
-        const isMonthly   = task.type === 'recurring-monthly';
-        const notifTitle  = task.name;
-        const notifBody   = isMonthly ? 'Monthly task due today' : 'Task due today';
-
-        // Update lastSentDate before sending to minimise duplicates
-        await taskDoc.ref.update({ 'notify.lastSentDate': todayLocal });
-
-        await sendPush(db, messaging, uid, tokens, notifTitle, notifBody, APP_URL + '?tab=tasks');
-      }
+      await guarded('Investing jobs', uid, () => investing.runInvestingJobs(db, userDoc, push));
     }));
   }
 );

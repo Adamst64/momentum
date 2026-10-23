@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { todayStr } from '../../utils/dateUtils';
+import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
 
 const inputStyle = {
   width: '100%', padding: '12px 14px', borderRadius: 10,
@@ -9,8 +9,12 @@ const inputStyle = {
   color: T.text, fontSize: 16, outline: 'none',
 };
 
+// Monday first
+const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
 const TYPE_LABELS = {
   'one-time':          'One-time',
+  'recurring-weekly':  'Weekly',
   'recurring-monthly': 'Monthly',
   'backlog':           'Backlog',
 };
@@ -21,12 +25,14 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
   const [type,         setType]         = useState(initial?.type || 'one-time');
   const [date,         setDate]         = useState(initial?.date || todayStr());
   const [dom,          setDom]          = useState(String(initial?.dayOfMonth || 1));
+  const [dow,          setDow]          = useState(initial?.dayOfWeek ?? getDOW(todayStr()));
   const [notifyOn,     setNotifyOn]     = useState(initial?.notify?.enabled || false);
   const [notifyTime,   setNotifyTime]   = useState(initial?.notify?.time || '09:00');
 
   const valid = name.trim() && (
     type === 'backlog' ||
     (type === 'one-time' && date) ||
+    type === 'recurring-weekly' ||
     (type === 'recurring-monthly' && parseInt(dom, 10) >= 1 && parseInt(dom, 10) <= 31)
   );
 
@@ -35,7 +41,8 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
     const data = { name: name.trim(), type };
     if (type === 'one-time')          data.date       = date;
     if (type === 'recurring-monthly') data.dayOfMonth = Math.min(31, Math.max(1, parseInt(dom, 10) || 1));
-    if (type === 'one-time' || type === 'recurring-monthly') {
+    if (type === 'recurring-weekly')  data.dayOfWeek  = dow;
+    if (type !== 'backlog') {
       if (notifyOn) {
         data.notify = {
           enabled: true,
@@ -113,13 +120,39 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
           </div>
         )}
 
+        {type === 'recurring-weekly' && (
+          <div>
+            <div style={{ fontSize: 11, color: T.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Every week on
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {WEEK_ORDER.map(d => (
+                <button
+                  key={d}
+                  type="button"
+                  onClick={() => setDow(d)}
+                  style={{
+                    flex: 1, padding: '10px 0', borderRadius: 10, fontSize: 13,
+                    fontWeight: dow === d ? 600 : 400,
+                    background: dow === d ? T.olive : '#0F0F0F',
+                    border: `1px solid ${dow === d ? T.olive : T.cardBorder}`,
+                    color: dow === d ? '#fff' : T.muted,
+                  }}
+                >
+                  {DAYS_SHORT[d]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {type === 'backlog' && (
           <div style={{ padding: '8px 12px', background: '#0F0F0F', borderRadius: 10, border: `1px solid ${T.cardBorder}` }}>
             <span style={{ fontSize: 13, color: T.muted }}>No due date — sits in your backlog until you schedule it</span>
           </div>
         )}
 
-        {(type === 'one-time' || type === 'recurring-monthly') && (
+        {type !== 'backlog' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 14, color: T.text }}>Notify me</span>

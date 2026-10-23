@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useLongPress } from '../../hooks/useLongPress';
-import { todayStr, formatShortDate } from '../../utils/dateUtils';
+import { todayStr, formatShortDate, DAYS_FULL } from '../../utils/dateUtils';
 import { FULL_PAGE } from '../../utils/pageStyle';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
@@ -52,6 +52,7 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
 
   const subtitle = (() => {
     if (task.type === 'recurring-monthly') return `Every ${task.dayOfMonth}${ord(task.dayOfMonth)} of the month`;
+    if (task.type === 'recurring-weekly') return `Every ${DAYS_FULL[task.dayOfWeek]}`;
     if (missed && task.date) return `Missed · ${formatShortDate(task.date)}`;
     if (task.type === 'one-time' && task.date) return formatShortDate(task.date);
     if (task.missedLabel) return `Missed: ${task.missedLabel}`;

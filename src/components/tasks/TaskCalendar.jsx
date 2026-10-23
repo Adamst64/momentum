@@ -127,11 +127,11 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{task.name}</span>
 
-        {task.type === 'recurring-monthly' && (
+        {(task.type === 'recurring-monthly' || task.type === 'recurring-weekly') && (
           <span style={{
             fontSize: 9, padding: '2px 5px', borderRadius: 4, flexShrink: 0,
             background: '#2A3A1A', color: T.oliveLight, fontWeight: 600, textTransform: 'uppercase',
-          }}>mo</span>
+          }}>{task.type === 'recurring-weekly' ? 'wk' : 'mo'}</span>
         )}
       </div>
 
@@ -178,7 +178,7 @@ function DayTaskRow({ item, dateStr, today, editable, onToggle, onDelete, onEdit
               flex: 1, padding: '8px', borderRadius: 7, background: 'transparent',
               border: `1px solid ${T.cardBorder}`, color: T.muted, fontSize: 13,
             }}>Cancel</button>
-            <button onClick={() => { onReschedule(task.id, newDate, dateStr.slice(0, 7)); setRescheduling(false); }} style={{
+            <button onClick={() => { onReschedule(task.id, newDate, dateStr.slice(0, 7), dateStr); setRescheduling(false); }} style={{
               flex: 1, padding: '8px', borderRadius: 7, background: T.olive, color: T.text, fontSize: 13, fontWeight: 600,
             }}>Set Date</button>
           </div>

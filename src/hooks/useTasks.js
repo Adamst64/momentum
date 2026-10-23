@@ -1,8 +1,18 @@
 import { useState, useCallback, useEffect } from 'react';
 import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { todayStr, getYM } from '../utils/dateUtils';
+import { todayStr, getYM, getDOW } from '../utils/dateUtils';
 import { genId } from '../utils/id';
+
+// Weekly tasks: due every week on dayOfWeek (0 = Sunday). A single week's
+// occurrence can be moved: moved = { originalDate: newDate }. Completions are
+// keyed by the date the occurrence falls on.
+export function weeklyDueOn(t, dateStr) {
+  if (t.createdAt && dateStr < t.createdAt) return false;
+  const moved = t.moved || {};
+  if (Object.values(moved).includes(dateStr)) return true;
+  return getDOW(dateStr) === t.dayOfWeek && !moved[dateStr];
+}
 
 export function useTasks(userId) {
   const [tasks, setTasks] = useState([]);
@@ -23,6 +33,7 @@ export function useTasks(userId) {
     const dom = parseInt(today.slice(-2), 10);
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
+      if (t.type === 'recurring-weekly') return weeklyDueOn(t, today);
       if (t.type === 'recurring-monthly') {
         if (t.createdAt && today < t.createdAt) return false;
         let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
@@ -46,6 +57,7 @@ export function useTasks(userId) {
     return tasks
       .filter(t => {
         if (t.type === 'one-time') return t.date === dateStr;
+        if (t.type === 'recurring-weekly') return weeklyDueOn(t, dateStr);
         if (t.type === 'recurring-monthly') {
           if (t.createdAt && dateStr < t.createdAt) return false;
           let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
@@ -64,6 +76,7 @@ export function useTasks(userId) {
         let done = false;
         if (t.type === 'one-time') done = t.completedAt === dateStr;
         else if (t.type === 'recurring-monthly') done = !!t.completedOccurrences?.[ym];
+        else if (t.type === 'recurring-weekly') done = !!t.completedOccurrences?.[dateStr];
         else if (t.type === 'backlog') done = true;
         return { task: t, done };
       });
@@ -83,6 +96,9 @@ export function useTasks(userId) {
     } else if (task.type === 'recurring-monthly') {
       const isDone = !!task.completedOccurrences?.[ym];
       changes = { completedOccurrences: { ...task.completedOccurrences, [ym]: isDone ? null : dateStr } };
+    } else if (task.type === 'recurring-weekly') {
+      const isDone = !!task.completedOccurrences?.[dateStr];
+      changes = { completedOccurrences: { ...task.completedOccurrences, [dateStr]: isDone ? null : dateStr } };
     } else if (task.type === 'backlog') {
       const isDone = task.completedAt === dateStr;
       changes = isDone ? { done: false, completedAt: null } : { done: true, completedAt: dateStr };
@@ -96,6 +112,7 @@ export function useTasks(userId) {
     return tasks.filter(t => {
       if (t.type === 'one-time') return t.completedAt === today;
       if (t.type === 'recurring-monthly') return t.completedOccurrences?.[ym] === today;
+      if (t.type === 'recurring-weekly') return t.completedOccurrences?.[today] === today;
       if (t.type === 'backlog') return t.completedAt === today;
       return false;
     });
@@ -126,12 +143,20 @@ export function useTasks(userId) {
       .sort((a, b) => (a.dayOfMonth ?? 1) - (b.dayOfMonth ?? 1));
   }, [tasks]);
 
+  // Monday first, Sunday last
+  const weeklyTasks = useCallback(() => {
+    return tasks
+      .filter(t => t.type === 'recurring-weekly')
+      .sort((a, b) => ((a.dayOfWeek + 6) % 7) - ((b.dayOfWeek + 6) % 7));
+  }, [tasks]);
+
   const todayStats = useCallback(() => {
     const today = todayStr();
     const ym  = getYM(today);
     const dom = new Date().getDate();
     const scheduled = tasks.filter(t => {
       if (t.type === 'one-time') return t.date === today;
+      if (t.type === 'recurring-weekly') return weeklyDueOn(t, today);
       if (t.type === 'recurring-monthly') {
         if (t.createdAt && today < t.createdAt) return false;
         let day = t.monthOverrides?.[ym] ?? t.dayOfMonth;
@@ -147,6 +172,7 @@ export function useTasks(userId) {
     const done = scheduled.filter(t => {
       if (t.type === 'one-time') return !!t.completedAt;
       if (t.type === 'recurring-monthly') return !!t.completedOccurrences?.[ym];
+      if (t.type === 'recurring-weekly') return !!t.completedOccurrences?.[today];
       return false;
     }).length;
     return { total: scheduled.length, done };
@@ -158,7 +184,7 @@ export function useTasks(userId) {
     if (!userId) return;
     const id = genId();
     const base = { id, createdAt: todayStr(), ...data };
-    if (data.type === 'recurring-monthly') {
+    if (data.type === 'recurring-monthly' || data.type === 'recurring-weekly') {
       base.completedOccurrences = {};
     }
     if (data.type === 'backlog') base.missedDot = false;
@@ -181,16 +207,26 @@ export function useTasks(userId) {
       changes = { completed: true, completedAt: today };
     } else if (task.type === 'recurring-monthly') {
       changes = { completedOccurrences: { ...task.completedOccurrences, [ym]: today } };
+    } else if (task.type === 'recurring-weekly') {
+      changes = { completedOccurrences: { ...task.completedOccurrences, [today]: today } };
     } else {
       changes = { done: true, completedAt: today };
     }
     await updateDoc(doc(db, 'users', userId, 'tasks', id), changes);
   }, [userId, tasks]);
 
-  const rescheduleTask = useCallback(async (id, newDate, sourceYM) => {
+  const rescheduleTask = useCallback(async (id, newDate, sourceYM, sourceDate) => {
     if (!userId) return;
     const task = tasks.find(t => t.id === id);
-    if (task?.type === 'recurring-monthly') {
+    if (task?.type === 'recurring-weekly') {
+      // Move just this week's occurrence; the original date stays the key
+      if (!sourceDate) return;
+      const moved = { ...(task.moved || {}) };
+      const original = Object.keys(moved).find(k => moved[k] === sourceDate) || sourceDate;
+      if (original === newDate) delete moved[original];
+      else moved[original] = newDate;
+      await updateDoc(doc(db, 'users', userId, 'tasks', id), { moved });
+    } else if (task?.type === 'recurring-monthly') {
       // Override just the specified month; all others keep their own day
       const ym     = sourceYM || newDate.slice(0, 7);
       const newDay = parseInt(newDate.slice(-2), 10);
@@ -226,6 +262,7 @@ export function useTasks(userId) {
     backlogTasks,
     scheduledTasks,
     monthlyTasks,
+    weeklyTasks,
     todayStats,
     tasksForDate,
     toggleTaskForDate,

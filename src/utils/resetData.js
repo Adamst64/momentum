@@ -50,7 +50,7 @@ export async function resetData(userId, keys) {
   if (keys.includes('tasks')) {
     for (const d of await docsOf(userId, 'tasks')) {
       const t = d.data();
-      if (t.type === 'recurring-monthly') {
+      if (t.type === 'recurring-monthly' || t.type === 'recurring-weekly') {
         ops.push(b => b.update(d.ref, { completedOccurrences: {} }));
       } else if (t.completedAt) {
         ops.push(b => b.delete(d.ref));
