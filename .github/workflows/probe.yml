@@ -9,10 +9,11 @@ jobs:
       - run: |
           cat > p.mjs <<'JS'
           const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36' };
+          try {
           const r1 = await fetch('https://fc.yahoo.com', { headers: UA, redirect: 'manual' });
           const cookie = (r1.headers.getSetCookie?.() || []).map(c => c.split(';')[0]).join('; ');
           console.log('cookie?', !!cookie, r1.status);
-          const crumb = await (await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { ...UA, cookie } })).text();
+          const crumb = await (await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', { headers: { ...UA, cookie } })).text();
           console.log('crumb', crumb);
           for (const s of ['AAPL', 'VOO']) {
             const u = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${s}?modules=assetProfile,summaryDetail,defaultKeyStatistics,price,fundProfile,topHoldings,financialData&crumb=${encodeURIComponent(crumb)}`;
@@ -21,6 +22,7 @@ jobs:
             console.log(s, 'err', JSON.stringify(j?.quoteSummary?.error));
             if (r) for (const [k, v] of Object.entries(r)) console.log(s, k, JSON.stringify(v).slice(0, 1500));
           }
+          } catch (e) { console.log('yahoo failed', e.message); }
           const Q = 'SELECT ?item ?inception ?emp ?ceoLabel ?hqLabel ?article WHERE { ?item p:P414 ?st . ?st pq:P249 "AAPL" . OPTIONAL{?item wdt:P571 ?inception} OPTIONAL{?item wdt:P1128 ?emp} OPTIONAL{?item wdt:P169 ?ceo} OPTIONAL{?item wdt:P159 ?hq} OPTIONAL{?article schema:about ?item; schema:isPartOf <https://en.wikipedia.org/>} SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 5';
           const w = await fetch('https://query.wikidata.org/sparql?query=' + encodeURIComponent(Q), { headers: { 'User-Agent': 'MomentumApp/1.0', Accept: 'application/sparql-results+json' } });
           console.log('wikidata', w.status, (await w.text()).slice(0, 1500));
