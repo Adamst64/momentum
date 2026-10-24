@@ -3,16 +3,19 @@ import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { FULL_PAGE } from '../../utils/pageStyle';
+import { useDraft } from '../../utils/drafts';
 
 const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export default function BirthdayForm({ initial, onSave, onClose }) {
   useBackHandler(true, onClose);
-  const [name,  setName]  = useState(initial?.name  || '');
-  const [month, setMonth] = useState(initial?.month || 1);
-  const [day,   setDay]   = useState(initial?.day   || 1);
-  const [year,  setYear]  = useState(initial?.year  ? String(initial.year) : '');
+  // A new birthday keeps what's typed as a draft when you switch away (see utils/drafts)
+  const dk = name => (initial ? null : `birthday-add.${name}`);
+  const [name,  setName]  = useDraft(dk('name'), initial?.name  || '');
+  const [month, setMonth] = useDraft(dk('month'), initial?.month || 1);
+  const [day,   setDay]   = useDraft(dk('day'), initial?.day   || 1);
+  const [year,  setYear]  = useDraft(dk('year'), initial?.year  ? String(initial.year) : '');
 
   const maxDay     = MONTH_DAYS[month - 1];
   const clampedDay = Math.min(day, maxDay);

@@ -40,3 +40,9 @@ export function useBackDepth() {
   }, []);
   return n;
 }
+
+// Closes everything open on top of the page, newest first (the bottom bar does
+// this before switching views, so a form or detail page never stays behind)
+export function closeAll() {
+  [...stack].reverse().forEach(e => e.run());
+}

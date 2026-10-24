@@ -55,7 +55,7 @@ export default function CommitmentCalendarModal({ commitment, onMarkSlip, onClea
       </div>
 
       {/* Swipeable calendar area */}
-      <div ref={swipeRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+      <div ref={swipeRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 20px)' }}>
 
         {/* Streaks */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>

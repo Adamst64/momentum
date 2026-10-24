@@ -50,7 +50,9 @@ export default function Modal({ title, onClose, children, full = true }) {
         position: 'fixed',
         left: 0, right: 0,
         top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)',
-        zIndex: 100,
+        // Pages sit under a section's bottom bar (it stays usable); quick
+        // confirmations pop up above it
+        zIndex: full ? 100 : 400,
         background: 'rgba(0,0,0,0.7)',
         display: 'flex', alignItems: 'flex-end',
         backdropFilter: 'blur(4px)',
@@ -63,7 +65,7 @@ export default function Modal({ title, onClose, children, full = true }) {
           background: T.card,
           borderRadius: full ? 0 : '20px 20px 0 0',
           padding: full
-            ? `calc(60px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`
+            ? `calc(60px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom) + var(--tabbar-h, 0px))'}`
             : `20px 20px ${kbHeight > 0 ? '20px' : 'calc(20px + env(safe-area-inset-bottom))'}`,
           // Never taller than the space above the keyboard, or its top goes off-screen
           ...(full ? { height: '100%' } : { maxHeight: 'min(85vh, calc(100% - 24px))' }),

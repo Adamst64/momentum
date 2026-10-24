@@ -6,6 +6,8 @@ import TintPicker, { TINTS, fallbackTint } from '../TintPicker';
 
 const listColor = l => l.color || fallbackTint(l.id);
 import { useBackHandler } from '../../hooks/useBackHandler';
+import TabBar, { scrollToTop } from '../TabBar';
+import { useDraft } from '../../utils/drafts';
 
 const KINDS = {
   try:       { label: 'To-try',    hint: 'Movies, books, restaurants, places — check off when done' },
@@ -94,14 +96,15 @@ export default function ListsTab({ hook }) {
         </div>
       )}
 
-      {!active && (
-        <button
-          onClick={() => setShowCreate(true)}
-          style={{ padding: 14, borderRadius: 14, border: `1.5px dashed ${T.cardBorder}`, color: T.muted, fontSize: 15, textAlign: 'center' }}
-        >
-          + New list
-        </button>
-      )}
+      {/* Lists · Add along the bottom (Add makes a new list) */}
+      <TabBar
+        items={[
+          { value: 'lists', label: 'Lists', icon: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01' },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
+        ]}
+        value={showCreate ? 'add' : 'lists'}
+        onChange={v => { if (v === 'add') setShowCreate(true); else scrollToTop(); }}
+      />
 
       {lists.length === 0 && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '40px 20px', lineHeight: 1.5 }}>
@@ -262,9 +265,10 @@ function ItemGroup({ items, showDate, onToggle, onDelete }) {
 }
 
 function CreateListModal({ onCreate, onClose, defaultColor }) {
-  const [name, setName] = useState('');
+  // Kept as a draft if you switch away from the bar mid-way (see utils/drafts)
+  const [name, setName] = useDraft('list-add.name', '');
   const [color, setColor] = useState(defaultColor);
-  const [kind, setKind] = useState('try');
+  const [kind, setKind] = useDraft('list-add.kind', 'try');
   const [error, setError] = useState(null);
 
   const handleCreate = async () => {

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDraft } from '../../utils/drafts';
 import { useLongPress } from '../../hooks/useLongPress';
 import Modal from '../Modal';
 import { T } from '../../theme';
@@ -58,30 +59,32 @@ function CategoryGrid({ options, value, onChange, onNew, onHold }) {
 // Add or edit one transaction. `initial` is an existing transaction, or null for a new one.
 export default function TxForm({
   initial, preset, accounts, categories, defaultAccountId, onSave, onAddCategory, onUpdateCategory, onRemoveCategory,
-  allTxs = [], onDelete, onRefund, onRemoveRefund, onClose,
+  allTxs = [], onDelete, onRefund, onRemoveRefund, onClose, draftKey = null,
 }) {
+  // A new entry from the bottom bar's Add keeps what's typed as a draft (see utils/drafts)
+  const dk = name => (draftKey ? `${draftKey}.${name}` : null);
   // A refunded purchase: the amount field edits the price paid; what it counts as is that minus refunds
   const refunded = initial ? refundedTotal(initial) : 0;
   const start = initial || preset; // preset: a new transaction with some fields filled in
   const firstAccount = start?.accountId || defaultAccountId || accounts[0]?.id || '';
-  const [type, setType]           = useState(start?.type || 'expense');
-  const [amount, setAmount]       = useState(centsToInput(refunded ? initial.originalAmount : initial?.amount));
-  const [category, setCategory]   = useState(start?.category || null);
-  const [accountId, setAccountId] = useState(firstAccount);
-  const [toAccountId, setToAccountId] = useState(
+  const [type, setType]           = useDraft(dk('type'), start?.type || 'expense');
+  const [amount, setAmount]       = useDraft(dk('amount'), centsToInput(refunded ? initial.originalAmount : initial?.amount));
+  const [category, setCategory]   = useDraft(dk('category'), start?.category || null);
+  const [accountId, setAccountId] = useDraft(dk('accountId'), firstAccount);
+  const [toAccountId, setToAccountId] = useDraft(dk('toAccountId'), 
     start?.toAccountId || accounts.find(a => a.id !== firstAccount)?.id || '');
-  const [date, setDate]   = useState(initial?.date || todayStr());
-  const [note, setNote]   = useState(start?.note || '');
+  const [date, setDate]   = useDraft(dk('date'), initial?.date || todayStr());
+  const [note, setNote]   = useDraft(dk('note'), start?.note || '');
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [newCategory, setNewCategory] = useState(false);
   const [editCat, setEditCat] = useState(null); // category held down in the grid
-  const [rows, setRows] = useState(() => itemsToRows(initial?.items)); // scanned receipt lines
+  const [rows, setRows] = useDraft(dk('rows'), () => itemsToRows(initial?.items)); // scanned receipt lines
   const [showItems, setShowItems] = useState(false);
   // Groceries typed in by hand: one food group for the whole amount, or split into items
-  const [foodGroup, setFoodGroup] = useState(null);
-  const [split, setSplit] = useState(false);
+  const [foodGroup, setFoodGroup] = useDraft(dk('foodGroup'), null);
+  const [split, setSplit] = useDraft(dk('split'), false);
   const [refunding, setRefunding] = useState(false);
 
   const cents = parseAmount(amount);

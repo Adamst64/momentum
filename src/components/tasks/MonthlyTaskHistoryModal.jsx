@@ -44,7 +44,7 @@ export default function MonthlyTaskHistoryModal({ task, onClose }) {
         </div>
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + 20px)' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 20px)' }}>
         {entries.length === 0 ? (
           <div style={{
             background: T.card, border: `1px solid ${T.cardBorder}`,

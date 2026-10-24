@@ -318,9 +318,10 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           { value: 'overview', label: 'Overview', icon: ICONS.home },
           { value: 'where', label: 'Categories', icon: ICONS.pie },
           { value: 'list', label: 'Transactions', icon: ICONS.receipt },
-          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14', onPress: () => setEditingTx('new') },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
         ]}
-        value={page || 'overview'} onChange={goTo}
+        value={editingTx === 'new' ? 'add' : page || 'overview'}
+        onChange={v => (v === 'add' ? setEditingTx('new') : goTo(v))}
       />
       {filteredAccount ? (() => {
         const a = filteredAccount;
@@ -618,6 +619,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           <TxForm
             initial={isNew ? null : editingTx}
             preset={editingTx.preset}
+            draftKey={editingTx === 'new' ? 'budget-add' : null}
             accounts={accounts}
             categories={categories}
             defaultAccountId={accountFilter}

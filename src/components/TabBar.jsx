@@ -1,21 +1,31 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import ReactDOM from 'react-dom';
 import { T } from '../theme';
+import { closeAll } from '../hooks/useBackHandler';
+import { hasUnsaved, keepDrafts } from '../utils/drafts';
 
 // Switcher along the bottom of a section (like Robinhood's): its views, and
 // sometimes an action (e.g. Crews opens its page). While shown it sets
 // --tabbar-h, so the main menu button, add buttons and page padding move up.
+// It stays on top of everything opened inside the section (pages, forms);
+// tapping it closes those first. An Add form with something typed in asks to
+// keep it as a draft (it's back next time) or discard it.
 // items: [{ value, label, icon (SVG path, 24×24), onPress? }]
 export const TABBAR_H = 58;
 
 export default function TabBar({ items, value, onChange }) {
+  const [asking, setAsking] = useState(null); // the item waiting on "keep or discard?"
+  const go = v => { closeAll(); if (v.onPress) v.onPress(); else onChange(v.value); };
+  const press = v => (hasUnsaved() ? setAsking(v) : go(v));
   useEffect(() => {
     const s = document.documentElement.style;
     s.setProperty('--tabbar-h', `${TABBAR_H}px`);
     return () => s.removeProperty('--tabbar-h');
   }, []);
   return (
+    <>
     <nav style={{
-      position: 'fixed', zIndex: 95, left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 430,
+      position: 'fixed', zIndex: 300, left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 430,
       background: T.card, borderTop: `1px solid ${T.cardBorder}`,
       paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex',
     }}>
@@ -23,7 +33,7 @@ export default function TabBar({ items, value, onChange }) {
         const on = !v.onPress && v.value === value;
         const color = on ? T.khaki : T.muted;
         return (
-          <button key={v.value} onClick={() => (v.onPress ? v.onPress() : onChange(v.value))} aria-current={on ? 'page' : undefined}
+          <button key={v.value} onClick={() => press(v)} aria-current={on ? 'page' : undefined}
             style={{ flex: 1, minWidth: 0, height: TABBAR_H, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
               <path d={v.icon} stroke={color} strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" />
@@ -33,6 +43,24 @@ export default function TabBar({ items, value, onChange }) {
         );
       })}
     </nav>
+    {asking && ReactDOM.createPortal(
+      <div onClick={() => setAsking(null)} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
+        <div onClick={e => e.stopPropagation()} style={{
+          width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: T.card, borderRadius: '20px 20px 0 0',
+          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10,
+        }}>
+          <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Unsaved entry</div>
+          <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.4 }}>You started filling this in. Keep it as a draft for when you come back, or clear it?</div>
+          <button onClick={() => { const v = asking; setAsking(null); keepDrafts(); go(v); }}
+            style={{ padding: 13, borderRadius: 12, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}>Keep draft</button>
+          <button onClick={() => { const v = asking; setAsking(null); go(v); }}
+            style={{ padding: 13, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.red, fontSize: 15, fontWeight: 600 }}>Clear it</button>
+          <button onClick={() => setAsking(null)} style={{ padding: 10, color: T.muted, fontSize: 14 }}>Cancel</button>
+        </div>
+      </div>,
+      document.body,
+    )}
+    </>
   );
 }
 

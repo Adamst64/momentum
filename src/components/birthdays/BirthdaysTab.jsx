@@ -138,9 +138,10 @@ export default function BirthdaysTab({ hook, userId }) {
         items={[
           { value: 'list', label: 'Upcoming', icon: ICONS.cake },
           { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
-          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14', onPress: () => { setEditing(null); setShowForm(true); } },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
         ]}
-        value={view} onChange={v => { setView(v); scrollToTop(); }}
+        value={showForm && !editing ? 'add' : view}
+        onChange={v => { if (v === 'add') { setEditing(null); setShowForm(true); } else { setView(v); scrollToTop(); } }}
       />
 
       {view === 'list' ? (

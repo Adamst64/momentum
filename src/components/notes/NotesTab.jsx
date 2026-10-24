@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { T } from '../../theme';
 import { parseDate } from '../../utils/dateUtils';
 import NoteEditor from './NoteEditor';
+import TabBar, { scrollToTop } from '../TabBar';
 import NoteViewer, { editedLabel } from './NoteViewer';
 
 
@@ -57,15 +58,15 @@ export default function NotesTab({ hook }) {
 
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <button
-        onClick={() => setEditing('new')}
-        style={{
-          padding: 14, borderRadius: 14, background: T.olive,
-          color: '#fff', fontSize: 15, fontWeight: 600,
-        }}
-      >
-        + New entry
-      </button>
+      {/* Notes · Add along the bottom (Add opens a new entry) */}
+      <TabBar
+        items={[
+          { value: 'notes', label: 'Notes', icon: 'M6 3h9l4 4v14H6V3zM14 3v5h5M9 12h7M9 16h7' },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
+        ]}
+        value={editing === 'new' ? 'add' : 'notes'}
+        onChange={v => { if (v === 'add') setEditing('new'); else scrollToTop(); }}
+      />
 
       {notes.length > 0 && (
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>

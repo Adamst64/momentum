@@ -3,14 +3,17 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import TintPicker from '../TintPicker';
 import { todayStr } from '../../utils/dateUtils';
+import { useDraft } from '../../utils/drafts';
 
 
 export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
-  const [date,   setDate]   = useState(initial?.date || todayStr());
+  // A new note keeps what's typed as a draft when you switch away (see utils/drafts)
+  const dk = name => (initial ? null : `note-add.${name}`);
+  const [date,   setDate]   = useDraft(dk('date'), initial?.date || todayStr());
   const mood = initial?.mood ?? null; // no longer edited; kept so older entries don't lose it
-  const [title,  setTitle]  = useState(initial?.title || '');
-  const [color,  setColor]  = useState(initial?.color ?? null);
-  const [text,   setText]   = useState(initial?.text || '');
+  const [title,  setTitle]  = useDraft(dk('title'), initial?.title || '');
+  const [color,  setColor]  = useDraft(dk('color'), initial?.color ?? null);
+  const [text,   setText]   = useDraft(dk('text'), initial?.text || '');
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
