@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 import { T } from '../../theme';
 import { parseDate, todayYM } from '../../utils/dateUtils';
 import { ACCOUNT_TYPES, lookupCategory, money, monthSummary, shiftMonth, monthTitle, groceryBreakdown, accountMonthSummary, categoryStats, refundedTotal } from '../../utils/budget';
-import { Card, Chips } from '../investing/ui';
+import { Card } from '../investing/ui';
 import TxForm from './TxForm';
 import AccountForm from './AccountForm';
 import CategoriesSheet from './CategoriesSheet';
@@ -336,13 +336,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
                 {credit && <span style={{ fontSize: 15, fontWeight: 600, color: T.muted }}> {bal < 0 ? 'owed' : bal > 0 ? 'credit' : ''}</span>}
               </div>
             </div>
-            {!page && editingTx !== 'new' && (
-              <SubBar items={[
-                { value: 'in', label: credit ? 'Pay off' : '+ Add money', onPress: () => setMoneyMode('in') },
-                { value: 'out', label: '− Take out', onPress: () => setMoneyMode('out') },
-                { value: 'edit', label: 'Edit account', onPress: () => setEditingAcct(a) },
-              ]} />
-            )}
+
             {(a.type === 'debit' || a.type === 'savings') && (
               <AccountExtras account={a} workEnabled={workEnabled} workLinkedElsewhere={accounts.some(x => x.workLink?.since && x.id !== a.id)} categories={categories} onLinkWork={linkWork} onSetRecurring={setRecurring} />
             )}
@@ -420,12 +414,22 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
       />
 
-      {/* Period: a month, a year, or all time */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <Chips small options={[{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }]}
-          value={range} onChange={v => { setRange(v); setCatFilter(null); }} />
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: -6 }}>
+      {/* Period: a month, a year, or all time (switched from the sub-bar) */}
+      {!page && editingTx !== 'new' && (
+        <SubBar
+          items={[
+            // An account's page: its money actions first
+            ...(filteredAccount ? [
+              { value: 'in', label: filteredAccount.type === 'credit' ? 'Pay off' : '+ Add money', onPress: () => setMoneyMode('in') },
+              { value: 'out', label: '− Take out', onPress: () => setMoneyMode('out') },
+              { value: 'edit', label: 'Edit account', onPress: () => setEditingAcct(filteredAccount) },
+            ] : []),
+            { value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' },
+          ]}
+          value={range} onChange={v => { setRange(v); setCatFilter(null); }}
+        />
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         {range !== 'all' ? (
           <button onClick={() => changeMonth(-1)} aria-label={`Previous ${range}`} style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
         ) : <span style={{ width: 40 }} />}

@@ -1058,6 +1058,7 @@ function WatchHome({ hook, items, onOpenList }) {
   const { watchLists, addWatchList } = hook;
   const [name, setName] = useState('');
   const [err, setErr] = useState(null);
+  const [showNew, setShowNew] = useState(false); // the New list box (always shown before the first list)
   const loose = items.filter(a => !(a.lists || []).some(id => watchLists.some(l => l.id === id)));
   const cards = [
     ...watchLists.map(l => ({ id: l.id, name: l.name, items: items.filter(a => (a.lists || []).includes(l.id)) })),
@@ -1066,7 +1067,7 @@ function WatchHome({ hook, items, onOpenList }) {
   const create = async () => {
     if (!name.trim()) return;
     setErr(null);
-    try { const id = await addWatchList(name); setName(''); onOpenList(id); }
+    try { const id = await addWatchList(name); setName(''); setShowNew(false); onOpenList(id); }
     catch (e) { setErr(e.message || 'Could not create the list'); }
   };
   return (
@@ -1089,7 +1090,8 @@ function WatchHome({ hook, items, onOpenList }) {
           </Card>
         );
       })}
-      <Card>
+      {watchLists.length > 0 && <SubBar items={[{ value: 'new', label: showNew ? 'Cancel new list' : '+ New list', onPress: () => setShowNew(v => !v) }]} />}
+      {(showNew || !watchLists.length) && <Card>
         <SectionTitle>{watchLists.length ? 'New list' : 'Make your first list'}</SectionTitle>
         <div style={{ display: 'flex', gap: 8 }}>
           <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && create()} placeholder="e.g. My picks, YouTuber picks" style={{ ...inputStyle, flex: 1 }} />
@@ -1097,7 +1099,7 @@ function WatchHome({ hook, items, onOpenList }) {
         </div>
         {err && <div style={{ fontSize: 13, color: T.red, marginTop: 6 }}>{err}</div>}
         <div style={{ fontSize: 11, color: T.muted, marginTop: 8 }}>A stock can be in several lists. Each list remembers when you added it and the price then.</div>
-      </Card>
+      </Card>}
     </>
   );
 }
