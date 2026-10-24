@@ -17,6 +17,18 @@ export default function TabBar({ items, value, onChange }) {
   const [asking, setAsking] = useState(null); // the item waiting on "keep or discard?"
   const go = v => { closeAll(); if (v.onPress) v.onPress(); else onChange(v.value); };
   const press = v => (hasUnsaved() ? setAsking(v) : go(v));
+  // While the keyboard is up, ride on top of it instead of hiding behind it
+  const [kb, setKb] = useState(false);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const typing = () => { const el = document.activeElement; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); };
+    const update = () => setKb(typing() && window.innerHeight - vv.height > 120);
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    document.addEventListener('focusout', update);
+    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); document.removeEventListener('focusout', update); };
+  }, []);
   useEffect(() => {
     const s = document.documentElement.style;
     s.setProperty('--tabbar-h', `${TABBAR_H}px`);
@@ -25,9 +37,11 @@ export default function TabBar({ items, value, onChange }) {
   return (
     <>
     <nav style={{
-      position: 'fixed', zIndex: 300, left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 430,
-      background: T.card, borderTop: `1px solid ${T.cardBorder}`,
-      paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex',
+      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430,
+      ...(kb
+        ? { top: `calc(var(--vv-top, 0px) + var(--vv-height, 100vh) - ${TABBAR_H}px)` }
+        : { bottom: 0, paddingBottom: 'env(safe-area-inset-bottom)' }),
+      background: T.card, borderTop: `1px solid ${T.cardBorder}`, display: 'flex',
     }}>
       {items.map(v => {
         const on = !v.onPress && v.value === value;

@@ -165,7 +165,6 @@ export default function TxForm({
           inputMode="decimal"
           placeholder="0.00"
           aria-label="Amount"
-          autoFocus={!initial}
           style={{ ...inputStyle, fontSize: 28, fontWeight: 700, padding: '12px 14px',
             color: type === 'income' ? T.green : T.text }}
         />
