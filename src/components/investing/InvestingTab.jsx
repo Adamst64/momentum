@@ -95,6 +95,7 @@ export default function InvestingTab({ hook, userId, budget }) {
   const [manageAccounts, setManageAccounts] = useState(false);
   const [editing, setEditing] = useState(null); // transaction being edited from All transactions
   const [transfer, setTransfer] = useState(false);
+  const [showAllTx, setShowAllTx] = useState(false); // Insights → All transactions, folded by default
   // Hero: investments only, or net worth (investments + Budget cash)
   const hasCash = (budget?.accounts?.length || 0) > 0;
   const [heroMode, setHeroModeState] = useState(() => { try { return localStorage.getItem('momentum_hero') || 'inv'; } catch { return 'inv'; } });
@@ -648,9 +649,14 @@ export default function InvestingTab({ hook, userId, budget }) {
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
 
-          <Card>
-            <SectionTitle>All transactions</SectionTitle>
-            <TxList txs={txs} hide={hide} onDelete={deleteTx} onEdit={t => { const e = txEditInit(t, txs); if (e) setEditing(e); }} accounts={accounts} onSetAccount={setTxAccount} />
+          <Card style={showAllTx ? undefined : { padding: 0 }}>
+            <button onClick={() => setShowAllTx(v => !v)}
+              style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: showAllTx ? '0 0 10px' : '14px 16px' }}>
+              <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>All transactions</span>
+              <span style={{ fontSize: 13, color: T.muted }}>{txs.length}</span>
+              <span style={{ fontSize: 12, color: T.muted }}>{showAllTx ? '▴' : '▾'}</span>
+            </button>
+            {showAllTx && <TxList txs={txs} hide={hide} onDelete={deleteTx} onEdit={t => { const e = txEditInit(t, txs); if (e) setEditing(e); }} accounts={accounts} onSetAccount={setTxAccount} />}
           </Card>
         </>
       )}
