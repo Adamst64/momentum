@@ -209,7 +209,8 @@ export default function InvestingTab({ hook, userId, budget }) {
     // Net worth: each day's investments plus Budget cash that day (no deposits to
     // exclude: money moving between bank and investing stays inside net worth)
     return out.map((p, i) => {
-      const cash = i === out.length - 1 || intraPts ? cashNow : cashAt(p.date);
+      // Cash as it was that day (today: right now); spending shows up straight away
+      const cash = i === out.length - 1 || p.date >= today ? cashNow : cashAt(p.date);
       return { date: p.date, label: p.label, value: p.value + cash, invested: p.value, cash };
     });
   }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, txs.length, worth, cashAt, cashNow, intra, intraRange, heldKey]);
@@ -433,7 +434,14 @@ export default function InvestingTab({ hook, userId, budget }) {
           );
         })()}
 
-        {span ? (() => {
+        {span && worth ? (
+          <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
+            <span style={{ color: gainColor(span.to.value - span.from.value), fontWeight: 700 }}>{signedMoney(span.to.value - span.from.value, hide)}</span>
+            {' · '}{formatDateYear(span.from.date)} → {span.to.label || formatDateYear(span.to.date)}
+          </div>
+        ) : scrub && worth ? (
+          <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>{scrub.label || formatDateYear(scrub.date)}</div>
+        ) : span ? (() => {
           // Gain between two dates, not counting money added or withdrawn in between
           const nd = typeof span.to.netDeposits === 'number' && typeof span.from.netDeposits === 'number';
           const flows = nd ? span.to.netDeposits - span.from.netDeposits : 0;
@@ -455,20 +463,12 @@ export default function InvestingTab({ hook, userId, budget }) {
           </div>
         ) : (
           <>
-            {worth && chartPoints.length > 1 && (() => {
-              const d = chartPoints[chartPoints.length - 1].value - chartPoints[0].value;
-              return (
-                <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, color: gainColor(d) }}>
-                  {signedMoney(d, hide)} <span style={{ color: T.muted, fontWeight: 400 }}>· {period === 'ALL' ? 'since you started' : periodLabel}</span>
-                </div>
-              );
-            })()}
             {!worth && ret && !ret.unavailable && (
               <div style={{ fontSize: 14, fontWeight: 600, marginTop: 2, color: gainColor(ret.gain) }}>
                 {signedMoney(ret.gain, hide)} ({pct(ret.pct)}) <span style={{ color: T.muted, fontWeight: 400 }}>· {period === 'ALL' ? 'all time' : periodLabel}</span>
               </div>
             )}
-            {txs.length > 0 && (
+            {txs.length > 0 && !worth && (
               <div style={{ fontSize: 12, marginTop: 2, color: gainColor(portfolio.dayChange) }}>
                 {signedMoney(portfolio.dayChange, hide)} {dayContext().word}
                 {portfolio.ext && (
