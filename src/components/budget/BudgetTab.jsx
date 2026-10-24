@@ -302,6 +302,28 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
     );
   }
 
+  // ‹ October 2026 › (or the year), shown on the overview and each Budget page
+  const periodNav = (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      {range !== 'all' ? (
+        <button onClick={() => changeMonth(-1)} aria-label={`Previous ${range}`} style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
+      ) : <span style={{ width: 40 }} />}
+      <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{periodTitle}</span>
+      {range !== 'all' ? (
+        <button
+          onClick={() => changeMonth(1)}
+          disabled={isCurrentMonth}
+          aria-label={`Next ${range}`}
+          style={{ color: isCurrentMonth ? T.subtle : T.khaki, fontSize: 22, padding: '2px 12px' }}
+        >
+          ›
+        </button>
+      ) : <span style={{ width: 40 }} />}
+    </div>
+  );
+  const RANGES = [{ value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' }];
+  const pickRange = v => { setRange(v); setCatFilter(null); };
+
   // Overview · Categories · Transactions along the bottom, plus Add
   const goTo = v => {
     setDetailCat(null); setListFromCat(null);
@@ -424,27 +446,12 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
               { value: 'out', label: '− Take out', onPress: () => setMoneyMode('out') },
               { value: 'edit', label: 'Edit', onPress: () => setEditingAcct(filteredAccount) },
             ] : []),
-            { value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' },
+            ...RANGES,
           ]}
-          value={range} onChange={v => { setRange(v); setCatFilter(null); }}
+          value={range} onChange={pickRange}
         />
       )}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {range !== 'all' ? (
-          <button onClick={() => changeMonth(-1)} aria-label={`Previous ${range}`} style={{ color: T.khaki, fontSize: 22, padding: '2px 12px' }}>‹</button>
-        ) : <span style={{ width: 40 }} />}
-        <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{periodTitle}</span>
-        {range !== 'all' ? (
-          <button
-            onClick={() => changeMonth(1)}
-            disabled={isCurrentMonth}
-            aria-label={`Next ${range}`}
-            style={{ color: isCurrentMonth ? T.subtle : T.khaki, fontSize: 22, padding: '2px 12px' }}
-          >
-            ›
-          </button>
-        ) : <span style={{ width: 40 }} />}
-      </div>
+      {periodNav}
 
       <Card style={{ display: 'flex', gap: 12 }}>
         <Stat label="Spent" value={money(summary.spent)} />
@@ -488,18 +495,21 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
 
       {page === 'where' && (
         <BudgetPage title="Categories" subtitle={`${periodTitle}${filteredAccount ? ` · ${filteredAccount.name}` : ''} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
+          {periodNav}
           <DonutBlock
             segments={summary.categories.map(c => ({ id: c.id, emoji: c.emoji, label: c.label, color: c.color, value: c.total, valueLabel: money(c.total) }))}
             total={summary.spent} totalLabel="Spent"
             onOpen={id => setDetailCat(id)}
             note="Tap a category for its averages and seasons."
           />
-          {!detailCat && <SubBar items={[{ value: 'manage', label: 'Manage categories', onPress: () => setShowCategories(true) }]} />}
+          {!detailCat && <SubBar items={[...RANGES, { value: 'manage', label: 'Manage', onPress: () => setShowCategories(true) }]} value={range} onChange={pickRange} />}
         </BudgetPage>
       )}
 
       {page === 'accounts' && (
         <BudgetPage title="Spent by account" subtitle={`${periodTitle} · ${money(summary.spent)} spent`} onClose={() => setPage(null)}>
+          {periodNav}
+          <SubBar items={RANGES} value={range} onChange={pickRange} />
           <DonutBlock
             segments={perAccount.filter(x => x.spent > 0).sort((a, b) => b.spent - a.spent).map(({ account: a, spent }) => ({
               id: a.id, emoji: ACCOUNT_EMOJI[a.type] || '💳', label: a.name,
@@ -515,6 +525,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
 
       {page === 'months' && (
         <BudgetPage title="Month by month" subtitle={periodTitle + (filteredAccount ? ` · ${filteredAccount.name}` : '')} onClose={() => setPage(null)}>
+          {periodNav}
+          {/* One month has nothing to compare, so only a year or all time here */}
+          <SubBar items={RANGES.filter(r => r.value !== 'month')} value={range} onChange={pickRange} />
           <SpendHighlights
             key={period}
             txs={monthTxs} range={range} year={month.slice(0, 4)} currentYM={todayYM()}
@@ -529,6 +542,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           setListF({ cat: null, acct: null, from: '', to: '' });
           if (listFromCat) { setDetailCat(listFromCat); setListFromCat(null); setPage('where'); } else setPage(null);
         }}>
+          {!customDates && periodNav}
+          {/* Picking a period clears custom dates */}
+          {!detailCat && <SubBar items={RANGES} value={customDates ? null : range} onChange={v => { setListF(f => ({ ...f, from: '', to: '' })); pickRange(v); }} />}
           {/* Filters: category, account, dates */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 14, background: T.card, border: `1px solid ${T.cardBorder}` }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -609,11 +625,12 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         );
       })()}
       {/* Add: instead of typing it in, scan a receipt or move money between accounts */}
-      {editingTx === 'new' && (
+      {/* They open on top of the Add form, so the bar stays on Add and closing them returns to it */}
+      {editingTx === 'new' && !transfer && !receiptFile && (
         <SubBar items={[
-          { value: 'camera', label: '📷 Scan receipt', onPress: () => { setEditingTx(null); cameraRef.current?.click(); } },
-          { value: 'photos', label: '🖼️ From photos', onPress: () => { setEditingTx(null); libraryRef.current?.click(); } },
-          { value: 'transfer', label: '⇄ Transfer', onPress: () => { setEditingTx(null); setTransfer(true); } },
+          { value: 'camera', label: '📷 Scan receipt', onPress: () => cameraRef.current?.click() },
+          { value: 'photos', label: '🖼️ From photos', onPress: () => libraryRef.current?.click() },
+          { value: 'transfer', label: '⇄ Transfer', onPress: () => setTransfer(true) },
         ]} />
       )}
 
@@ -658,7 +675,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           categories={categories}
           defaultAccountId={accountFilter}
           scanReceipt={scanReceipt}
-          onSave={addTx}
+          // A receipt saved from Add finishes the Add too
+          onSave={async data => { const r = await addTx(data); if (editingTx === 'new') setEditingTx(null); return r; }}
           onClose={() => setReceiptFile(null)}
         />
       )}
