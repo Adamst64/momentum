@@ -139,6 +139,8 @@ export default function InvestingTab({ hook, userId, budget }) {
   // Budget cash on any date: running total of every budget entry up to that day
   // (credit cards count as negative, so this is cash minus what's owed)
   const worth = heroMode === 'worth' && hasCash;
+  // Returns: total return (value minus money put in) at each day's close
+  const returnsMode = heroMode === 'ret';
   const cashSteps = useMemo(() => cashTimeline(budget?.accounts || [], budget?.txs || []), [budget?.accounts, budget?.txs]);
   const cashNow = useMemo(() => (budget?.accounts || []).reduce((t, a) => t + (budget.balances[a.id] || 0), 0) / 100, [budget?.accounts, budget?.balances]);
   const cashAt = useCallback(d => {
@@ -205,6 +207,11 @@ export default function InvestingTab({ hook, userId, budget }) {
         { date: nowDate, value: portfolio.value, netDeposits: nd, label: 'Now' },
       ];
     }
+    if (returnsMode) {
+      // Past days use that day's closing prices (fund NAVs included); the last point is now
+      return out.filter(p => typeof p.netDeposits === 'number')
+        .map(p => ({ ...p, value: p.value - p.netDeposits, invested: p.value }));
+    }
     if (!worth) return out;
     // Net worth: each day's investments plus Budget cash that day (no deposits to
     // exclude: money moving between bank and investing stays inside net worth)
@@ -213,7 +220,7 @@ export default function InvestingTab({ hook, userId, budget }) {
       const cash = i === out.length - 1 || p.date >= today ? cashNow : cashAt(p.date);
       return { date: p.date, label: p.label, value: p.value + cash, invested: p.value, cash };
     });
-  }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, txs.length, worth, cashAt, cashNow, intra, intraRange, heldKey]);
+  }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, txs.length, worth, returnsMode, cashAt, cashNow, intra, intraRange, heldKey]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
@@ -300,7 +307,7 @@ export default function InvestingTab({ hook, userId, budget }) {
 
 
   // Headline: the touched chart point, else the current value
-  const headValue = span ? span.to.value : scrub ? scrub.value : worth ? portfolio.value + cashNow : portfolio.value;
+  const headValue = span ? span.to.value : scrub ? scrub.value : worth ? portfolio.value + cashNow : returnsMode ? portfolio.totalGain : portfolio.value;
   // Touching a point: that day's return (vs the day before's last value, or for
   // 1D vs yesterday's close), not counting money added or withdrawn that day
   const scrubDay = (() => {
@@ -434,9 +441,24 @@ export default function InvestingTab({ hook, userId, budget }) {
       {/* Overview: value, period change, chart */}
       {view === 'overview' && <Card style={noSelect}>
 
-        <div style={{ fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
-          {money(headValue, hide)}
+        <div style={{ fontSize: 34, fontWeight: 800, color: returnsMode ? gainColor(headValue) : T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
+          {returnsMode ? signedMoney(headValue, hide) : money(headValue, hide)}
         </div>
+        {returnsMode && (() => {
+          // Total return as of the touched day (or now), and that day's own move
+          const p = scrub || null;
+          const put = p ? p.netDeposits : portfolio.netDeposits;
+          const i = p ? chartPoints.indexOf(p) : -1;
+          const prev = i > 0 ? chartPoints.slice(0, i).reverse().find(x => x.date < p.date) : null;
+          const day = p ? (prev ? p.value - prev.value : null) : portfolio.dayChange;
+          return (
+            <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>
+              Total return{put > 0 ? ` (${pct(headValue / put)} on ${money(put, hide)} put in)` : ''}
+              {' · '}{p ? (p.label || formatDateYear(p.date)) : 'now'}
+              {day !== null && <span style={{ color: gainColor(day) }}> · {signedMoney(day, hide)} {p ? 'that day' : dayContext().word}</span>}
+            </div>
+          );
+        })()}
         {worth && (() => {
           const p = span ? span.to : scrub;
           const inv = p ? p.invested : portfolio.value, cash = p ? p.cash : cashNow;
@@ -447,7 +469,12 @@ export default function InvestingTab({ hook, userId, budget }) {
           );
         })()}
 
-        {span && worth ? (
+        {returnsMode ? (span ? (
+          <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
+            <span style={{ color: gainColor(span.to.value - span.from.value), fontWeight: 700 }}>{signedMoney(span.to.value - span.from.value, hide)}</span> earned
+            {' · '}{formatDateYear(span.from.date)} → {span.to.label || formatDateYear(span.to.date)}
+          </div>
+        ) : null) : span && worth ? (
           <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
             <span style={{ color: gainColor(span.to.value - span.from.value), fontWeight: 700 }}>{signedMoney(span.to.value - span.from.value, hide)}</span>
             {' · '}{formatDateYear(span.from.date)} → {span.to.label || formatDateYear(span.to.date)}
@@ -504,9 +531,9 @@ export default function InvestingTab({ hook, userId, budget }) {
         )}
 
         {/* One line under the chart: vs the S&P 500 (when there's history) and when prices updated */}
-        {(hasAuto || (!worth && bench !== null && ret?.pct != null)) && (
+        {(hasAuto || (!worth && !returnsMode && bench !== null && ret?.pct != null)) && (
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 10, fontSize: 11, color: T.muted }}>
-            {!worth && bench !== null && ret?.pct != null && txs.length > 0 && (
+            {!worth && !returnsMode && bench !== null && ret?.pct != null && txs.length > 0 && (
               <span style={{ flex: 1, minWidth: 0 }}>
                 S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts
               </span>
@@ -520,10 +547,14 @@ export default function InvestingTab({ hook, userId, budget }) {
         )}
       </Card>}
 
-      {view === 'overview' && hasCash && txs.length > 0 && (
+      {view === 'overview' && txs.length > 0 && (
         <SubBar
-          items={[{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }]}
-          value={worth ? 'worth' : 'inv'} onChange={setHeroMode}
+          items={[
+            { value: 'inv', label: 'Investments' },
+            { value: 'ret', label: 'Returns', icon: 'M4 17l6-6 4 4 6-8M15 7h5v5' },
+            ...(hasCash ? [{ value: 'worth', label: 'Net worth' }] : []),
+          ]}
+          value={worth ? 'worth' : returnsMode ? 'ret' : 'inv'} onChange={setHeroMode}
         />
       )}
 
