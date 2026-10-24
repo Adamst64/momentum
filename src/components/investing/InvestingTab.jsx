@@ -83,7 +83,12 @@ const earningsBadge = (date, today) => {
 export default function InvestingTab({ hook, userId, budget }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('overview');
-  const setView = v => { setViewState(v); setOpenAccountId(null); setOpenListId(null); };
+  // Each view opens at its top, not where the last one was scrolled to
+  const setView = v => {
+    setViewState(v); setOpenAccountId(null); setOpenListId(null);
+    window.scrollTo(0, 0);
+    document.querySelector('main')?.scrollTo?.(0, 0);
+  };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
   const [trade, setTrade]     = useState(null);  // { type, symbol }
