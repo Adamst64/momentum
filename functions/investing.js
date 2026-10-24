@@ -391,7 +391,7 @@ const analystStale = a => {
 // ── Company / fund details for the holding screen ───────────────────────────
 // Bump to refetch cached docs after adding fields
 const METRICS_V = 2;
-const ABOUT_V = 3;
+const ABOUT_V = 4;
 
 // Today's open / high / low / volume and the 30-day average volume, from
 // Yahoo's chart endpoint (keyless; also works for ETFs and funds)
@@ -618,10 +618,25 @@ async function fetchAbout(db, sym) {
   if (!y && avKey) av = await (isFund ? avFund(sym, avKey) : avCompany(sym, avKey)).catch(() => null);
   if (!y && !w && !av) throw new Error('No company details');
   const pick = (...v) => v.find(x => x !== null && x !== undefined && x !== '') ?? null;
-  const description = pick(y?.description, w?.description, av?.description);
+  let fund = y?.fund || av?.fund || (isFund ? { holdings: [], sectors: [], mix: [] } : null);
+  if (fund) {
+    fund = { ...fund, legalType: fund.legalType || (meta?.type === 'MUTUALFUND' ? 'Mutual fund' : isFund ? 'Exchange traded fund' : null) };
+    // A sector list that covers under half the fund would mislead
+    if (fund.sectors?.reduce((a, x) => a + x.pct, 0) < 0.5) fund.sectors = [];
+  }
+  let description = pick(y?.description, w?.description, av?.description);
+  let source = !description ? null : description === y?.description ? 'Yahoo Finance' : description === w?.description ? 'Wikipedia' : 'Alpha Vantage';
+  // No write-up anywhere: a short one from the fund's own data
+  if (!description && isFund && meta?.name) {
+    const year = pick(y?.fundInception, av?.fundInception, w?.founded);
+    const top = (fund?.holdings || []).slice(0, 3).map(h => h.name.replace(/\s+(Corp|Corporation|Inc|Ltd|Plc|Co|Adr|Class [A-C])\.?$/gi, '').trim());
+    description = `${meta.name} is ${meta.type === 'MUTUALFUND' ? 'a mutual fund' : 'an exchange-traded fund'}${year ? ` launched in ${year}` : ''}.`
+      + (top.length ? ` Its largest holdings are ${top.length > 1 ? `${top.slice(0, -1).join(', ')} and ${top[top.length - 1]}` : top[0]}.` : '');
+    source = 'fund data';
+  }
   return {
     description,
-    descriptionSource: !description ? null : description === y?.description ? 'Yahoo Finance' : description === w?.description ? 'Wikipedia' : 'Alpha Vantage',
+    descriptionSource: source,
     founded: pick(w?.founded, y?.fundInception, av?.fundInception),
     employees: isFund ? null : pick(y?.employees, w?.employees),
     ceo: isFund ? null : pick(y?.ceo, w?.ceo),
@@ -637,7 +652,7 @@ async function fetchAbout(db, sym) {
     forwardPE: pick(y?.forwardPE, av?.forwardPE),
     sharesOutstanding: pick(y?.sharesOutstanding, av?.sharesOutstanding),
     shortPercentFloat: pick(y?.shortPercentFloat),
-    fund: y?.fund || av?.fund || (isFund ? { holdings: [], sectors: [], mix: [], legalType: meta.type === 'ETF' ? 'Exchange traded fund' : 'Mutual fund' } : null),
+    fund,
     name: meta?.name || null,
     partial: !y && !av,
   };

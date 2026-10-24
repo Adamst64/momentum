@@ -325,7 +325,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <About about={data.about} profile={data.profile} name={data.profile.name} />
+      <About about={data.about} profile={data.profile} name={data.profile.name || data.about?.name} />
       <FundInside fund={a.fund} symbol={symbol} />
 
       {(stats.length > 0 || range !== null) && (
