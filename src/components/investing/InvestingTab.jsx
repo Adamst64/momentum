@@ -18,11 +18,37 @@ const HIDE_KEY = 'momentum_hide_amounts';
 const readHide = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
 const writeHide = v => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } catch { /* storage unavailable */ } };
 
+// The switcher at the bottom of the screen (like Robinhood's)
 const VIEWS = [
-  { value: 'portfolio', label: 'Portfolio' },
-  { value: 'watchlist', label: 'Watchlist' },
-  { value: 'insights',  label: 'Insights' },
+  { value: 'overview',  label: 'Overview',  icon: 'M3 17l5-6 4 3 6-8 3 3' },
+  { value: 'portfolio', label: 'Portfolio', icon: 'M4 7h16M4 12h16M4 17h10' },
+  { value: 'watchlist', label: 'Watchlist', icon: 'M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z' },
+  { value: 'insights',  label: 'Insights',  icon: 'M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3zM9.5 19h5M10.5 21.5h3' },
 ];
+
+function ViewBar({ view, onChange }) {
+  return (
+    <nav style={{
+      position: 'fixed', zIndex: 45, left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 430,
+      background: T.card, borderTop: `1px solid ${T.cardBorder}`,
+      paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex',
+    }}>
+      {VIEWS.map(v => {
+        const on = v.value === view;
+        const color = on ? T.khaki : T.muted;
+        return (
+          <button key={v.value} onClick={() => onChange(v.value)} aria-current={on ? 'page' : undefined}
+            style={{ flex: 1, padding: '9px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d={v.icon} stroke={color} strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontSize: 11, fontWeight: on ? 700 : 500, color }}>{v.label}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
 
 const ADD_ACTIONS = [
   { type: 'buy',      label: 'Buy',           hint: 'Record a purchase, or add shares you already own' },
@@ -56,7 +82,7 @@ const earningsBadge = (date, today) => {
 
 export default function InvestingTab({ hook, userId, budget }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
-  const [view, setViewState] = useState('portfolio');
+  const [view, setViewState] = useState('overview');
   const setView = v => { setViewState(v); setOpenAccountId(null); setOpenListId(null); };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -299,6 +325,7 @@ export default function InvestingTab({ hook, userId, budget }) {
   // Sheets and pop-ups, shared by the main view and an opened account's page
   const overlays = (
     <>
+      <ViewBar view={view} onChange={setView} />
       {adding && (
         <Modal title="Add" onClose={() => setAdding(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -384,37 +411,39 @@ export default function InvestingTab({ hook, userId, budget }) {
         </div>
       )}
 
-      {/* Hero: value, period change, chart */}
-      <Card style={noSelect}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
-            color: status.session === 'open' ? T.green : status.session === 'closed' ? T.muted : T.khaki,
-            background: status.session === 'open' ? 'rgba(48,209,88,0.12)' : T.bg,
-          }}>
-            {status.session === 'open' ? '● ' : ''}{status.label}
-          </span>
-          <span style={{ flex: 1 }} />
-          <button onClick={toggleHide} aria-label={hide ? 'Show amounts' : 'Hide amounts'} style={{ padding: 4, flexShrink: 0 }}>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-              <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke={T.olive} strokeWidth="1.8" />
-              <circle cx="12" cy="12" r="3" stroke={T.olive} strokeWidth="1.8" />
-              {hide && <path d="M4 4l16 16" stroke={T.olive} strokeWidth="1.8" strokeLinecap="round" />}
-            </svg>
-          </button>
-          <button
-            onClick={() => setAdding(true)}
-            aria-label="Add transaction"
-            style={{ width: 32, height: 32, borderRadius: 16, background: T.olive, color: '#fff', fontSize: 22, lineHeight: '30px', flexShrink: 0 }}
-          >+</button>
-        </div>
+      {/* Market status, hide amounts, add — on every view */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{
+          fontSize: 11, fontWeight: 600, padding: '4px 9px', borderRadius: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0,
+          color: status.session === 'open' ? T.green : status.session === 'closed' ? T.muted : T.khaki,
+          background: status.session === 'open' ? 'rgba(48,209,88,0.12)' : T.card,
+        }}>
+          {status.session === 'open' ? '● ' : ''}{status.label}
+        </span>
+        <span style={{ flex: 1 }} />
+        <button onClick={toggleHide} aria-label={hide ? 'Show amounts' : 'Hide amounts'} style={{ padding: 4, flexShrink: 0 }}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z" stroke={T.olive} strokeWidth="1.8" />
+            <circle cx="12" cy="12" r="3" stroke={T.olive} strokeWidth="1.8" />
+            {hide && <path d="M4 4l16 16" stroke={T.olive} strokeWidth="1.8" strokeLinecap="round" />}
+          </svg>
+        </button>
+        <button
+          onClick={() => setAdding(true)}
+          aria-label="Add transaction"
+          style={{ width: 32, height: 32, borderRadius: 16, background: T.olive, color: '#fff', fontSize: 22, lineHeight: '30px', flexShrink: 0 }}
+        >+</button>
+      </div>
+
+      {/* Overview: value, period change, chart */}
+      {view === 'overview' && <Card style={noSelect}>
 
         {hasCash && txs.length > 0 && (
-          <div style={{ marginTop: 10 }}>
+          <div style={{ marginBottom: 10 }}>
             <Chips small options={[{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }]} value={worth ? 'worth' : 'inv'} onChange={setHeroMode} />
           </div>
         )}
-        <div style={{ marginTop: 10, fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
+        <div style={{ fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
           {money(headValue, hide)}
         </div>
         {worth && (() => {
@@ -501,16 +530,14 @@ export default function InvestingTab({ hook, userId, budget }) {
             {updating ? 'Updating prices…' : updateErr ? `${updateErr} · tap to retry` : lastUpdate ? `Prices updated ${ago(lastUpdate)} · ↻` : 'Tap to update prices ↻'}
           </button>
         )}
-      </Card>
+      </Card>}
 
-      {hasCash && (
+      {view === 'overview' && hasCash && (
         <button onClick={() => setTransfer(true)}
           style={{ padding: 11, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
           ⇄ Transfer money
         </button>
       )}
-
-      <Chips options={VIEWS} value={view} onChange={setView} />
 
       {txs.length === 0 && view !== 'watchlist' && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
