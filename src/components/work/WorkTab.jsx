@@ -8,6 +8,7 @@ import WeeklyTexts from './WeeklyTexts';
 import { formatDayFull } from '../../utils/workUtils';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { FULL_PAGE } from '../../utils/pageStyle';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 function pad(n) { return String(n).padStart(2, '0'); }
 function todayStr() {
@@ -45,26 +46,20 @@ export default function WorkTab({ hook, requestedView }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-      {/* Inner tabs */}
-      <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>
-        {[['today', 'Today'], ['calendar', 'Calendar'], ['pay', 'Pay']].map(([v, label]) => (
-          <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, padding: '7px 0', borderRadius: 8,
-            background: view === v ? T.card : 'transparent',
-            color: view === v ? T.text : T.muted,
-            fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
-          }}>{label}</button>
-        ))}
-      </div>
+      {/* Today · Calendar · Pay along the bottom; Crews opens its page */}
+      <TabBar
+        items={[
+          { value: 'today', label: 'Today', icon: ICONS.today },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
+          { value: 'pay', label: 'Pay', icon: ICONS.money },
+          { value: 'crews', label: 'Crews', icon: ICONS.people, onPress: () => setShowCrewMgr(true) },
+        ]}
+        value={view} onChange={v => { setView(v); scrollToTop(); }}
+      />
 
       {view === 'today' && (
         <>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 14, color: T.muted }}>{formatDayFull(today)}</span>
-            <button onClick={() => setShowCrewMgr(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>
-              Manage Crews
-            </button>
-          </div>
+          <span style={{ fontSize: 14, color: T.muted }}>{formatDayFull(today)}</span>
           <WorkDayForm
             dateStr={today}
             initial={dayMap[today] || null}
@@ -77,14 +72,7 @@ export default function WorkTab({ hook, requestedView }) {
       )}
 
       {view === 'calendar' && (
-        <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button onClick={() => setShowCrewMgr(true)} style={{ fontSize: 13, color: T.oliveLight, fontWeight: 600 }}>
-              Manage Crews
-            </button>
-          </div>
-          <WorkCalendar days={days} weeks={weeks} crews={crews} onSelectDay={handleCalendarSelect} />
-        </>
+        <WorkCalendar days={days} weeks={weeks} crews={crews} onSelectDay={handleCalendarSelect} />
       )}
 
       {view === 'pay' && (
@@ -103,7 +91,7 @@ export default function WorkTab({ hook, requestedView }) {
 
       {/* Day sheet (opened from calendar) */}
       {showDaySheet && selectedDay && (
-        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 90, background: '#000000AA' }} onClick={() => setShowDaySheet(false)}>
+        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 100, background: '#000000AA' }} onClick={() => setShowDaySheet(false)}>
           <div
             style={{ position: 'absolute', bottom: 0, left: 0, right: 0, maxWidth: 430, margin: '0 auto', background: T.bg, borderRadius: '20px 20px 0 0', padding: '20px 20px 0', maxHeight: 'calc(var(--vv-height, 100vh) * 0.9)', overflowY: 'auto', paddingBottom: 'env(safe-area-inset-bottom)', ...FULL_PAGE }}
             onClick={e => e.stopPropagation()}
