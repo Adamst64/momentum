@@ -100,7 +100,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         ) : points === null ? (
           <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, color: T.muted }}>Loading chart…</div>
         ) : (
-          <ValueChart points={pts} hide={hide} onScrub={setScrub} onRange={setSpan} refs={refs} markers={markers} trades={allDots} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
+          <ValueChart points={pts} hide={hide} onScrub={setScrub} onRange={setSpan} refs={pts[0]?.prev ? [{ value: pts[0].value, label: 'Prev close', color: T.muted }, ...(refs || [])] : refs} markers={markers} trades={allDots} selectedTrade={tradeId} onTradeTap={setTradeId} emptyText="No price history for this symbol." />
         )}
       </div>
       {trade?.type === 'note' && (

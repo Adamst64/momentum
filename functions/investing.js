@@ -903,6 +903,33 @@ const HISTORY_RANGES = {
   i1d: ['1d', '5m'], i5d: ['5d', '15m'], i1m: ['1mo', '60m'],
 };
 
+// Pre-market and after-hours trades are thin, and a single odd trade (a few
+// shares far from the market) shows up as a needle on the chart. Robinhood
+// filters these; drop an extended-hours point that jumps away from both
+// neighbours by over 1% while they stay close to each other.
+function dropSpikes(points) {
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = points.length - 1; i >= 0; i--) {
+      const p = points[i];
+      if (!p.ext) continue;
+      const prev = points[i - 1]?.value, next = points[i + 1]?.value;
+      const ref = prev && next ? (prev + next) / 2 : prev || next;
+      if (!ref) continue;
+      const jump = Math.abs(p.value - ref) / ref;
+      const calm = prev && next ? Math.abs(prev - next) / ref < jump / 3 : true;
+      if (jump > 0.01 && calm) { points.splice(i, 1); continue; }
+      // Two odd trades in a row: both away from the prices around them, which agree
+      const q = points[i - 1], before = points[i - 2]?.value;
+      if (q?.ext && before && next) {
+        const base = (before + next) / 2;
+        const away = v => (v - base) / base;
+        if (Math.abs(before - next) / base < 0.004 && Math.abs(away(p.value)) > 0.01 && Math.abs(away(q.value)) > 0.01
+          && Math.sign(away(p.value)) === Math.sign(away(q.value))) { points.splice(i - 1, 2); i--; }
+      }
+    }
+  }
+}
+
 async function priceHistory(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const sym = String(request.data?.symbol || '').trim().toUpperCase();
@@ -941,8 +968,23 @@ async function priceHistory(db, request) {
     if (points.length && points[points.length - 1].date === date) points[points.length - 1].value = value;
     else points.push({ date, value });
   }
-  // 1D starts from yesterday's close, so the change matches the day's move
-  const prevClose = r?.meta?.chartPreviousClose ?? r?.meta?.previousClose;
+  if (prePost) dropSpikes(points);
+  // 1D starts from yesterday's official close (4 PM), so the change matches the
+  // day's move. The chart's own "previous close" can be the last after-hours
+  // trade, so take it from the daily candles: the last one before today.
+  let prevClose = null;
+  if (range === 'i1d' && points.length) {
+    try {
+      const dres = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=10d`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      const dr = dres.ok ? (await dres.json())?.chart?.result?.[0] : null;
+      const dts = dr?.timestamp || [], dcl = dr?.indicators?.quote?.[0]?.close || [];
+      for (let i = dts.length - 1; i >= 0; i--) {
+        if (dcl[i] > 0 && easternNow(new Date(dts[i] * 1000)).today < points[0].date) { prevClose = dcl[i]; break; }
+      }
+    } catch { /* fall back below */ }
+    if (!prevClose) prevClose = r?.meta?.previousClose ?? r?.meta?.chartPreviousClose;
+  }
   if (range === 'i1d' && points.length && prevClose > 0) {
     points.unshift({ date: points[0].date, t: points[0].t - 1, value: Math.round(prevClose * 1e4) / 1e4, label: 'Previous close', prev: true });
   }

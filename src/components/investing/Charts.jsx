@@ -68,7 +68,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     );
   }
 
-  const W = 340, H = 200, PAD = 4;
+  const W = 340, H = 260, PAD = 4;
   const vals = points.map(p => p.value);
   const refVals = refs.filter(r => r.value > 0).map(r => r.value);
   // Trades inside the chart's dates, each placed on its day (or the next point)
@@ -93,7 +93,6 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const x = i => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = v => PAD + (1 - (v - min) / span) * (H - PAD * 2);
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
-  const area = `${line} L${x(points.length - 1)},${H} L${x(0)},${H} Z`;
   const up = vals[vals.length - 1] >= vals[0];
   const color = up ? T.oliveLight : T.red;
 
@@ -212,7 +211,6 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
         role="img"
         aria-label={`Portfolio value from ${money(vals[0], hide)} to ${money(vals[vals.length - 1], hide)}`}
       >
-        <path d={area} fill={color} opacity={0.12} />
         {refs.filter(r => r.value > 0).map(r => {
           if (!near(r.value)) {
             // Off the chart: a label at the edge, pointing where it is (stacked when several)
