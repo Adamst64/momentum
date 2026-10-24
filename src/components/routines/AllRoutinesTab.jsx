@@ -248,7 +248,7 @@ export default function AllRoutinesTab({ hook }) {
   };
 
   return (
-    <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
       {/* Header row: sub-tabs + Add button */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>

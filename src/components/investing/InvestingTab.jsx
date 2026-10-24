@@ -5,6 +5,7 @@ import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -20,35 +21,11 @@ const writeHide = v => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } 
 
 // The switcher at the bottom of the screen (like Robinhood's)
 const VIEWS = [
-  { value: 'overview',  label: 'Overview',  icon: 'M3 17l5-6 4 3 6-8 3 3' },
-  { value: 'portfolio', label: 'Portfolio', icon: 'M4 7h16M4 12h16M4 17h10' },
-  { value: 'watchlist', label: 'Watchlist', icon: 'M12 3.5l2.6 5.3 5.9.9-4.2 4.1 1 5.8-5.3-2.8-5.3 2.8 1-5.8-4.2-4.1 5.9-.9z' },
-  { value: 'insights',  label: 'Insights',  icon: 'M12 3a6 6 0 00-3.5 10.9V16h7v-2.1A6 6 0 0012 3zM9.5 19h5M10.5 21.5h3' },
+  { value: 'overview',  label: 'Overview',  icon: ICONS.chart },
+  { value: 'portfolio', label: 'Portfolio', icon: ICONS.list },
+  { value: 'watchlist', label: 'Watchlist', icon: ICONS.star },
+  { value: 'insights',  label: 'Insights',  icon: ICONS.bulb },
 ];
-
-function ViewBar({ view, onChange }) {
-  return (
-    <nav style={{
-      position: 'fixed', zIndex: 45, left: 0, right: 0, bottom: 0, margin: '0 auto', maxWidth: 430,
-      background: T.card, borderTop: `1px solid ${T.cardBorder}`,
-      paddingBottom: 'env(safe-area-inset-bottom)', display: 'flex',
-    }}>
-      {VIEWS.map(v => {
-        const on = v.value === view;
-        const color = on ? T.khaki : T.muted;
-        return (
-          <button key={v.value} onClick={() => onChange(v.value)} aria-current={on ? 'page' : undefined}
-            style={{ flex: 1, padding: '9px 0 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-              <path d={v.icon} stroke={color} strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <span style={{ fontSize: 11, fontWeight: on ? 700 : 500, color }}>{v.label}</span>
-          </button>
-        );
-      })}
-    </nav>
-  );
-}
 
 const ADD_ACTIONS = [
   { type: 'buy',      label: 'Buy',           hint: 'Record a purchase, or add shares you already own' },
@@ -86,8 +63,7 @@ export default function InvestingTab({ hook, userId, budget }) {
   // Each view opens at its top, not where the last one was scrolled to
   const setView = v => {
     setViewState(v); setOpenAccountId(null); setOpenListId(null);
-    window.scrollTo(0, 0);
-    document.querySelector('main')?.scrollTo?.(0, 0);
+    scrollToTop();
   };
   const [period, setPeriod]   = useState('ALL');
   const [hide, setHide]       = useState(readHide);
@@ -331,7 +307,7 @@ export default function InvestingTab({ hook, userId, budget }) {
   // Sheets and pop-ups, shared by the main view and an opened account's page
   const overlays = (
     <>
-      <ViewBar view={view} onChange={setView} />
+      <TabBar items={VIEWS} value={view} onChange={setView} />
       {adding && (
         <Modal title="Add" onClose={() => setAdding(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

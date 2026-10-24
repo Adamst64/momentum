@@ -370,7 +370,7 @@ export default function App() {
       <main style={{
         paddingTop: 20,
         // Room for the floating menu button on section pages
-        paddingBottom: tab === 'home' ? 'calc(env(safe-area-inset-bottom) + 12px)' : `calc(env(safe-area-inset-bottom) + ${tab === 'investing' ? 160 : 96}px)`,
+        paddingBottom: tab === 'home' ? 'calc(env(safe-area-inset-bottom) + 12px)' : 'calc(env(safe-area-inset-bottom) + 96px + var(--tabbar-h, 0px))',
         overflowY: 'auto',
       }}>
         {tab === 'home'      && <HomeMenu tabs={visibleTabs} onOpen={setTab} />}
@@ -439,8 +439,8 @@ export default function App() {
           aria-label="Main menu"
           style={{
             position: 'fixed', zIndex: 46,
-            // Investing has its own bar along the bottom: sit just above it
-            right: 'max(20px, calc(50vw - 195px))', bottom: `calc(env(safe-area-inset-bottom) + ${tab === 'investing' ? 76 : 24}px)`,
+            // Above a section's switcher bar when it has one (see TabBar)
+            right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 18px)',
             width: 58, height: 58, borderRadius: 29,
             background: T.card, border: `1px solid ${T.subtle}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',

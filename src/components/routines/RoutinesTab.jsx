@@ -12,7 +12,7 @@ import UndoToast from '../UndoToast';
 import CommitmentsTab from './CommitmentsTab';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
-import { useBackHandler } from '../../hooks/useBackHandler';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
@@ -26,16 +26,16 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
     return dayRatio(dateStr);
   };
 
-  const [subTab, setSubTab]                   = useState('routines');
+  // Today · Calendar · All routines · Commitments, switched from the bar at the bottom
+  const [view, setViewState]                  = useState('today');
+  const setView = v => { setViewState(v); scrollToTop(); };
   const [showCreate, setShowCreate]           = useState(false);
   const [editing, setEditing]                 = useState(null);
   const [selectedDay, setSelectedDay]         = useState(null);
-  const [showAllRoutines, setShowAllRoutines] = useState(false);
   const [calendarRoutineId, setCalendarRoutineId] = useState(null);
   const calendarRoutine = routines.find(r => r.id === calendarRoutineId) ?? null;
   const [pendingDelete, setPendingDelete]     = useState(null);
   const [undoState, setUndoState]             = useState(null);
-  useBackHandler(showAllRoutines, () => setShowAllRoutines(false));
 
   const today = todayStr();
   const stats = todayStats();
@@ -85,29 +85,31 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      {/* Sub-tab switcher */}
-      <div style={{
-        display: 'flex', gap: 4, background: T.card,
-        border: `1px solid ${T.cardBorder}`, borderRadius: 12, padding: 4,
-      }}>
-        {[['routines', 'Routines'], ['commitments', 'Commitments']].map(([id, label]) => (
-          <button
-            key={id}
-            type="button"
-            onClick={() => setSubTab(id)}
-            style={{
-              flex: 1, padding: '8px 0', borderRadius: 8, fontSize: 13, fontWeight: 600,
-              background: subTab === id ? T.olive : 'transparent',
-              color: subTab === id ? '#fff' : T.muted,
-              transition: 'background 0.15s, color 0.15s',
-            }}
-          >{label}</button>
-        ))}
-      </div>
+      <TabBar
+        items={[
+          { value: 'today', label: 'Today', icon: ICONS.check },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
+          { value: 'all', label: 'All routines', icon: ICONS.list },
+          { value: 'commitments', label: 'Commitments', icon: ICONS.handshake },
+        ]}
+        value={view} onChange={setView}
+      />
 
-      {subTab === 'commitments' && <CommitmentsTab hook={commitmentsHook} />}
+      {view === 'commitments' && <CommitmentsTab hook={commitmentsHook} />}
 
-      {subTab === 'routines' && <>
+      {view === 'all' && <AllRoutinesTab hook={hook} />}
+
+      {view === 'calendar' && (
+        <div>
+          <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+            Monthly overview
+          </div>
+          <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
+          <div style={{ fontSize: 12, color: T.muted, marginTop: 10 }}>Tap a day to see or fix what you did (up to a week back).</div>
+        </div>
+      )}
+
+      {view === 'today' && <>
 
       {/* Today's progress */}
       <div style={{
@@ -162,29 +164,6 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
         Tap a name for its history · hold for Edit / Delete
       </div>
 
-      {/* All Routines nav */}
-      <button
-        type="button"
-        onClick={() => setShowAllRoutines(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '13px 16px', borderRadius: 12,
-          background: T.card, border: `1px solid ${T.cardBorder}`,
-          color: T.text, fontSize: 14, fontWeight: 500,
-        }}
-      >
-        <span>All Routines</span>
-        <span style={{ color: T.muted, fontSize: 18 }}>›</span>
-      </button>
-
-      {/* Monthly calendar */}
-      <div>
-        <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-          Monthly Overview
-        </div>
-        <MonthlyCalendar dayRatio={calendarDayRatio} onDayClick={setSelectedDay} minEditableDate={addDays(today, -6)} />
-      </div>
-
       {/* Space so the add button never covers the last row */}
       <div style={{ height: 60 }} />
 
@@ -194,7 +173,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
         aria-label="Add routine"
         style={{
           position: 'fixed', zIndex: 45,
-          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + 96px)', // above the main menu button
+          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 90px)', // above the main menu button
           width: 58, height: 58, borderRadius: 29, background: T.olive,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
@@ -204,22 +183,6 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
       </button>
 
       </>}
-
-      {/* All Routines overlay */}
-      {showAllRoutines && (
-        <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 60, background: T.bg, display: 'flex', flexDirection: 'column' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
-            padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
-            borderBottom: `1px solid ${T.cardBorder}`,
-          }}>
-            <span style={{ fontSize: 17, fontWeight: 700, color: T.text }}>All Routines</span>
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', paddingTop: 16, paddingBottom: `calc(env(safe-area-inset-bottom) + 16px)` }}>
-            <AllRoutinesTab hook={hook} />
-          </div>
-        </div>
-      )}
 
       {selectedDay && (
         <DayDetailModal

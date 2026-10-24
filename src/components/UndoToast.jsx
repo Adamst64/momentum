@@ -11,7 +11,7 @@ export default function UndoToast({ message, onUndo, onDismiss }) {
   return ReactDOM.createPortal(
     <div style={{
       position: 'fixed',
-      bottom: 'calc(env(safe-area-inset-bottom) + 96px)', // above the main menu button
+      bottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 90px)', // above the main menu button
       left: 16, right: 16, zIndex: 300,
       background: '#2C2C2E', borderRadius: 12,
       padding: '12px 16px',
