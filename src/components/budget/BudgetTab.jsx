@@ -20,6 +20,7 @@ import TransferSheet from '../TransferSheet';
 import Modal from '../Modal';
 import SortableList, { DragHandle } from '../SortableList';
 import InvestTransferSheet from './InvestTransferSheet';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 const ACCOUNT_EMOJI = { cash: '💵', debit: '💳', credit: '💳', savings: '🏦' };
@@ -302,8 +303,25 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
     );
   }
 
+  // Overview · Categories · Transactions along the bottom, plus Add
+  const goTo = v => {
+    setDetailCat(null); setListFromCat(null);
+    if (v === 'list') setListF({ cat: null, acct: null, from: '', to: '' });
+    setPage(v === 'overview' ? null : v);
+    scrollToTop();
+  };
+
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <TabBar
+        items={[
+          { value: 'overview', label: 'Overview', icon: ICONS.home },
+          { value: 'where', label: 'Categories', icon: ICONS.pie },
+          { value: 'list', label: 'Transactions', icon: ICONS.receipt },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14', onPress: () => setEditingTx('new') },
+        ]}
+        value={page || 'overview'} onChange={goTo}
+      />
       {filteredAccount ? (() => {
         const a = filteredAccount;
         const bal = balances[a.id] || 0;
@@ -393,17 +411,11 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
 
       <div style={{ display: 'flex', gap: 8 }}>
         <button
-          onClick={() => setEditingTx('new')}
-          style={{ flex: 1, padding: 14, borderRadius: 14, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}
-        >
-          + Add transaction
-        </button>
-        <button
           onClick={() => setScanMenu(v => !v)}
           aria-label="Scan a receipt"
-          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${scanMenu ? T.olive : T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+          style={{ flex: 1, padding: '14px 14px', borderRadius: 14, border: `1px solid ${scanMenu ? T.olive : T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
         >
-          📷
+          📷 Scan receipt
         </button>
         {/* Two inputs: one opens the camera, the other the photo library */}
         <input
@@ -416,7 +428,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         />
         <button
           onClick={() => setTransfer(true)}
-          style={{ padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
+          style={{ flex: 1, padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
         >
           ⇄ Transfer
         </button>

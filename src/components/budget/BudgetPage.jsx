@@ -21,7 +21,7 @@ export default function BudgetPage({ title, subtitle, onClose, children }) {
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 16px calc(env(safe-area-inset-bottom) + 32px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 16px calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 32px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {children}
         </div>
       </div>
