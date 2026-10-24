@@ -83,7 +83,6 @@ export default function MoneySheet({ account, mode, accounts, balances, categori
           inputMode="decimal"
           placeholder="0.00"
           aria-label="Amount"
-          autoFocus
           style={{ ...inputStyle, fontSize: 28, fontWeight: 700, padding: '12px 14px', color: mode === 'in' ? T.green : T.text }}
         />
 

@@ -35,7 +35,6 @@ function NameSheet({ initial = '', initialDays = null, title, onSave, onClose, s
         <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>{title}</div>
 
         <input
-          autoFocus
           value={name}
           onChange={e => setName(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') save(); }}

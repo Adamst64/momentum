@@ -125,7 +125,6 @@ export default function CreateRoutineModal({ initial, onSave, onClose }) {
           placeholder="Routine name"
           value={name}
           onChange={e => setName(e.target.value)}
-          autoFocus
         />
 
         <div>

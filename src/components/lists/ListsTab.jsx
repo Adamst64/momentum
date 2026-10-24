@@ -277,7 +277,6 @@ function CreateListModal({ onCreate, onClose, defaultColor }) {
           onChange={e => setName(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleCreate()}
           placeholder={kind === 'try' ? 'e.g. Movies to watch' : 'e.g. Weekend trip packing'}
-          autoFocus
           style={inputStyle}
         />
         {Object.entries(KINDS).map(([key, k]) => {

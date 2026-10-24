@@ -35,7 +35,6 @@ export default function AccountForm({ initial, txCount, onSave, onDelete, onClos
             value={name}
             onChange={e => setName(e.target.value)}
             placeholder="e.g. Cash, Chase debit"
-            autoFocus={!initial}
             style={inputStyle}
           />
         </Field>

@@ -20,11 +20,24 @@ function useKeyboardUp() {
     const vv = window.visualViewport;
     if (!vv) return undefined;
     const typing = () => { const el = document.activeElement; return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable); };
-    const update = () => setKb(typing() && window.innerHeight - vv.height > 120);
+    // On iPhone window.innerHeight shrinks with the keyboard too, so compare with
+    // the tallest the visible area has been (reset when the phone is turned)
+    let full = Math.max(vv.height, document.documentElement.clientHeight);
+    const update = () => {
+      if (!typing()) full = Math.max(vv.height, document.documentElement.clientHeight);
+      setKb(typing() && full - vv.height > 120);
+    };
+    const turned = () => { full = 0; setTimeout(update, 300); };
     vv.addEventListener('resize', update);
     vv.addEventListener('scroll', update);
+    document.addEventListener('focusin', update);
     document.addEventListener('focusout', update);
-    return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); document.removeEventListener('focusout', update); };
+    window.addEventListener('orientationchange', turned);
+    return () => {
+      vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update);
+      document.removeEventListener('focusin', update); document.removeEventListener('focusout', update);
+      window.removeEventListener('orientationchange', turned);
+    };
   }, []);
   return kb;
 }

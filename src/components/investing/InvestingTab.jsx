@@ -863,7 +863,7 @@ function TargetModal({ label, initial, onSave, onClose }) {
   return (
     <Modal title={`Target for ${label}`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <input value={v} onChange={e => setV(e.target.value)} inputMode="decimal" placeholder="% of portfolio, e.g. 25" autoFocus style={inputStyle} />
+        <input value={v} onChange={e => setV(e.target.value)} inputMode="decimal" placeholder="% of portfolio, e.g. 25" style={inputStyle} />
         {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => save(null)} style={{ flex: 1, padding: 12, borderRadius: 12, background: T.subtle, color: T.text, fontSize: 14 }}>Clear</button>

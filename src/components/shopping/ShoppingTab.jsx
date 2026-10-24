@@ -381,7 +381,6 @@ export default function ShoppingTab({ hook, userId }) {
                 }
               }}
               placeholder="List name"
-              autoFocus
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: 10, marginBottom: 12,
                 background: T.bg, border: `1px solid ${T.cardBorder}`, color: T.text,

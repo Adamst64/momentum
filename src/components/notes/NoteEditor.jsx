@@ -49,7 +49,6 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
           onChange={e => setTitle(e.target.value)}
           placeholder="Name, e.g. Window measurements"
           aria-label="Note name"
-          autoFocus={!initial}
           style={{
             padding: '12px 14px', borderRadius: 10,
             background: T.bg, border: `1px solid ${T.cardBorder}`,

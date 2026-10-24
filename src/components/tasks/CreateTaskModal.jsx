@@ -65,7 +65,6 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
           placeholder="Task name"
           value={name}
           onChange={e => setName(e.target.value)}
-          autoFocus
         />
 
         {/* Type — locked in edit mode */}

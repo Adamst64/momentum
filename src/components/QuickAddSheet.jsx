@@ -124,7 +124,6 @@ function OneLineAdd({ targets, initialTarget, onTargetChange, emptyText, placeho
         onChange={e => setText(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && handleAdd()}
         placeholder={placeholder}
-        autoFocus
         style={inputStyle}
       />
       {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
