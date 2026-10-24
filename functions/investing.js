@@ -391,7 +391,7 @@ const analystStale = a => {
 // ── Company / fund details for the holding screen ───────────────────────────
 // Bump to refetch cached docs after adding fields
 const METRICS_V = 2;
-const ABOUT_V = 1;
+const ABOUT_V = 2;
 
 // Today's open / high / low / volume and the 30-day average volume, from
 // Yahoo's chart endpoint (keyless; also works for ETFs and funds)
@@ -418,7 +418,7 @@ async function yahooDayStats(sym) {
 // expense ratio, net assets, fund family and category
 async function yahooAbout(sym) {
   const s = await getYahooSession();
-  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}?modules=assetProfile,summaryProfile,fundProfile,summaryDetail,defaultKeyStatistics,price&crumb=${encodeURIComponent(s.crumb)}`;
+  const url = `https://query2.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(sym)}?modules=assetProfile,summaryProfile,fundProfile,summaryDetail,defaultKeyStatistics,price,topHoldings,fundPerformance&crumb=${encodeURIComponent(s.crumb)}`;
   const res = await fetch(url, { headers: { ...s.UA, Cookie: s.cookie } });
   if (res.status === 401 || res.status === 403) { yahooSession = null; throw new Error(`Yahoo ${res.status}`); }
   if (!res.ok) throw new Error(`Yahoo ${res.status}`);
@@ -445,6 +445,44 @@ async function yahooAbout(sym) {
     forwardPE: raw(d.forwardPE) ?? raw(k.forwardPE) ?? null,
     sharesOutstanding: raw(k.sharesOutstanding) ?? null,
     shortPercentFloat: raw(k.shortPercentOfFloat) ?? null, // fraction
+    fund: fundDetails(r),
+  };
+}
+
+// What's inside an ETF or mutual fund (null for stocks): top holdings, sector and
+// asset mix, yield and returns. Percentages are fractions (0.07 = 7%).
+const SECTOR_NAMES = {
+  realestate: 'Real estate', consumer_cyclical: 'Consumer cyclical', basic_materials: 'Basic materials',
+  consumer_defensive: 'Consumer defensive', technology: 'Technology', communication_services: 'Communication',
+  financial_services: 'Financials', utilities: 'Utilities', industrials: 'Industrials', energy: 'Energy', healthcare: 'Healthcare',
+};
+function fundDetails(r) {
+  const type = r.price?.quoteType;
+  const t = r.topHoldings;
+  if (!t && type !== 'ETF' && type !== 'MUTUALFUND') return null;
+  const k = r.defaultKeyStatistics || {};
+  const d = r.summaryDetail || {};
+  const fees = r.fundProfile?.feesExpensesInvestment || {};
+  const perf = r.fundPerformance?.trailingReturns || {};
+  const holdings = (t?.holdings || []).map(h => ({ symbol: h.symbol || null, name: h.holdingName || h.symbol || '', pct: raw(h.holdingPercent) }))
+    .filter(h => h.name && h.pct > 0).slice(0, 10);
+  const sectors = (t?.sectorWeightings || []).map(o => { const [key, v] = Object.entries(o)[0] || []; return { name: SECTOR_NAMES[key] || key, pct: raw(v) }; })
+    .filter(x => x.name && x.pct > 0.0005).sort((a, b) => b.pct - a.pct);
+  const mix = [['Stocks', raw(t?.stockPosition)], ['Bonds', raw(t?.bondPosition)], ['Cash', raw(t?.cashPosition)], ['Other', raw(t?.otherPosition)]]
+    .map(([name, pct]) => ({ name, pct })).filter(x => x.pct > 0.0005);
+  const eq = t?.equityHoldings || {};
+  return {
+    holdings, sectors, mix,
+    topTenPct: holdings.length ? holdings.reduce((a, h) => a + h.pct, 0) : null,
+    yield: raw(d.yield) ?? raw(d.trailingAnnualDividendYield) ?? null,
+    ytdReturn: raw(k.ytdReturn) ?? raw(perf.ytd) ?? null,
+    return1y: raw(perf.oneYear) ?? null,
+    return3y: raw(k.threeYearAverageReturn) ?? raw(perf.threeYear) ?? null,
+    return5y: raw(k.fiveYearAverageReturn) ?? raw(perf.fiveYear) ?? null,
+    turnover: raw(fees.annualHoldingsTurnover) ?? null,
+    beta3y: raw(k.beta3Year) ?? null,
+    pe: raw(eq.priceToEarnings) ?? null,
+    legalType: k.legalType || null,
   };
 }
 
@@ -506,6 +544,7 @@ async function fetchAbout(sym) {
     forwardPE: pick(y?.forwardPE),
     sharesOutstanding: pick(y?.sharesOutstanding),
     shortPercentFloat: pick(y?.shortPercentFloat),
+    fund: y?.fund || null,
     partial: !y,
   };
 }

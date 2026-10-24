@@ -33,13 +33,12 @@ function About({ about, profile, name }) {
     ['CEO', a.ceo],
     ['Employees', a.employees ? a.employees.toLocaleString('en-US') : null],
     ['Headquarters', a.hq],
-    ['Founded', a.founded],
+    [a.fund ? 'Launched' : 'Founded', a.founded],
     ['Sector', a.sector],
     ['Industry', a.industry || profile.industry],
     ['Fund family', a.fundFamily],
     ['Category', a.category],
-    ['Expense ratio', a.expenseRatio != null ? `${(a.expenseRatio * 100).toFixed(2)}%` : null],
-    ['Net assets', a.netAssets ? `$${bigNum(a.netAssets)}` : null],
+    ['Type', a.fund?.legalType],
   ].filter(([, v]) => v != null && v !== '');
   const website = [a.website, profile.weburl].find(u => /^https?:\/\//.test(u || ''));
   if (!a.description && !facts.length && !website) return null;
@@ -79,6 +78,71 @@ function About({ about, profile, name }) {
         {a.wikiUrl && <a href={a.wikiUrl} target="_blank" rel="noopener noreferrer" style={{ color: T.khaki }}>Wikipedia ↗</a>}
         {a.descriptionSource && <span style={{ color: T.muted, marginLeft: 'auto' }}>From {a.descriptionSource}</span>}
       </div>
+    </div>
+  );
+}
+
+// Fund look-through: top holdings, sectors and stock/bond/cash mix
+const pct1 = v => `${(v * 100).toFixed(v >= 0.1 ? 1 : 2)}%`;
+function Bars({ rows, color }) {
+  const max = Math.max(...rows.map(r => r.pct));
+  return rows.map(r => (
+    <div key={r.key || r.name} style={{ padding: '6px 0' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, fontSize: 13 }}>
+        {r.symbol && <span style={{ fontWeight: 700, color: T.text, minWidth: 44 }}>{r.symbol}</span>}
+        <span style={{ flex: 1, minWidth: 0, color: r.symbol ? T.muted : T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
+        <span style={{ color: T.text, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{pct1(r.pct)}</span>
+      </div>
+      <div style={{ height: 4, borderRadius: 2, background: T.subtle, marginTop: 4 }}>
+        <div style={{ width: `${Math.max(2, (r.pct / max) * 100)}%`, height: '100%', borderRadius: 2, background: color }} />
+      </div>
+    </div>
+  ));
+}
+
+const MIX_COLORS = { Stocks: '#7BC96F', Bonds: '#5AC8FA', Cash: '#FFD60A', Other: '#8E8E93' };
+
+function FundInside({ fund, symbol }) {
+  const [allSectors, setAllSectors] = useState(false);
+  if (!fund || (!fund.holdings.length && !fund.sectors.length && !fund.mix.length)) return null;
+  const sectors = allSectors ? fund.sectors : fund.sectors.slice(0, 5);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {fund.mix.length > 0 && (
+        <div>
+          <SectionTitle>What {symbol} holds</SectionTitle>
+          <div style={{ display: 'flex', height: 10, borderRadius: 5, overflow: 'hidden', gap: 2 }}>
+            {fund.mix.map(m => <div key={m.name} style={{ flex: m.pct, background: MIX_COLORS[m.name] }} />)}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', fontSize: 12, color: T.muted, marginTop: 6 }}>
+            {fund.mix.map(m => (
+              <span key={m.name}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 4, background: MIX_COLORS[m.name], marginRight: 5 }} />{m.name} <b style={{ color: T.text }}>{pct1(m.pct)}</b></span>
+            ))}
+          </div>
+        </div>
+      )}
+      {fund.holdings.length > 0 && (
+        <div>
+          <SectionTitle>Top {fund.holdings.length} holdings</SectionTitle>
+          {fund.topTenPct != null && (
+            <div style={{ fontSize: 12, color: T.muted, marginTop: -4, marginBottom: 4 }}>
+              Together {pct1(fund.topTenPct)} of the fund
+            </div>
+          )}
+          <Bars rows={fund.holdings.map(h => ({ ...h, key: h.symbol || h.name }))} color={T.khaki} />
+        </div>
+      )}
+      {fund.sectors.length > 0 && (
+        <div>
+          <SectionTitle>Sectors</SectionTitle>
+          <Bars rows={sectors} color="#5AC8FA" />
+          {fund.sectors.length > 5 && (
+            <button onClick={() => setAllSectors(v => !v)} style={{ fontSize: 13, color: T.khaki, fontWeight: 600, marginTop: 4 }}>
+              {allSectors ? 'Show fewer' : `All ${fund.sectors.length} sectors`}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -215,6 +279,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
   const m = data.metrics || {};
   const a = data.about || {};
   const d = data.day || {};
+  const f = a.fund || {};
   const range = m.high52 && m.low52 && price ? Math.min(1, Math.max(0, (price - m.low52) / (m.high52 - m.low52))) : null;
   const usd = v => (v == null ? null : money(v, hide));
   const stats = [
@@ -240,6 +305,16 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
     ['ROE', pctOf(m.roe, 1)],
     ['Shares out.', bigNum(a.sharesOutstanding)],
     ['Short % float', a.shortPercentFloat != null ? `${(a.shortPercentFloat * 100).toFixed(2)}%` : null],
+    // Funds
+    ['Expense ratio', a.expenseRatio != null ? `${(a.expenseRatio * 100).toFixed(2)}%` : null],
+    ['Net assets', a.netAssets ? `$${bigNum(a.netAssets)}` : null],
+    ['Yield', f.yield != null ? pctOf(f.yield * 100) : null],
+    ['YTD return', f.ytdReturn != null ? pctOf(f.ytdReturn * 100, 1) : null],
+    ['3-yr avg return', f.return3y != null ? pctOf(f.return3y * 100, 1) : null],
+    ['5-yr avg return', f.return5y != null ? pctOf(f.return5y * 100, 1) : null],
+    ['P/E of holdings', fix(f.pe)],
+    ['Turnover', f.turnover != null ? pctOf(f.turnover * 100, 0) : null],
+    ['Beta (3 yr)', fix(f.beta3y)],
   ].filter(([, v]) => v != null);
   const stat = (label, value) => (
     <div key={label} style={{ background: T.bg, borderRadius: 10, padding: '8px 10px', minWidth: 0 }}>
@@ -251,6 +326,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <About about={data.about} profile={data.profile} name={data.profile.name} />
+      <FundInside fund={a.fund} symbol={symbol} />
 
       {(stats.length > 0 || range !== null) && (
         <div>
@@ -276,7 +352,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
 
       {data.analyst && <AnalystTargets a={data.analyst} price={price} hide={hide} />}
 
-      <div>
+      {!(a.fund && !data.nextEarnings && !data.earningsHistory.length) && <div>
         <SectionTitle>Earnings</SectionTitle>
         <div style={{ fontSize: 13, color: T.text, marginBottom: 8 }}>
           {data.nextEarnings
@@ -299,7 +375,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
             </div>
           );
         })}
-      </div>
+      </div>}
 
     </div>
   );
