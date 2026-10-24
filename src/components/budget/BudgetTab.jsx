@@ -326,7 +326,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         const a = filteredAccount;
         const bal = balances[a.id] || 0;
         const credit = a.type === 'credit';
-        const pill = { padding: '8px 14px', borderRadius: 18, fontSize: 13, fontWeight: 600, border: `1px solid ${T.cardBorder}`, background: T.card };
         return (
           <>
             <div style={{ marginTop: -6 }}>
@@ -337,11 +336,13 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
                 {credit && <span style={{ fontSize: 15, fontWeight: 600, color: T.muted }}> {bal < 0 ? 'owed' : bal > 0 ? 'credit' : ''}</span>}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button onClick={() => setMoneyMode('in')} style={{ ...pill, color: T.green }}>{credit ? 'Pay off' : '+ Add money'}</button>
-              <button onClick={() => setMoneyMode('out')} style={{ ...pill, color: T.khaki }}>− Take out</button>
-              <button onClick={() => setEditingAcct(a)} style={{ ...pill, color: T.muted }}>Edit account</button>
-            </div>
+            {!page && editingTx !== 'new' && (
+              <SubBar items={[
+                { value: 'in', label: credit ? 'Pay off' : '+ Add money', onPress: () => setMoneyMode('in') },
+                { value: 'out', label: '− Take out', onPress: () => setMoneyMode('out') },
+                { value: 'edit', label: 'Edit account', onPress: () => setEditingAcct(a) },
+              ]} />
+            )}
             {(a.type === 'debit' || a.type === 'savings') && (
               <AccountExtras account={a} workEnabled={workEnabled} workLinkedElsewhere={accounts.some(x => x.workLink?.since && x.id !== a.id)} categories={categories} onLinkWork={linkWork} onSetRecurring={setRecurring} />
             )}
@@ -409,14 +410,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         </>
       )}
 
-      {/* Scan a receipt (camera or photo library) and transfer, in the sub-bar */}
-      {!page && (
-        <SubBar items={[
-          { value: 'camera', label: '📷 Camera', onPress: () => cameraRef.current?.click() },
-          { value: 'photos', label: '🖼️ Photos', onPress: () => libraryRef.current?.click() },
-          { value: 'transfer', label: '⇄ Transfer', onPress: () => setTransfer(true) },
-        ]} />
-      )}
+      {/* Receipt photos (picked from Add's sub-bar) */}
       <input
         ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
@@ -610,6 +604,14 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           />
         );
       })()}
+      {/* Add: instead of typing it in, scan a receipt or move money between accounts */}
+      {editingTx === 'new' && (
+        <SubBar items={[
+          { value: 'camera', label: '📷 Scan receipt', onPress: () => { setEditingTx(null); cameraRef.current?.click(); } },
+          { value: 'photos', label: '🖼️ From photos', onPress: () => { setEditingTx(null); libraryRef.current?.click(); } },
+          { value: 'transfer', label: '⇄ Transfer', onPress: () => { setEditingTx(null); setTransfer(true); } },
+        ]} />
+      )}
 
       {moneyMode && filteredAccount && (
         <MoneySheet

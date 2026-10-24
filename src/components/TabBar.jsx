@@ -119,11 +119,36 @@ function KeepOrClear({ onKeep, onClear, onCancel }) {
 // items: [{ value, label, onPress? }]
 export const SUBBAR_H = 44;
 
+// Only the newest sub-bar shows (an Add form's over the page it was opened from)
+const subStack = [];
+const subListeners = new Set();
+const subChanged = () => {
+  const s = document.documentElement.style;
+  if (subStack.length) s.setProperty('--subbar-h', `${SUBBAR_H}px`); else s.removeProperty('--subbar-h');
+  subListeners.forEach(fn => fn(subStack[subStack.length - 1]));
+};
+function useTopSubBar() {
+  const [id] = useState(() => Symbol('subbar'));
+  const [top, setTop] = useState(null);
+  useEffect(() => {
+    subListeners.add(setTop);
+    subStack.push(id);
+    subChanged();
+    return () => {
+      subListeners.delete(setTop);
+      subStack.splice(subStack.indexOf(id), 1);
+      subChanged();
+    };
+  }, [id]);
+  return top === id;
+}
+
 export function SubBar({ items, value, onChange }) {
   // Acts within the open view, so unlike the main bar it doesn't close anything first
   const press = v => (v.onPress ? v.onPress() : onChange(v.value));
   const kb = useKeyboardUp();
-  useCssVar('--subbar-h', `${SUBBAR_H}px`);
+  const shown = useTopSubBar();
+  if (!shown) return null;
   return (
     <div style={{
       position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430, height: SUBBAR_H, boxSizing: 'border-box',
