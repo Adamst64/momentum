@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { parseDate } from '../../utils/dateUtils';
@@ -20,6 +21,7 @@ const SAVE_DELAY = 800;
 // Full-screen note: the text is edited in place and saved as you type;
 // name, date and colour live behind the Edit button (NoteEditor)
 export default function NoteViewer({ note: n, onSaveText, onEdit, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   const [text, setText]     = useState(n.text || '');
   const [status, setStatus] = useState(null); // null | 'saving' | 'error'
   const saved = useRef(n.text || '');

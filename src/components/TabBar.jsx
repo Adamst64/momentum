@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../theme';
 import { closeAll } from '../hooks/useBackHandler';
@@ -119,29 +119,37 @@ function KeepOrClear({ onKeep, onClear, onCancel }) {
 // items: [{ value, label, onPress? }]
 export const SUBBAR_H = 48;
 
-// Only the newest sub-bar shows (an Add form's over the page it was opened from)
-const subStack = [];
+// Only the newest sub-bar shows (an Add form's over the page it was opened from).
+// A page or form opened on top hides the sub-bar of what's underneath
+// (useSubBarBlock); its own sub-bar, if it has one, shows instead.
+const subStack = []; // { id, bar: true } for a sub-bar, { id, bar: false } for a page on top
 const subListeners = new Set();
 const subChanged = () => {
+  const top = subStack[subStack.length - 1];
   const s = document.documentElement.style;
-  if (subStack.length) s.setProperty('--subbar-h', `${SUBBAR_H}px`); else s.removeProperty('--subbar-h');
-  subListeners.forEach(fn => fn(subStack[subStack.length - 1]));
+  if (top?.bar) s.setProperty('--subbar-h', `${SUBBAR_H}px`); else s.removeProperty('--subbar-h');
+  subListeners.forEach(fn => fn(top?.id));
 };
-function useTopSubBar() {
-  const [id] = useState(() => Symbol('subbar'));
+function useSubLayer(bar, useMountEffect) {
+  const [id] = useState(() => Symbol(bar ? 'subbar' : 'page'));
   const [top, setTop] = useState(null);
-  useEffect(() => {
+  useMountEffect(() => {
+    const entry = { id, bar };
     subListeners.add(setTop);
-    subStack.push(id);
+    subStack.push(entry);
     subChanged();
     return () => {
       subListeners.delete(setTop);
-      subStack.splice(subStack.indexOf(id), 1);
+      subStack.splice(subStack.indexOf(entry), 1);
       subChanged();
     };
   }, [id]);
   return top === id;
 }
+const useTopSubBar = () => useSubLayer(true, useEffect);
+// For full pages and forms (Modal, BudgetPage, custom sheets). Registers before
+// the page's own sub-bar does (layout effects run first), so that one stays on top.
+export function useSubBarBlock() { useSubLayer(false, useLayoutEffect); }
 
 // Icons for sub-bar buttons, picked from the label (an item can pass its own icon)
 const SUB_ICONS = [
@@ -151,7 +159,8 @@ const SUB_ICONS = [
   [/^\+|add|new|set up/, 'M12 5v14M5 12h14'],
   [/reset/, 'M4 4v6h6M5.5 15a7 7 0 1 0 1.6-7.3L4 10'],
   [/manage/, 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4'],
-  [/edit/, 'M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4'],
+  [/edit|rename/, 'M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4'],
+  [/delete|remove/, 'M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3'],
   [/scan|camera/, 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 100-7 3.5 3.5 0 000 7z'],
   [/photo/, 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01'],
   [/transfer/, 'M4 8h14l-3-3M20 16H6l3 3'],

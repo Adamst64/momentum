@@ -1,9 +1,11 @@
 import React from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 export default function DeleteRoutineSheet({ routine, onKeepHistory, onDeleteAll, onCancel }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onCancel);
   return ReactDOM.createPortal(
     <div

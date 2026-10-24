@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
@@ -21,6 +22,7 @@ function formatEntry(ym, dateStr) {
 }
 
 export default function MonthlyTaskHistoryModal({ task, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const entries = Object.entries(task.completedOccurrences || {})
     .filter(([, v]) => !!v)

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { TAG_COLORS } from '../../hooks/useShoppingLists';
@@ -6,6 +7,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { FULL_PAGE } from '../../utils/pageStyle';
 
 export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [selected, setSelected] = useState(new Set(selectedIds));
   const [editingTagId, setEditingTagId] = useState(null);

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, todayStr, formatMonthYear, formatShortDate, DAYS_SHORT, addDays } from '../../utils/dateUtils';
@@ -10,6 +11,7 @@ import { SlipSheet, ConfirmSheet } from './CommitmentSheets';
 function pad(n) { return String(n).padStart(2, '0'); }
 
 export default function CommitmentCalendarModal({ commitment, onMarkSlip, onClearSlip, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const today           = todayStr();
   const minEditableDate = addDays(today, -6);

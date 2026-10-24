@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { getDaysInMonth, getFirstDOW, getDOW, toDateStr, todayStr, parseDate, formatMonthYear, formatShortDate, DAYS_SHORT, DAYS_FULL } from '../../utils/dateUtils';
@@ -123,6 +124,7 @@ function computeInsights(routine, today) {
 }
 
 export default function RoutineCalendarModal({ routine, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const today       = todayStr();
   const todayDate   = parseDate(today);

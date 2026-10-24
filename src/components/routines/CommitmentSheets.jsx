@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { SLIP_REASONS, streakLabel } from '../../utils/commitments';
@@ -6,6 +7,7 @@ import { FULL_PAGE } from '../../utils/pageStyle';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 function Sheet({ onClose, children }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 200, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useLongPress } from '../../hooks/useLongPress';
@@ -7,6 +8,7 @@ import { FULL_PAGE } from '../../utils/pageStyle';
 import { useBackHandler } from '../../hooks/useBackHandler';
 
 function RescheduleSheet({ task, onReschedule, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [date, setDate] = useState(todayStr());
   return ReactDOM.createPortal(

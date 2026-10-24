@@ -1,13 +1,8 @@
 import React, { useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
-import { Chips } from '../investing/ui';
+import { SubBar } from '../TabBar';
 import CategoryForm from './CategoryForm';
-
-const KINDS = [
-  { value: 'expense', label: 'Expenses' },
-  { value: 'income',  label: 'Income' },
-];
 
 // Every category, to rename, re-emoji, recolor, delete or add to
 export default function CategoriesSheet({ categories, txs, onAdd, onUpdate, onRemove, onClose }) {
@@ -19,7 +14,15 @@ export default function CategoriesSheet({ categories, txs, onAdd, onUpdate, onRe
   return (
     <Modal title="Categories" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <Chips options={KINDS} value={kind} onChange={setKind} />
+        {/* Expenses · Income · New, in the sub-bar (no scrolling to the bottom to add one) */}
+        <SubBar
+          items={[
+            { value: 'expense', label: 'Expenses', icon: 'M12 4v16M6 14l6 6 6-6' },
+            { value: 'income', label: 'Income', icon: 'M12 20V4M6 10l6-6 6 6' },
+            { value: 'new', label: `New ${kind === 'income' ? 'income' : 'expense'}`, icon: 'M12 5v14M5 12h14', onPress: () => setEditing('new') },
+          ]}
+          value={kind} onChange={setKind}
+        />
 
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           {shown.map(c => (
@@ -42,13 +45,6 @@ export default function CategoriesSheet({ categories, txs, onAdd, onUpdate, onRe
             </button>
           ))}
         </div>
-
-        <button
-          onClick={() => setEditing('new')}
-          style={{ padding: 13, borderRadius: 12, border: `1px dashed ${T.subtle}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
-        >
-          + New {kind === 'income' ? 'income' : 'expense'} category
-        </button>
       </div>
 
       {editing && (

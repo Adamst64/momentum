@@ -740,6 +740,17 @@ function AccountsModal({ hook, onClose }) {
   return (
     <Modal title="Accounts" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {/* New account first, so it's never below a long list */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            value={newName} onChange={e => setNewName(e.target.value)} placeholder="New account, e.g. Vanguard 401k" style={{ ...inputStyle, flex: 1 }}
+            onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) run(async () => { await addAccount(newName); setNewName(''); }); }}
+          />
+          <button
+            onClick={() => newName.trim() && run(async () => { await addAccount(newName); setNewName(''); })}
+            style={{ padding: '0 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
+          >Add</button>
+        </div>
         {accounts.map(a => {
           const n = txs.filter(t => t.account === a.id && !isLegacyCash(t)).length;
           return (
@@ -755,16 +766,6 @@ function AccountsModal({ hook, onClose }) {
             </div>
           );
         })}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            value={newName} onChange={e => setNewName(e.target.value)} placeholder="New account, e.g. Vanguard 401k" style={{ ...inputStyle, flex: 1 }}
-            onKeyDown={e => { if (e.key === 'Enter' && newName.trim()) run(async () => { await addAccount(newName); setNewName(''); }); }}
-          />
-          <button
-            onClick={() => newName.trim() && run(async () => { await addAccount(newName); setNewName(''); })}
-            style={{ padding: '0 14px', borderRadius: 10, background: T.olive, color: '#fff', fontSize: 14 }}
-          >Add</button>
-        </div>
         {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
 
         {unassigned > 0 && (
@@ -1215,20 +1216,16 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ flex: 1 }} />
-        {!isLoose && <button onClick={() => { setNewName(list.name); setRenaming(r => !r); }} style={{ fontSize: 13, color: T.khaki }}>Rename</button>}
-        {!isLoose && (
-          <button
-            onClick={() => setAsking({
-              title: `Delete “${list.name}”?`,
-              message: `The list is removed. Its ${rows.length} stock${rows.length !== 1 ? 's stay' : ' stays'} on your watchlist${rows.length ? ' (under “Not in a list” unless in another list)' : ''}.`,
-              action: async () => { await deleteWatchList(listId); onBack(); },
-            })}
-            style={{ fontSize: 13, color: T.red, marginLeft: 8 }}
-          >Delete</button>
-        )}
-      </div>
+      {!isLoose && (
+        <SubBar items={[
+          { value: 'rename', label: renaming ? 'Cancel rename' : 'Rename', onPress: () => { setNewName(list.name); setRenaming(r => !r); } },
+          { value: 'delete', label: 'Delete list', icon: 'M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3', onPress: () => setAsking({
+            title: `Delete “${list.name}”?`,
+            message: `The list is removed. Its ${rows.length} stock${rows.length !== 1 ? 's stay' : ' stays'} on your watchlist${rows.length ? ' (under “Not in a list” unless in another list)' : ''}.`,
+            action: async () => { await deleteWatchList(listId); onBack(); },
+          }) },
+        ]} />
+      )}
 
       <Card>
         {renaming ? (

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { SubBar } from '../TabBar';
+import { SubBar, useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { todayStr, DAYS_SHORT } from '../../utils/dateUtils';
@@ -14,6 +14,7 @@ const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 const WEEK_ORDER = [1, 2, 3, 4, 5, 6, 0]; // Mon first
 
 function NameSheet({ initial = '', initialDays = null, title, onSave, onClose, showLastFailed = false }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [name, setName]             = useState(initial);
   const [lastFailed, setLastFailed] = useState('');

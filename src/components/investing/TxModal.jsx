@@ -4,7 +4,7 @@ import { T } from '../../theme';
 import { toDateStr, formatDateYear } from '../../utils/dateUtils';
 import { validateTx, money, qtyFmt, accountHoldings } from '../../utils/investing';
 import { genId } from '../../utils/id';
-import { Field, Chips, PrimaryButton, inputStyle } from './ui';
+import { Field, Chips, PrimaryButton, inputStyle, StickyFooter } from './ui';
 import SymbolInput from './SymbolInput';
 
 const TYPES = [
@@ -344,11 +344,12 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
 
         {check?.errors.map(msg => <div key={msg} style={{ fontSize: 13, color: T.red }}>{msg}</div>)}
 
-        {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
-
-        <PrimaryButton disabled={blocked || busy} onClick={handleSave}>
-          {busy ? 'Saving…' : 'Save'}
-        </PrimaryButton>
+        <StickyFooter>
+          {error && <div style={{ fontSize: 13, color: T.red, marginBottom: 8 }}>{error}</div>}
+          <PrimaryButton disabled={blocked || busy} onClick={handleSave}>
+            {busy ? 'Saving…' : 'Save'}
+          </PrimaryButton>
+        </StickyFooter>
       </div>
     </Modal>
   );

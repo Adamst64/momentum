@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
@@ -7,6 +8,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 // The round back button (top left) or swiping in from the left edge goes back. Sits below sheets (Modal is 100),
 // so editing an entry from here opens on top of it.
 export default function BudgetPage({ title, subtitle, onClose, children }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   return ReactDOM.createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 90, background: T.bg, display: 'flex', flexDirection: 'column' }}>

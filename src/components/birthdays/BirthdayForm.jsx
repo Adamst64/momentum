@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
@@ -9,6 +10,7 @@ const MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct',
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 export default function BirthdayForm({ initial, onSave, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   // A new birthday keeps what's typed as a draft when you switch away (see utils/drafts)
   const dk = name => (initial ? null : `birthday-add.${name}`);

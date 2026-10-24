@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from './TabBar';
 import ReactDOM from 'react-dom';
 import { collection, getDocs, getDoc, doc, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -12,6 +13,7 @@ import { FULL_PAGE } from '../utils/pageStyle';
 
 
 export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork, notes, personalLists, dailyReview, onSaveDailyReview, userId }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [pwOpen, setPwOpen]         = useState(false);
   const [currentPw, setCurrentPw]   = useState('');

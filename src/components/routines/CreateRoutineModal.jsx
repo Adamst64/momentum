@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { StickyFooter } from '../investing/ui';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { DAYS_SHORT, DAYS_FULL, getDOW, todayStr, addDays, formatShortDate } from '../../utils/dateUtils';
@@ -308,19 +309,21 @@ export default function CreateRoutineModal({ initial, onSave, onClose }) {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={save}
-          style={{
-            width: '100%', padding: 14, borderRadius: 12,
-            background: name.trim() && days.length ? T.olive : T.subtle,
-            color: name.trim() && days.length ? '#fff' : T.muted,
-            fontSize: 16, fontWeight: 600,
-            transition: 'background 0.2s',
-          }}
-        >
-          {initial ? 'Save Changes' : 'Add Routine'}
-        </button>
+        <StickyFooter>
+          <button
+            type="button"
+            onClick={save}
+            style={{
+              width: '100%', padding: 14, borderRadius: 12,
+              background: name.trim() && days.length ? T.olive : T.subtle,
+              color: name.trim() && days.length ? '#fff' : T.muted,
+              fontSize: 16, fontWeight: 600,
+              transition: 'background 0.2s',
+            }}
+          >
+            {initial ? 'Save Changes' : 'Add Routine'}
+          </button>
+        </StickyFooter>
       </div>
     </Modal>
   );

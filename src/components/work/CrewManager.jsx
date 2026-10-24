@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SubBar, useSubBarBlock } from '../TabBar';
 import { T } from '../../theme';
 import { CREW_COLORS } from '../../utils/workUtils';
 import SortableList, { DragHandle } from '../SortableList';
@@ -125,8 +126,10 @@ function MemberList({ members, onDelete, onReorder }) {
 }
 
 export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, onUpdateCrewColor, onUpdateCrewPhone, onAddMember, onDeleteMember, onReorderCrews, onReorderMembers, onClose }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const nextCrewColor = CREW_COLORS[crews.length % CREW_COLORS.length];
+  const [tab, setTab] = useState('crews');
 
   return (
     <div style={{ position: 'fixed', left: 0, right: 0, top: 'var(--vv-top, 0px)', height: 'var(--vv-height, 100%)', zIndex: 100, background: '#000000AA' }} onClick={onClose}>
@@ -141,17 +144,25 @@ export default function CrewManager({ crews, members, onAddCrew, onDeleteCrew, o
           </span>
         </div>
 
-        <div style={{ marginBottom: 24 }}>
-          <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Crews</div>
-          <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} onUpdatePhone={onUpdateCrewPhone} onReorder={onReorderCrews} />
-          <AddInput placeholder="Crew name…" onAdd={onAddCrew} nextColor={nextCrewColor} />
-        </div>
-
-        <div style={{ marginBottom: 32 }}>
-          <div style={{ fontSize: 12, color: T.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.6 }}>Members</div>
-          <MemberList members={members} onDelete={onDeleteMember} onReorder={onReorderMembers} />
-          <AddInput placeholder="Member name…" onAdd={onAddMember} />
-        </div>
+        {/* Crews · Members in the sub-bar; each list's add box is at its top */}
+        <SubBar
+          items={[
+            { value: 'crews', label: `Crews (${crews.length})`, icon: 'M3 10l9-6 9 6M5 10v8M10 10v8M14 10v8M19 10v8M3 20h18' },
+            { value: 'members', label: `Members (${members.length})`, icon: 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 6.5M18 14a5.5 5.5 0 013.5 6' },
+          ]}
+          value={tab} onChange={setTab}
+        />
+        {tab === 'crews' ? (
+          <div style={{ marginBottom: 24 }}>
+            <AddInput placeholder="New crew name…" onAdd={onAddCrew} nextColor={nextCrewColor} />
+            <CrewList crews={crews} onDelete={onDeleteCrew} onUpdateColor={onUpdateCrewColor} onUpdatePhone={onUpdateCrewPhone} onReorder={onReorderCrews} />
+          </div>
+        ) : (
+          <div style={{ marginBottom: 24 }}>
+            <AddInput placeholder="New member name…" onAdd={onAddMember} />
+            <MemberList members={members} onDelete={onDeleteMember} onReorder={onReorderMembers} />
+          </div>
+        )}
       </div>
     </div>
   );

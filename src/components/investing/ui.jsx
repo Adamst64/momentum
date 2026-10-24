@@ -112,3 +112,20 @@ export function ConfirmDialog({ title, message, confirmLabel = 'Delete', onConfi
     </Modal>
   );
 }
+
+// A page's main button (Save…) that stays pinned at the bottom while the form
+// above it scrolls, so it never has to be scrolled to.
+// PAGE_BOTTOM: the page's bottom padding (under its content, above the bars)
+const PAGE_BOTTOM = '(20px + env(safe-area-inset-bottom) + var(--bars-h, 0px))';
+export function StickyFooter({ children }) {
+  return (
+    <div style={{
+      // Sticks into that padding and fills it, so nothing shows between it and the bars
+      position: 'sticky', bottom: `calc(-1 * ${PAGE_BOTTOM})`, zIndex: 2, display: 'flex', flexDirection: 'column',
+      background: T.card, padding: `10px 0 calc(${PAGE_BOTTOM} + 4px)`, marginTop: 4,
+      boxShadow: `0 -10px 12px -6px ${T.card}`,
+    }}>
+      {children}
+    </div>
+  );
+}

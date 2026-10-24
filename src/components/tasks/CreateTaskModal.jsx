@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { StickyFooter } from '../investing/ui';
 import { useDraft } from '../../utils/drafts';
 import Modal from '../Modal';
 import { T } from '../../theme';
@@ -189,18 +190,20 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={save}
-          style={{
-            width: '100%', padding: 14, borderRadius: 12,
-            background: valid ? T.olive : T.subtle,
-            color: valid ? '#fff' : T.muted,
-            fontSize: 16, fontWeight: 600, transition: 'background 0.2s',
-          }}
-        >
-          {isEdit ? 'Save Changes' : 'Add Task'}
-        </button>
+        <StickyFooter>
+          <button
+            type="button"
+            onClick={save}
+            style={{
+              width: '100%', padding: 14, borderRadius: 12,
+              background: valid ? T.olive : T.subtle,
+              color: valid ? '#fff' : T.muted,
+              fontSize: 16, fontWeight: 600, transition: 'background 0.2s',
+            }}
+          >
+            {isEdit ? 'Save Changes' : 'Add Task'}
+          </button>
+        </StickyFooter>
       </div>
     </Modal>
   );

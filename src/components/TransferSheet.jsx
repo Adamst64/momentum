@@ -5,7 +5,7 @@ import { todayStr } from '../utils/dateUtils';
 import { money as cents$, parseAmount } from '../utils/budget';
 import { validateTx, accountHoldings, money as usd } from '../utils/investing';
 import { genId } from '../utils/id';
-import { inputStyle, Field, Chips, PrimaryButton } from './investing/ui';
+import { inputStyle, Field, Chips, PrimaryButton, StickyFooter } from './investing/ui';
 
 const MODES = [
   { value: 'in',   label: 'Bank → Investing' },
@@ -153,7 +153,11 @@ export default function TransferSheet({ investing, budget, onClose }) {
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
         {mode !== 'bank' && invAccts.length === 0 && <div style={{ fontSize: 13, color: T.muted }}>Add an investing account first.</div>}
 
-        <PrimaryButton onClick={save} disabled={!ready || busy}>{busy ? 'Saving…' : 'Transfer'}</PrimaryButton>
+        <StickyFooter>
+
+          <PrimaryButton onClick={save} disabled={!ready || busy}>{busy ? 'Saving…' : 'Transfer'}</PrimaryButton>
+
+        </StickyFooter>
         <div style={{ fontSize: 11, color: T.muted, lineHeight: 1.4 }}>
           {mode === 'bank' ? "Moves money between your accounts; it isn't spending or income."
             : 'Saved in both Budget and Investing. Money moved in or out isn\'t counted as an investment gain or loss.'}

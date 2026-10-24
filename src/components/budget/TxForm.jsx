@@ -6,7 +6,7 @@ import { T } from '../../theme';
 import { todayStr, parseDate } from '../../utils/dateUtils';
 import { parseAmount, centsToInput, money, refundedTotal, GROCERY_GROUPS, lookupGroup } from '../../utils/budget';
 import RefundSheet, { RefundPanel } from './RefundPanel';
-import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog } from '../investing/ui';
+import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog, StickyFooter } from '../investing/ui';
 import CategoryForm from './CategoryForm';
 import ReceiptItems, { itemsToRows, rowsToItems, parseSigned } from './ReceiptItems';
 
@@ -275,10 +275,6 @@ export default function TxForm({
           </div>
         )}
 
-        {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
-
-        <PrimaryButton onClick={save} disabled={!canSave}>{saving ? 'Saving…' : 'Save'}</PrimaryButton>
-
         {initial && onDelete && (
           <button
             onClick={() => setConfirmDelete(true)}
@@ -287,6 +283,11 @@ export default function TxForm({
             Delete transaction
           </button>
         )}
+
+        <StickyFooter>
+          {error && <div style={{ fontSize: 13, color: T.red, marginBottom: 8 }}>{error}</div>}
+          <PrimaryButton onClick={save} disabled={!canSave}>{saving ? 'Saving…' : 'Save'}</PrimaryButton>
+        </StickyFooter>
       </div>
 
       {refunding && (

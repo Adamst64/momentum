@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useSubBarBlock } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { FULL_PAGE } from '../../utils/pageStyle';
 
 export default function ShareSheet({ list, userId, onClose, onJoin, onLeaveOrDelete, onRegenerate, onRename }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [joinCode, setJoinCode]   = useState('');
   const [joining, setJoining]     = useState(false);

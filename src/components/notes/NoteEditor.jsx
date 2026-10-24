@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { StickyFooter } from '../investing/ui';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import TintPicker from '../TintPicker';
@@ -85,17 +86,19 @@ export default function NoteEditor({ initial, onSave, onDelete, onClose }) {
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
 
-        <button
-          onClick={handleSave}
-          disabled={(!text.trim() && !title.trim()) || saving}
-          style={{
-            padding: 13, borderRadius: 12,
-            background: text.trim() || title.trim() ? T.olive : T.subtle,
-            color: '#fff', fontSize: 15, fontWeight: 600,
-          }}
-        >
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+        <StickyFooter>
+          <button
+            onClick={handleSave}
+            disabled={(!text.trim() && !title.trim()) || saving}
+            style={{
+              padding: 13, borderRadius: 12,
+              background: text.trim() || title.trim() ? T.olive : T.subtle,
+              color: '#fff', fontSize: 15, fontWeight: 600,
+            }}
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </StickyFooter>
 
         {initial && onDelete && (
           <button

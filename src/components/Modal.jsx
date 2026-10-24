@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSubBarBlock } from './TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../theme';
 import { useBackHandler } from '../hooks/useBackHandler';
@@ -10,6 +11,7 @@ let openSheets = 0;
 // Every screen opened this way is a whole page (back with the round button or a
 // swipe). full={false}: a small sheet at the bottom, only for quick confirmations.
 export default function Modal({ title, onClose, children, full = true }) {
+  useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [kbHeight, setKbHeight] = useState(0);
 

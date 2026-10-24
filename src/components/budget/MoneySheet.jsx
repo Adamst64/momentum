@@ -3,7 +3,7 @@ import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr } from '../../utils/dateUtils';
 import { parseAmount, money, centsToInput, BALANCE_CATEGORY } from '../../utils/budget';
-import { inputStyle, Field, PrimaryButton } from '../investing/ui';
+import { inputStyle, Field, PrimaryButton, StickyFooter } from '../investing/ui';
 
 function Option({ on, emoji, label, sub, onClick }) {
   return (
@@ -134,7 +134,9 @@ export default function MoneySheet({ account, mode, accounts, balances, categori
         </Field>
 
         {error && <div style={{ fontSize: 13, color: T.red }}>{error}</div>}
-        <PrimaryButton onClick={save} disabled={!canSave}>{saving ? 'Saving…' : 'Save'}</PrimaryButton>
+        <StickyFooter>
+          <PrimaryButton onClick={save} disabled={!canSave}>{saving ? 'Saving…' : 'Save'}</PrimaryButton>
+        </StickyFooter>
       </div>
     </Modal>
   );
