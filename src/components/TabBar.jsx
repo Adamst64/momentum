@@ -13,11 +13,8 @@ import { hasUnsaved, keepDrafts } from '../utils/drafts';
 // items: [{ value, label, icon (SVG path, 24×24), onPress? }]
 export const TABBAR_H = 58;
 
-export default function TabBar({ items, value, onChange }) {
-  const [asking, setAsking] = useState(null); // the item waiting on "keep or discard?"
-  const go = v => { closeAll(); if (v.onPress) v.onPress(); else onChange(v.value); };
-  const press = v => (hasUnsaved() ? setAsking(v) : go(v));
-  // While the keyboard is up, ride on top of it instead of hiding behind it
+// Is the on-screen keyboard up? (the bars ride on top of it instead of hiding behind it)
+function useKeyboardUp() {
   const [kb, setKb] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
@@ -29,11 +26,32 @@ export default function TabBar({ items, value, onChange }) {
     document.addEventListener('focusout', update);
     return () => { vv.removeEventListener('resize', update); vv.removeEventListener('scroll', update); document.removeEventListener('focusout', update); };
   }, []);
+  return kb;
+}
+
+// Sets a CSS variable while mounted (the bars' heights, see --bars-h in index.css)
+function useCssVar(name, value) {
   useEffect(() => {
     const s = document.documentElement.style;
-    s.setProperty('--tabbar-h', `${TABBAR_H}px`);
-    return () => s.removeProperty('--tabbar-h');
-  }, []);
+    s.setProperty(name, value);
+    return () => s.removeProperty(name);
+  }, [name, value]);
+}
+
+// A tap on a bar: close what's open, then switch or act. With an unsaved Add
+// form open it first asks to keep it as a draft or clear it.
+function useBarPress(onChange) {
+  const [asking, setAsking] = useState(null);
+  const go = v => { closeAll(); if (v.onPress) v.onPress(); else onChange(v.value); };
+  const press = v => (hasUnsaved() ? setAsking(v) : go(v));
+  const dialog = asking && <KeepOrClear onKeep={() => { setAsking(null); keepDrafts(); go(asking); }} onClear={() => { setAsking(null); go(asking); }} onCancel={() => setAsking(null)} />;
+  return [press, dialog];
+}
+
+export default function TabBar({ items, value, onChange }) {
+  const [press, dialog] = useBarPress(onChange);
+  const kb = useKeyboardUp();
+  useCssVar('--tabbar-h', `${TABBAR_H}px`);
   return (
     <>
     <nav style={{
@@ -57,24 +75,66 @@ export default function TabBar({ items, value, onChange }) {
         );
       })}
     </nav>
-    {asking && ReactDOM.createPortal(
-      <div onClick={() => setAsking(null)} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
-        <div onClick={e => e.stopPropagation()} style={{
-          width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: T.card, borderRadius: '20px 20px 0 0',
-          padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10,
-        }}>
-          <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Unsaved entry</div>
-          <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.4 }}>You started filling this in. Keep it as a draft for when you come back, or clear it?</div>
-          <button onClick={() => { const v = asking; setAsking(null); keepDrafts(); go(v); }}
-            style={{ padding: 13, borderRadius: 12, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}>Keep draft</button>
-          <button onClick={() => { const v = asking; setAsking(null); go(v); }}
-            style={{ padding: 13, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.red, fontSize: 15, fontWeight: 600 }}>Clear it</button>
-          <button onClick={() => setAsking(null)} style={{ padding: 10, color: T.muted, fontSize: 14 }}>Cancel</button>
-        </div>
-      </div>,
-      document.body,
-    )}
+    {dialog}
     </>
+  );
+}
+
+// "Keep draft or clear it?" when leaving an unsaved Add form
+function KeepOrClear({ onKeep, onClear, onCancel }) {
+  return ReactDOM.createPortal(
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: T.card, borderRadius: '20px 20px 0 0',
+        padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10,
+      }}>
+        <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Unsaved entry</div>
+        <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.4 }}>You started filling this in. Keep it as a draft for when you come back, or clear it?</div>
+        <button onClick={onKeep}
+          style={{ padding: 13, borderRadius: 12, background: T.olive, color: '#fff', fontSize: 15, fontWeight: 600 }}>Keep draft</button>
+        <button onClick={onClear}
+          style={{ padding: 13, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.red, fontSize: 15, fontWeight: 600 }}>Clear it</button>
+        <button onClick={onCancel} style={{ padding: 10, color: T.muted, fontSize: 14 }}>Cancel</button>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// A second, smaller row of switches right above the main bar, for the view
+// that's open (e.g. Routines → All routines: Active · Paused · Add).
+// items: [{ value, label, onPress? }]
+export const SUBBAR_H = 44;
+
+export function SubBar({ items, value, onChange }) {
+  // Acts within the open view, so unlike the main bar it doesn't close anything first
+  const press = v => (v.onPress ? v.onPress() : onChange(v.value));
+  const kb = useKeyboardUp();
+  useCssVar('--subbar-h', `${SUBBAR_H}px`);
+  return (
+    <div style={{
+      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430, height: SUBBAR_H, boxSizing: 'border-box',
+      ...(kb
+        ? { top: `calc(var(--vv-top, 0px) + var(--vv-height, 100vh) - ${TABBAR_H + SUBBAR_H}px)` }
+        : { bottom: `calc(env(safe-area-inset-bottom) + ${TABBAR_H}px)` }),
+      background: T.bg, borderTop: `1px solid ${T.cardBorder}`,
+      display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
+    }}>
+      {items.map(v => {
+        const on = !v.onPress && v.value === value;
+        return (
+          <button key={v.value} onClick={() => press(v)} aria-current={on ? 'true' : undefined}
+            style={{
+              flex: 1, minWidth: 0, height: 32, borderRadius: 16, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              background: on ? T.olive : v.onPress ? 'transparent' : T.card,
+              color: on ? '#fff' : v.onPress ? T.khaki : T.muted,
+              border: `1px solid ${on ? T.olive : v.onPress ? T.khaki : T.cardBorder}`,
+            }}>
+            {v.label}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -5,7 +5,7 @@ import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
-import TabBar, { ICONS, scrollToTop } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -420,11 +420,6 @@ export default function InvestingTab({ hook, userId, budget }) {
       {/* Overview: value, period change, chart */}
       {view === 'overview' && <Card style={noSelect}>
 
-        {hasCash && txs.length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <Chips small options={[{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }]} value={worth ? 'worth' : 'inv'} onChange={setHeroMode} />
-          </div>
-        )}
         <div style={{ fontSize: 34, fontWeight: 800, color: T.text, letterSpacing: -0.8, fontVariantNumeric: 'tabular-nums' }}>
           {money(headValue, hide)}
         </div>
@@ -515,10 +510,13 @@ export default function InvestingTab({ hook, userId, budget }) {
       </Card>}
 
       {view === 'overview' && hasCash && (
-        <button onClick={() => setTransfer(true)}
-          style={{ padding: 11, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
-          ⇄ Transfer money
-        </button>
+        <SubBar
+          items={[
+            ...(txs.length > 0 ? [{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }] : []),
+            { value: 'transfer', label: '⇄ Transfer', onPress: () => setTransfer(true) },
+          ]}
+          value={worth ? 'worth' : 'inv'} onChange={setHeroMode}
+        />
       )}
 
       {txs.length === 0 && view !== 'watchlist' && (
@@ -530,13 +528,13 @@ export default function InvestingTab({ hook, userId, budget }) {
 
       {view === 'portfolio' && txs.length > 0 && (
         <>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {groupMode && <Chips small options={[{ value: 'account', label: 'By account' }, { value: 'all', label: 'All' }]} value={byAccount ? 'account' : 'all'} onChange={v => setByAccountPref(v === 'account')} />}
-          <span style={{ flex: 1 }} />
-          <button onClick={() => setManageAccounts(true)} style={{ fontSize: 12, color: T.khaki, padding: '4px 0' }}>
-            {accounts.length ? 'Accounts' : '+ Set up accounts'}
-          </button>
-        </div>
+        <SubBar
+          items={[
+            ...(groupMode ? [{ value: 'account', label: 'By account' }, { value: 'all', label: 'All' }] : []),
+            { value: 'manage', label: accounts.length ? 'Accounts' : '+ Set up accounts', onPress: () => setManageAccounts(true) },
+          ]}
+          value={byAccount ? 'account' : 'all'} onChange={v => setByAccountPref(v === 'account')}
+        />
         {byAccount ? groups.map(g => (
           <AccountCard key={g.id || 'none'} g={g} hide={hide} onOpen={() => setOpenAccountId(g.id)} />
         )) : (

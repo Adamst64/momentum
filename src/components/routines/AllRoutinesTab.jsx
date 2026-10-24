@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { SubBar, scrollToTop } from '../TabBar';
 import { T } from '../../theme';
 import { useLongPress } from '../../hooks/useLongPress';
 import CreateRoutineModal from './CreateRoutineModal';
@@ -250,43 +251,15 @@ export default function AllRoutinesTab({ hook }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
 
-      {/* Header row: sub-tabs + Add button */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-        <div style={{
-          display: 'flex', flex: 1,
-          background: T.card, borderRadius: 10, padding: 3,
-          border: `1px solid ${T.cardBorder}`,
-        }}>
-          {['active', 'paused'].map(tab => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setSubTab(tab)}
-              style={{
-                flex: 1, padding: '6px 0', borderRadius: 7, border: 'none', cursor: 'pointer',
-                fontSize: 13, fontWeight: 600,
-                background: subTab === tab ? T.subtle : 'transparent',
-                color: subTab === tab ? T.text : T.muted,
-                transition: 'background 0.15s, color 0.15s',
-              }}
-            >
-              {tab === 'active' ? `Active${active.length ? ` (${active.length})` : ''}` : `Paused${paused.length ? ` (${paused.length})` : ''}`}
-            </button>
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowCreate(true)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 5,
-            padding: '8px 14px', borderRadius: 10, flexShrink: 0,
-            border: `1.5px dashed ${T.cardBorder}`,
-            color: T.muted, fontSize: 13, fontWeight: 600, background: 'transparent',
-          }}
-        >
-          <span style={{ fontSize: 18, lineHeight: 1 }}>+</span> Add
-        </button>
-      </div>
+      {/* Active · Paused · Add, in the sub-bar above the main bar */}
+      <SubBar
+        items={[
+          { value: 'active', label: `Active${active.length ? ` (${active.length})` : ''}` },
+          { value: 'paused', label: `Paused${paused.length ? ` (${paused.length})` : ''}` },
+          { value: 'add', label: '+ Add routine', onPress: () => setShowCreate(true) },
+        ]}
+        value={subTab} onChange={v => { setSubTab(v); scrollToTop(); }}
+      />
 
       {visible.length === 0 && (
         <div style={{

@@ -5,6 +5,11 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Height taken by a section's bottom bar plus its sub-bar (set by TabBar / SubBar) */
+:root {
+  --bars-h: calc(var(--tabbar-h, 0px) + var(--subbar-h, 0px));
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;

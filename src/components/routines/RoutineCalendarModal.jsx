@@ -182,7 +182,7 @@ export default function RoutineCalendarModal({ routine, onClose }) {
       <div style={{
         flex: 1, overflowY: 'auto',
         padding: '16px 20px',
-        paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 20px)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 20px)',
       }}>
 
         {/* Stats card */}

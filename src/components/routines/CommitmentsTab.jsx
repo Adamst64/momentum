@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { SubBar } from '../TabBar';
 import ReactDOM from 'react-dom';
 import { T } from '../../theme';
 import { todayStr, DAYS_SHORT } from '../../utils/dateUtils';
@@ -193,14 +194,7 @@ export default function CommitmentsTab({ hook }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <button type="button" onClick={() => setShowAdd(true)} style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-        padding: 14, borderRadius: 14,
-        border: `1.5px dashed ${T.cardBorder}`,
-        color: T.muted, fontSize: 15, background: 'transparent',
-      }}>
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Commitment
-      </button>
+      <SubBar items={[{ value: 'add', label: '+ Add commitment', onPress: () => setShowAdd(true) }]} />
 
       {sorted.length === 0 && (
         <div style={{

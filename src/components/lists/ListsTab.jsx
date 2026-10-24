@@ -6,7 +6,7 @@ import TintPicker, { TINTS, fallbackTint } from '../TintPicker';
 
 const listColor = l => l.color || fallbackTint(l.id);
 import { useBackHandler } from '../../hooks/useBackHandler';
-import TabBar, { scrollToTop } from '../TabBar';
+import TabBar, { SubBar, scrollToTop } from '../TabBar';
 import { useDraft } from '../../utils/drafts';
 
 const KINDS = {
@@ -126,22 +126,10 @@ export default function ListsTab({ hook }) {
                   : `${open.length} to try · ${done.length} done`}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {active.kind === 'checklist' && done.length > 0 && (
-                <button
-                  onClick={() => run(() => resetList(active.id))}
-                  style={{ padding: '7px 12px', borderRadius: 10, background: T.subtle, color: T.text, fontSize: 13 }}
-                >
-                  Reset
-                </button>
-              )}
-              <button
-                onClick={() => setShowManage(true)}
-                style={{ padding: '7px 12px', borderRadius: 10, background: T.subtle, color: T.muted, fontSize: 13 }}
-              >
-                Edit
-              </button>
-            </div>
+            <SubBar items={[
+              ...(active.kind === 'checklist' && done.length > 0 ? [{ value: 'reset', label: '↺ Reset checks', onPress: () => run(() => resetList(active.id)) }] : []),
+              { value: 'edit', label: '✎ Edit list', onPress: () => setShowManage(true) },
+            ]} />
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>

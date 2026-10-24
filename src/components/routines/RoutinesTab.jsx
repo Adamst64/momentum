@@ -12,7 +12,7 @@ import UndoToast from '../UndoToast';
 import CommitmentsTab from './CommitmentsTab';
 import { formatLongDate, todayStr, getDOW, addDays } from '../../utils/dateUtils';
 import { getCompletionCount, getRequiredForDate } from '../../hooks/useRoutines';
-import TabBar, { ICONS, scrollToTop } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
 
 export default function RoutinesTab({ hook, commitmentsHook }) {
   const {
@@ -164,23 +164,7 @@ export default function RoutinesTab({ hook, commitmentsHook }) {
         Tap a name for its history · hold for Edit / Delete
       </div>
 
-      {/* Space so the add button never covers the last row */}
-      <div style={{ height: 60 }} />
-
-      <button
-        type="button"
-        onClick={() => setShowCreate(true)}
-        aria-label="Add routine"
-        style={{
-          position: 'fixed', zIndex: 45,
-          right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 90px)', // above the main menu button
-          width: 58, height: 58, borderRadius: 29, background: T.olive,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-        }}
-      >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" /></svg>
-      </button>
+      <SubBar items={[{ value: 'add', label: '+ Add routine', onPress: () => setShowCreate(true) }]} />
 
       </>}
 

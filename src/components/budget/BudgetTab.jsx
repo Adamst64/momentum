@@ -20,7 +20,7 @@ import TransferSheet from '../TransferSheet';
 import Modal from '../Modal';
 import SortableList, { DragHandle } from '../SortableList';
 import InvestTransferSheet from './InvestTransferSheet';
-import TabBar, { ICONS, scrollToTop } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
 
 const typeLabel = v => ACCOUNT_TYPES.find(t => t.value === v)?.label || '';
 const ACCOUNT_EMOJI = { cash: '💵', debit: '💳', credit: '💳', savings: '🏦' };
@@ -210,7 +210,6 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [transfer, setTransfer] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
   const [page, setPage] = useState(null); // null | 'where' | 'accounts' | 'groceries' | 'months' | 'list'
-  const [scanMenu, setScanMenu] = useState(false);
   const [moneyMode, setMoneyMode] = useState(null); // 'in' | 'out' for the account being viewed
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
@@ -410,43 +409,22 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         </>
       )}
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={() => setScanMenu(v => !v)}
-          aria-label="Scan a receipt"
-          style={{ flex: 1, padding: '14px 14px', borderRadius: 14, border: `1px solid ${scanMenu ? T.olive : T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
-        >
-          📷 Scan receipt
-        </button>
-        {/* Two inputs: one opens the camera, the other the photo library */}
-        <input
-          ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
-        />
-        <input
-          ref={libraryRef} type="file" accept="image/*" style={{ display: 'none' }}
-          onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
-        />
-        <button
-          onClick={() => setTransfer(true)}
-          style={{ flex: 1, padding: '14px 14px', borderRadius: 14, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 15, fontWeight: 600 }}
-        >
-          ⇄ Transfer
-        </button>
-      </div>
-
-      {scanMenu && (
-        <div style={{ display: 'flex', gap: 8, marginTop: -6 }}>
-          <button
-            onClick={() => { setScanMenu(false); cameraRef.current?.click(); }}
-            style={{ flex: 1, padding: 12, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 14, fontWeight: 600 }}
-          >📷 Take a photo</button>
-          <button
-            onClick={() => { setScanMenu(false); libraryRef.current?.click(); }}
-            style={{ flex: 1, padding: 12, borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`, color: T.text, fontSize: 14, fontWeight: 600 }}
-          >🖼️ Choose from photos</button>
-        </div>
+      {/* Scan a receipt (camera or photo library) and transfer, in the sub-bar */}
+      {!page && (
+        <SubBar items={[
+          { value: 'camera', label: '📷 Camera', onPress: () => cameraRef.current?.click() },
+          { value: 'photos', label: '🖼️ Photos', onPress: () => libraryRef.current?.click() },
+          { value: 'transfer', label: '⇄ Transfer', onPress: () => setTransfer(true) },
+        ]} />
       )}
+      <input
+        ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
+      />
+      <input
+        ref={libraryRef} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) setReceiptFile(f); }}
+      />
 
       {/* Period: a month, a year, or all time */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -518,10 +496,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             onOpen={id => setDetailCat(id)}
             note="Tap a category for its averages and seasons."
           />
-          <button onClick={() => setShowCategories(true)}
-            style={{ padding: 12, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 14, fontWeight: 600 }}>
-            Manage categories (add, edit, delete)
-          </button>
+          {!detailCat && <SubBar items={[{ value: 'manage', label: 'Manage categories', onPress: () => setShowCategories(true) }]} />}
         </BudgetPage>
       )}
 

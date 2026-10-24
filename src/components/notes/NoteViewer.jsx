@@ -99,7 +99,7 @@ export default function NoteViewer({ note: n, onSaveText, onEdit, onClose }) {
           aria-label="Note text"
           style={{
             flex: 1, width: '100%', boxSizing: 'border-box', resize: 'none',
-            padding: '0 0 calc(env(safe-area-inset-bottom) + var(--tabbar-h, 0px) + 24px)', border: 'none', background: 'transparent',
+            padding: '0 0 calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 24px)', border: 'none', background: 'transparent',
             color: T.text, fontSize: 16, lineHeight: 1.55, outline: 'none', fontFamily: 'inherit',
           }}
         />
