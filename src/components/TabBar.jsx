@@ -149,6 +149,7 @@ export function SubBar({ items, value, onChange }) {
   const kb = useKeyboardUp();
   const shown = useTopSubBar();
   if (!shown) return null;
+  const many = items.length > 4;
   return (
     <div style={{
       position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430, height: SUBBAR_H, boxSizing: 'border-box',
@@ -157,16 +158,19 @@ export function SubBar({ items, value, onChange }) {
         : { bottom: `calc(env(safe-area-inset-bottom) + ${TABBAR_H}px)` }),
       background: T.bg, borderTop: `1px solid ${T.cardBorder}`,
       display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
+      ...(many ? { overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } : {}),
     }}>
       {items.map(v => {
         const on = !v.onPress && v.value === value;
+        const action = v.onPress && !v.jump; // jump = a shortcut to a section of the page
         return (
           <button key={v.value} onClick={() => press(v)} aria-current={on ? 'true' : undefined}
             style={{
-              flex: 1, minWidth: 0, height: 32, borderRadius: 16, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              background: on ? T.olive : v.onPress ? 'transparent' : T.card,
-              color: on ? '#fff' : v.onPress ? T.khaki : T.muted,
-              border: `1px solid ${on ? T.olive : v.onPress ? T.khaki : T.cardBorder}`,
+              ...(many ? { flex: '0 0 auto', padding: '0 14px' } : { flex: 1, minWidth: 0 }),
+              height: 32, borderRadius: 16, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+              background: on ? T.olive : action ? 'transparent' : T.card,
+              color: on ? '#fff' : action ? T.khaki : v.jump ? T.text : T.muted,
+              border: `1px solid ${on ? T.olive : action ? T.khaki : T.cardBorder}`,
             }}>
             {v.label}
           </button>
@@ -174,6 +178,11 @@ export function SubBar({ items, value, onChange }) {
       })}
     </div>
   );
+}
+
+// Shortcut to a section of the page (it scrolls there)
+export function jumpTo(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 // Each view opens at its top, not where the last one was scrolled to

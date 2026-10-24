@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useDraft } from '../../utils/drafts';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
@@ -20,14 +21,16 @@ const TYPE_LABELS = {
 };
 
 export default function CreateTaskModal({ initial, onSave, onClose }) {
+  // A new task keeps what's typed as a draft when you switch away (see utils/drafts)
+  const dk = name => (initial ? null : `task-add.${name}`);
   const isEdit = !!initial;
-  const [name,         setName]         = useState(initial?.name || '');
-  const [type,         setType]         = useState(initial?.type || 'one-time');
-  const [date,         setDate]         = useState(initial?.date || todayStr());
-  const [dom,          setDom]          = useState(String(initial?.dayOfMonth || 1));
-  const [dow,          setDow]          = useState(initial?.dayOfWeek ?? getDOW(todayStr()));
-  const [notifyOn,     setNotifyOn]     = useState(initial?.notify?.enabled || false);
-  const [notifyTime,   setNotifyTime]   = useState(initial?.notify?.time || '09:00');
+  const [name,         setName]         = useDraft(dk('name'), initial?.name || '');
+  const [type,         setType]         = useDraft(dk('type'), initial?.type || 'one-time');
+  const [date,         setDate]         = useDraft(dk('date'), initial?.date || todayStr());
+  const [dom,          setDom]          = useDraft(dk('dom'), String(initial?.dayOfMonth || 1));
+  const [dow,          setDow]          = useDraft(dk('dow'), initial?.dayOfWeek ?? getDOW(todayStr()));
+  const [notifyOn,     setNotifyOn]     = useDraft(dk('notifyOn'), initial?.notify?.enabled || false);
+  const [notifyTime,   setNotifyTime]   = useDraft(dk('notifyTime'), initial?.notify?.time || '09:00');
 
   const valid = name.trim() && (
     type === 'backlog' ||

@@ -22,9 +22,9 @@ export const inputStyle = {
   color: T.text, fontSize: 16, outline: 'none', colorScheme: 'dark',
 };
 
-export function Card({ children, style }) {
+export function Card({ children, style, id }) {
   return (
-    <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '14px 16px', ...style }}>
+    <div id={id} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '14px 16px', scrollMarginTop: 'calc(64px + env(safe-area-inset-top))', ...style }}>
       {children}
     </div>
   );

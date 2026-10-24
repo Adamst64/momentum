@@ -44,7 +44,7 @@ function About({ about, profile, name }) {
   if (!a.description && !facts.length && !website) return null;
   const long = (a.description || '').length > 280;
   return (
-    <div>
+    <div id="h-about" style={JUMP}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
         {/^https:\/\//.test(profile.logo || '') && (
           <img src={profile.logo} alt="" width={28} height={28} style={{ borderRadius: 6, background: '#fff' }} />
@@ -107,7 +107,7 @@ function FundInside({ fund, symbol }) {
   if (!fund || (!fund.holdings.length && !fund.sectors.length && !fund.mix.length)) return null;
   const sectors = allSectors ? fund.sectors : fund.sectors.slice(0, 5);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div id="h-inside" style={{ display: 'flex', flexDirection: 'column', gap: 16, ...JUMP }}>
       {fund.mix.length > 0 && (
         <div>
           <SectionTitle>What {symbol} holds</SectionTitle>
@@ -146,6 +146,9 @@ function FundInside({ fund, symbol }) {
     </div>
   );
 }
+
+// Sections the holding screen's shortcuts jump to (clear of the back button)
+const JUMP = { scrollMarginTop: 'calc(64px + env(safe-area-inset-top))' };
 
 export function earningsLabel(next) {
   if (!next) return null;
@@ -195,7 +198,7 @@ function AnalystTargets({ a, price, hide }) {
   const c = a.counts;
   const total = c ? COUNT_ROWS.reduce((t, [k]) => t + (c[k] || 0), 0) : 0;
   return (
-    <div>
+    <div id="h-analyst" style={JUMP}>
       <SectionTitle>Analyst targets</SectionTitle>
       {a.targetMean ? (
         <>
@@ -329,7 +332,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
       <FundInside fund={a.fund} symbol={symbol} />
 
       {(stats.length > 0 || range !== null) && (
-        <div>
+        <div id="h-stats" style={JUMP}>
           <SectionTitle>Key stats</SectionTitle>
           {range !== null && (
             <div style={{ marginBottom: 10 }}>
@@ -352,7 +355,7 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
 
       {data.analyst && <AnalystTargets a={data.analyst} price={price} hide={hide} />}
 
-      {!(a.fund && !data.nextEarnings && !data.earningsHistory.length) && <div>
+      {!(a.fund && !data.nextEarnings && !data.earningsHistory.length) && <div id="h-earnings" style={JUMP}>
         <SectionTitle>Earnings</SectionTitle>
         <div style={{ fontSize: 13, color: T.text, marginBottom: 8 }}>
           {data.nextEarnings

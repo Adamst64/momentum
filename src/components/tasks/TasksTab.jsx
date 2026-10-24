@@ -8,6 +8,7 @@ import { formatLongDate, formatMonthYear, todayStr, addDays, getDOW, DAYS_FULL, 
 import { weeklyDueOn } from '../../hooks/useTasks';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 const BLUE = '#8FA89B'; // slate-sage, the Tasks colour
 
@@ -287,6 +288,8 @@ export default function TasksTab({ hook, userId }) {
   } = hook;
 
   const [showCreate, setShowCreate]     = useState(false);
+  // Tasks (overdue, today, upcoming, no date) · Repeating (weekly, monthly) · Calendar
+  const [view, setView]                 = useState('tasks');
   const [editing,    setEditing]        = useState(null);
   const [historyTask, setHistoryTask]   = useState(null);
   const [quick, setQuick]               = useState('');
@@ -348,17 +351,18 @@ export default function TasksTab({ hook, userId }) {
   return (
     <div style={{ padding: '0 16px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
 
-      <button
-        type="button"
-        onClick={() => setShowCreate(true)}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          height: 48, borderRadius: 14, background: '#4E6A5C', color: '#fff', fontSize: 15, fontWeight: 600,
-        }}
-      >
-        <span style={{ fontSize: 22, lineHeight: 1, marginTop: -2 }}>+</span> New task
-      </button>
+      <TabBar
+        items={[
+          { value: 'tasks', label: 'Tasks', icon: ICONS.check },
+          { value: 'repeating', label: 'Repeating', icon: 'M17 2l3 3-3 3M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 01-4 4H4' },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
+        ]}
+        value={showCreate ? 'add' : view}
+        onChange={v => { if (v === 'add') setShowCreate(true); else { setView(v); scrollToTop(); } }}
+      />
 
+      {view === 'tasks' && <>
       <Section title="Overdue" count={overdue.length} color={T.red}>
         {overdue.map(({ task, missed }) => (
           <TaskItem
@@ -465,7 +469,15 @@ export default function TasksTab({ hook, userId }) {
         ))}
       </Section>
 
-      {weekly.length > 0 && (
+      </>}
+
+      {view === 'repeating' && weekly.length === 0 && monthly.length === 0 && (
+        <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '28px 16px', textAlign: 'center', color: T.muted, fontSize: 14 }}>
+          No weekly or monthly tasks yet. Tap Add and choose how often it repeats.
+        </div>
+      )}
+
+      {view === 'repeating' && weekly.length > 0 && (
         <div>
           <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
             Weekly <span style={{ color: T.subtle }}>({weekly.length})</span>
@@ -478,7 +490,7 @@ export default function TasksTab({ hook, userId }) {
         </div>
       )}
 
-      {monthly.length > 0 && (
+      {view === 'repeating' && monthly.length > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
@@ -506,7 +518,7 @@ export default function TasksTab({ hook, userId }) {
         </div>
       )}
 
-      <TaskCalendar
+      {view === 'calendar' && <TaskCalendar
         today={today}
         calYear={calYear}
         calMonth={calMonth}
@@ -517,7 +529,7 @@ export default function TasksTab({ hook, userId }) {
         deleteTask={deleteTask}
         rescheduleTask={rescheduleTask}
         onEdit={setEditing}
-      />
+      />}
 
       {showCreate && (
         <CreateTaskModal onSave={handleSave} onClose={() => setShowCreate(false)} />

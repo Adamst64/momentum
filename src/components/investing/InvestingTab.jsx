@@ -5,7 +5,7 @@ import { T } from '../../theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
-import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
 import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
@@ -311,10 +311,10 @@ export default function InvestingTab({ hook, userId, budget }) {
       {adding && (
         <Modal title="Add" onClose={() => setAdding(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {ADD_ACTIONS.map(a => (
+            {[...ADD_ACTIONS, ...(hasCash ? [{ type: 'transfer', label: '⇄ Transfer', hint: 'Between your bank accounts and investing (or bank to bank)' }] : [])].map(a => (
               <button
                 key={a.type}
-                onClick={() => { setAdding(false); setTrade({ type: a.type }); }}
+                onClick={() => { setAdding(false); if (a.type === 'transfer') setTransfer(true); else setTrade({ type: a.type }); }}
                 style={{
                   display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2, padding: '12px 14px', borderRadius: 12,
                   background: a.type === 'buy' ? '#2A3A1A' : T.bg, border: `1px solid ${a.type === 'buy' ? T.olive : T.cardBorder}`, textAlign: 'left',
@@ -509,12 +509,9 @@ export default function InvestingTab({ hook, userId, budget }) {
         )}
       </Card>}
 
-      {view === 'overview' && hasCash && (
+      {view === 'overview' && hasCash && txs.length > 0 && (
         <SubBar
-          items={[
-            ...(txs.length > 0 ? [{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }] : []),
-            { value: 'transfer', label: '⇄ Transfer', onPress: () => setTransfer(true) },
-          ]}
+          items={[{ value: 'inv', label: 'Investments' }, { value: 'worth', label: 'Net worth' }]}
           value={worth ? 'worth' : 'inv'} onChange={setHeroMode}
         />
       )}
@@ -559,7 +556,12 @@ export default function InvestingTab({ hook, userId, budget }) {
 
       {view === 'insights' && txs.length > 0 && (
         <>
-          <Card>
+          <SubBar items={[
+            { value: 'ins-alloc', label: 'Allocation' }, { value: 'ins-sectors', label: 'Sectors' },
+            { value: 'ins-perf', label: 'Performers' }, { value: 'ins-monthly', label: 'Monthly' },
+            { value: 'ins-totals', label: 'Totals' }, { value: 'ins-tx', label: 'Transactions' },
+          ].map(x => ({ ...x, jump: true, onPress: () => { if (x.value === 'ins-tx') setShowAllTx(true); setTimeout(() => jumpTo(x.value), 0); } }))} />
+          <Card id="ins-alloc">
             <SectionTitle>Allocation</SectionTitle>
             {slices.length === 0 ? (
               <div style={{ fontSize: 13, color: T.muted }}>Nothing allocated yet.</div>
@@ -585,7 +587,7 @@ export default function InvestingTab({ hook, userId, budget }) {
             )}
           </Card>
 
-          <Card>
+          <Card id="ins-sectors">
             <SectionTitle>Sectors</SectionTitle>
             {(() => {
               const sectors = sectorBreakdown(portfolio.holdings, assets);
@@ -609,18 +611,18 @@ export default function InvestingTab({ hook, userId, budget }) {
             })()}
           </Card>
 
-          <Card>
+          <Card id="ins-perf">
             <SectionTitle>Top & bottom performers</SectionTitle>
             <Performers holdings={portfolio.holdings} sold={sold} hide={hide} onOpen={setOpen} />
             <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>Held: gain so far. Sold: the gain you locked in when you sold.</div>
           </Card>
 
-          <Card>
+          <Card id="ins-monthly">
             <SectionTitle>Monthly: deposited vs invested</SectionTitle>
             <MonthlyFlows months={monthlyFlows(txs.filter(t => t.note !== 'Cleared leftover cash'))} hide={hide} />
           </Card>
 
-          <Card>
+          <Card id="ins-totals">
             <SectionTitle>Totals</SectionTitle>
             <TotalRow label="Money added (net)" value={money(portfolio.netDeposits, hide)} />
             <TotalRow label="Realized gains (sells)" value={signedMoney(portfolio.realized, hide)} color={gainColor(portfolio.realized)} />
@@ -628,7 +630,7 @@ export default function InvestingTab({ hook, userId, budget }) {
             <TotalRow label="Unrealized gains" value={signedMoney(portfolio.holdings.reduce((a, h) => a + (h.unrealized || 0), 0), hide)} />
           </Card>
 
-          <Card style={showAllTx ? undefined : { padding: 0 }}>
+          <Card id="ins-tx" style={showAllTx ? undefined : { padding: 0 }}>
             <button onClick={() => setShowAllTx(v => !v)}
               style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left', padding: showAllTx ? '0 0 10px' : '14px 16px' }}>
               <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>All transactions</span>

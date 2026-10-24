@@ -9,6 +9,10 @@ import StockInfo, { ANALYST_COLOR } from './StockInfo';
 import StockChart from './StockChart';
 import TxModal from './TxModal';
 import PositionCalendar from './PositionCalendar';
+import { SubBar, jumpTo } from '../TabBar';
+
+// Sections the shortcuts jump to stay clear of the back button
+const JUMP = { scrollMarginTop: 'calc(64px + env(safe-area-inset-top))' };
 
 const timeAgo = iso => {
   if (!iso) return 'never';
@@ -185,6 +189,21 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           />
         )}
 
+        {/* Shortcuts to each part of this long page */}
+        <SubBar items={[
+          { value: 'h-chart', label: 'Chart' },
+          ...(held || sold ? [{ value: 'h-position', label: 'Position' }] : []),
+          ...(asset.source === 'finnhub' ? [
+            { value: 'h-about', label: 'About' },
+            ...(asset.about?.fund?.holdings?.length ? [{ value: 'h-inside', label: 'Holdings' }] : []),
+            { value: 'h-stats', label: 'Stats' },
+            ...(asset.analyst ? [{ value: 'h-analyst', label: 'Analysts' }] : []),
+            ...(asset.about?.fund ? [] : [{ value: 'h-earnings', label: 'Earnings' }]),
+          ] : []),
+          { value: 'h-price', label: 'Price & alerts' },
+        ].map(x => ({ ...x, jump: true, onPress: () => jumpTo(x.value) }))} />
+
+        <div id="h-chart" style={JUMP} />
         <StockChart
           symbol={symbol}
           priceHistory={priceHistory}
@@ -216,7 +235,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
         <PositionCalendar symbol={symbol} asset={asset} onSave={events => setEvents(symbol, events)} />
 
         {sold && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div id={held ? undefined : 'h-position'} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, ...JUMP }}>
             {stat('Sold', `${qtyFmt(sold.qty)} @ ${money(sold.avgSell, hide)}`)}
             {stat('Sold on', formatShortDate(sold.date))}
             {stat(sold.realized >= 0 ? 'Gain' : 'Loss', `${signedMoney(sold.realized, hide)} (${pct(sold.realizedPct)})`, gainColor(sold.realized))}
@@ -227,7 +246,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
         )}
 
         {held && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <div id="h-position" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, ...JUMP }}>
             {stat(scoped ? 'Shares' : multi ? 'Total shares' : 'Shares', qtyFmt(v.qty))}
             {stat('Avg cost / share', money(v.avgCost, hide))}
             {stat('Price', money(v.price, hide))}
@@ -280,7 +299,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           <StockInfo symbol={symbol} price={asset.price} stockInfo={stockInfo} hide={hide} />
         )}
 
-        <div>
+        <div id="h-price" style={JUMP}>
           <SectionTitle>Price</SectionTitle>
           <Chips
             small
