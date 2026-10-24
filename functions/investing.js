@@ -490,7 +490,7 @@ function fundDetails(r) {
 // Wikipedia intro as a fallback description. Funds often aren't linked by
 // ticker, so with no match the fund's name is searched on Wikipedia instead.
 const WIKI_UA = { 'User-Agent': 'MomentumApp/1.0 (personal finance app)' };
-const US_EXCHANGE = /nyse|nasdaq|cboe|bats|american stock exchange|iex/i;
+const US_EXCHANGE = /nyse|new york stock exchange|nasdaq|cboe|bats|american stock exchange|iex/i;
 
 async function wikiSummary(title) {
   const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers: WIKI_UA });
@@ -502,6 +502,11 @@ async function wikiByName(name) {
   if (!res.ok) return null;
   const title = (await res.json())?.query?.search?.[0]?.title;
   if (!title) return null;
+  // The page must be about this fund, not its issuer: its title shares a word of
+  // the name beyond the issuer and the generic ones ("Gold" in SPDR Gold Shares)
+  const GENERIC = /^(etf|fund|funds|trust|shares|share|index|the|of|and|&|inc|ishares|spdr|vanguard|vaneck|invesco|schwab|fidelity|ark|global|x|proshares|direxion|wisdomtree|first|portfolio)$/i;
+  const words = name.split(/[\s,.-]+/).slice(1).filter(w => w.length > 1 && !GENERIC.test(w)).map(w => w.toLowerCase());
+  if (words.length && !words.some(w => title.toLowerCase().includes(w))) return null;
   const extract = await wikiSummary(title);
   // Only a page that is actually about a fund
   if (!extract || !/exchange[- ]traded|\bETF\b|\bfund\b|\btrust\b/i.test(extract)) return null;
@@ -556,11 +561,14 @@ async function getAvKey(db) {
   return snap.exists ? String(snap.data().key || '').trim() : '';
 }
 const titleCase = s => String(s || '').toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()).replace(/\bAnd\b/g, 'and');
-async function alphaVantage(fn, sym, avKey) {
+async function alphaVantage(fn, sym, avKey, retried = false) {
   const res = await fetch(`https://www.alphavantage.co/query?function=${fn}&symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(avKey)}`);
   if (!res.ok) throw new Error(`Alpha Vantage ${res.status}`);
   const o = await res.json();
-  if (o?.Note || o?.Information || o?.['Error Message']) throw new Error('Alpha Vantage limit or error');
+  const note = o?.Note || o?.Information || o?.['Error Message'];
+  // One request a second on the free plan: wait and try once more
+  if (note && /second/i.test(note) && !retried) { await new Promise(r => setTimeout(r, 1500)); return alphaVantage(fn, sym, avKey, true); }
+  if (note) throw new Error(`Alpha Vantage: ${String(note).slice(0, 80)}`);
   return o;
 }
 const avNum = v => (v === undefined || v === null || v === '' || v === 'None' || v === 'n/a' || v === '-' ? null : Number.isFinite(Number(v)) ? Number(v) : null);

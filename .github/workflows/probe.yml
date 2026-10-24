@@ -26,11 +26,16 @@ jobs:
           const m = new Module('inv', module); m.paths = module.paths;
           m._compile(fs.readFileSync('investing.js', 'utf8') + '\nmodule.exports.fetchAbout = fetchAbout;', require('path').resolve('investing.js'));
           (async () => {
+            const av = (await db.doc('config/alphavantage').get()).data().key;
+            const t = await (await fetch(`https://www.alphavantage.co/query?function=ETF_PROFILE&symbol=GDX&apikey=${av}`)).json();
+            console.log('AV GDX raw keys', Object.keys(t), JSON.stringify(t).slice(0, 300).replace(av, 'KEY'));
+            await new Promise(r => setTimeout(r, 2500));
             for (const sym of ['GLD', 'GDX', 'UBER']) {
               try {
                 const a = await m.exports.fetchAbout(db, sym);
                 console.log(sym, JSON.stringify({ ...a, description: a.description && a.description.slice(0, 160) }));
               } catch (e) { console.log(sym, 'ERR', e.message); }
+              await new Promise(r => setTimeout(r, 2500));
             }
           })().catch(e => { console.error('ERR', e.message); process.exit(1); });
           JS
