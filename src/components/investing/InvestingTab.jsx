@@ -487,25 +487,23 @@ export default function InvestingTab({ hook, userId, budget }) {
             <div style={{ marginTop: 10 }}>
               <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={v => { setPeriod(v); setScrub(null); }} />
             </div>
-            <div style={{ fontSize: 12, color: T.muted, marginTop: 10, lineHeight: 1.45 }}>
-              {worth ? 'Net worth = investments + every Budget account (credit cards count as what you owe).' : ret?.unavailable
-                ? `Not enough history for ${periodLabel} yet${ret.trackingSince ? ` (values saved since ${formatShortDate(ret.trackingSince)})` : ''}.`
-                : bench !== null && ret?.pct !== null && ret?.pct !== undefined
-                  ? <>S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} by {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts</>
-                  : !history ? 'Building your history from past prices…' : 'S&P 500 comparison appears once there\'s enough history.'}
-              <span style={{ fontSize: 11, display: 'block', marginTop: 2 }}>Returns exclude money you add or withdraw.</span>
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 14px', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${T.cardBorder}`, fontSize: 12, color: T.muted }}>
-              <span>Invested <b style={{ color: T.text, fontWeight: 600 }}>{money(portfolio.holdingsValue, hide)}</b></span>
-              <span>All-time <b style={{ color: gainColor(portfolio.totalGain), fontWeight: 600 }}>{signedMoney(portfolio.totalGain, hide)}</b></span>
-            </div>
           </>
         )}
 
-        {hasAuto && (
-          <button onClick={update} disabled={updating} style={{ marginTop: 8, padding: 0, fontSize: 11, color: updateErr ? T.red : T.muted, textAlign: 'left' }}>
-            {updating ? 'Updating prices…' : updateErr ? `${updateErr} · tap to retry` : lastUpdate ? `Prices updated ${ago(lastUpdate)} · ↻` : 'Tap to update prices ↻'}
-          </button>
+        {/* One line under the chart: vs the S&P 500 (when there's history) and when prices updated */}
+        {(hasAuto || (!worth && bench !== null && ret?.pct != null)) && (
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 10, fontSize: 11, color: T.muted }}>
+            {!worth && bench !== null && ret?.pct != null && txs.length > 0 && (
+              <span style={{ flex: 1, minWidth: 0 }}>
+                S&P 500 <span style={{ color: gainColor(bench) }}>{pct(bench)}</span> · you're {ret.pct >= bench ? 'ahead' : 'behind'} {Math.abs((ret.pct - bench) * 100).toFixed(1)} pts
+              </span>
+            )}
+            {hasAuto && (
+              <button onClick={update} disabled={updating} style={{ marginLeft: 'auto', padding: 0, fontSize: 11, color: updateErr ? T.red : T.muted, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                {updating ? 'Updating prices…' : updateErr ? `${updateErr} · tap to retry` : lastUpdate ? `Updated ${ago(lastUpdate)} ↻` : 'Update prices ↻'}
+              </button>
+            )}
+          </div>
         )}
       </Card>}
 
@@ -560,7 +558,7 @@ export default function InvestingTab({ hook, userId, budget }) {
             { value: 'ins-alloc', label: 'Allocation' }, { value: 'ins-sectors', label: 'Sectors' },
             { value: 'ins-perf', label: 'Performers' }, { value: 'ins-monthly', label: 'Monthly' },
             { value: 'ins-totals', label: 'Totals' }, { value: 'ins-tx', label: 'Transactions' },
-          ].map(x => ({ ...x, jump: true, onPress: () => { if (x.value === 'ins-tx') setShowAllTx(true); setTimeout(() => jumpTo(x.value), 0); } }))} />
+          ].map(x => ({ ...x, jump: true, onPress: () => { setShowAllTx(x.value === 'ins-tx'); setTimeout(() => jumpTo(x.value), 0); } }))} />
           <Card id="ins-alloc">
             <SectionTitle>Allocation</SectionTitle>
             {slices.length === 0 ? (
