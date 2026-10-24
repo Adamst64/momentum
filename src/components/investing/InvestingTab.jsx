@@ -300,9 +300,22 @@ export default function InvestingTab({ hook, userId, budget }) {
 
 
   // Headline: the touched chart point, else the current value
-  const first = chartPoints[0];
   const headValue = span ? span.to.value : scrub ? scrub.value : worth ? portfolio.value + cashNow : portfolio.value;
-  const scrubChange = scrub && first ? scrub.value - first.value : null;
+  // Touching a point: that day's return (vs the day before's last value, or for
+  // 1D vs yesterday's close), not counting money added or withdrawn that day
+  const scrubDay = (() => {
+    if (!scrub) return null;
+    const i = chartPoints.indexOf(scrub);
+    if (i <= 0) return null;
+    let base = null;
+    if (intraRange === 'i1d') base = chartPoints[0];
+    else for (let j = i - 1; j >= 0; j--) if (chartPoints[j].date < scrub.date) { base = chartPoints[j]; break; }
+    if (!base) return null;
+    const flows = typeof scrub.netDeposits === 'number' && typeof base.netDeposits === 'number' ? scrub.netDeposits - base.netDeposits : 0;
+    const gain = scrub.value - base.value - flows;
+    const denom = base.value + Math.max(0, flows);
+    return { gain, pct: denom > 0 ? gain / denom : null };
+  })();
   const periodLabel = PERIODS.find(p => p.key === period)?.label;
 
   // Sheets and pop-ups, shared by the main view and an opened account's page
@@ -457,8 +470,8 @@ export default function InvestingTab({ hook, userId, budget }) {
         })() : scrub ? (
           <div style={{ fontSize: 13, marginTop: 2, color: T.muted }}>
             {scrub.label || formatDateYear(scrub.date)}
-            {scrubChange !== null && first !== scrub && (
-              <span style={{ color: gainColor(scrubChange) }}> · {signedMoney(scrubChange, hide)} since {formatDateYear(first.date)}</span>
+            {scrubDay && (
+              <span style={{ color: gainColor(scrubDay.gain) }}> · {signedMoney(scrubDay.gain, hide)}{scrubDay.pct !== null ? ` (${pct(scrubDay.pct)})` : ''} {intraRange === 'i1d' ? 'today so far' : 'that day'}</span>
             )}
           </div>
         ) : (
