@@ -18,7 +18,7 @@ function RescheduleSheet({ task, onReschedule, onClose }) {
         onClick={e => e.stopPropagation()}
         style={{ width: '100%', background: '#1C1C1E', borderRadius: '20px 20px 0 0', padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', ...FULL_PAGE }}
       >
-        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>Reschedule "{task.name}"</div>
+        <div style={{ fontSize: 15, fontWeight: 600, color: T.text, marginBottom: 16 }}>{task.date ? "Reschedule" : "Schedule"} "{task.name}"</div>
         <input
           type="date"
           value={date}
@@ -42,7 +42,7 @@ function RescheduleSheet({ task, onReschedule, onClose }) {
   );
 }
 
-export default function TaskItem({ task, onComplete, onDelete, onReschedule, onEdit, section, missed }) {
+export default function TaskItem({ task, onComplete, onDelete, onReschedule, onEdit, section, missed, scheduleButton = false }) {
   const [showMenu, setShowMenu]             = useState(false);
   const [showReschedule, setShowReschedule] = useState(false);
   const longPressRef = useLongPress(() => setShowMenu(true));
@@ -113,6 +113,14 @@ export default function TaskItem({ task, onComplete, onDelete, onReschedule, onE
             <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>{subtitle}</div>
           )}
         </div>
+
+        {/* Backlog and overdue: give it a day right here */}
+        {scheduleButton && !isDone && (
+          <button onClick={() => setShowReschedule(true)} style={{
+            flexShrink: 0, padding: '6px 10px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+            color: T.khaki, border: `1px solid ${T.cardBorder}`, background: 'transparent',
+          }}>📅 Schedule</button>
+        )}
 
         {/* Type badge */}
         {task.type === 'recurring-monthly' && !isDone && (

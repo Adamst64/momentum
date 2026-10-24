@@ -8,7 +8,7 @@ import { formatLongDate, formatMonthYear, todayStr, addDays, getDOW, DAYS_FULL, 
 import { weeklyDueOn } from '../../hooks/useTasks';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
-import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
 
 const BLUE = '#8FA89B'; // slate-sage, the Tasks colour
 
@@ -262,11 +262,11 @@ function WeeklyItem({ task, today, onEdit, onDelete }) {
   );
 }
 
-function Section({ title, count, children, defaultOpen = true, color = T.muted, id }) {
+function Section({ title, count, children, defaultOpen = true, color = T.muted }) {
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
   return (
-    <div id={id} style={JUMP}>
+    <div>
       <button type="button" onClick={() => setOpen(o => !o)} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         width: '100%', marginBottom: open ? 10 : 0,
@@ -279,9 +279,6 @@ function Section({ title, count, children, defaultOpen = true, color = T.muted, 
     </div>
   );
 }
-
-// Shortcut targets stop below the app's top bar
-const JUMP = { scrollMarginTop: 'calc(112px + env(safe-area-inset-top))' };
 
 // A task coming up in the next week (tap to edit; it's ticked off on its day)
 function UpcomingRow({ task, onEdit }) {
@@ -309,6 +306,7 @@ export default function TasksTab({ hook, userId }) {
   const [showCreate, setShowCreate]     = useState(false);
   // Today (overdue, today, the next 7 days) · All tasks (a task manager) · Calendar
   const [view, setView]                 = useState('today');
+  const [allView, setAllView]           = useState('once'); // All tasks: once | repeat | backlog | done
   const [editing,    setEditing]        = useState(null);
   const [historyTask, setHistoryTask]   = useState(null);
   const [quick, setQuick]               = useState('');
@@ -492,18 +490,25 @@ export default function TasksTab({ hook, userId }) {
       </>}
 
       {view === 'all' && <>
-      <SubBar items={[
-        { value: 'tasks-once', label: 'One-time' },
-        { value: 'tasks-repeat', label: 'Repeating' },
-        { value: 'tasks-done', label: 'Done' },
-      ].map(x => ({ ...x, icon: x.value === 'tasks-once' ? ICONS.calendar : x.value === 'tasks-repeat' ? 'M17 2l3 3-3 3M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 01-4 4H4' : ICONS.check, jump: true, onPress: () => jumpTo(x.value) }))} />
+      {/* One-time · Repeating · Backlog · Done: each its own list */}
+      <SubBar
+        items={[
+          { value: 'once', label: `One-time${overdue.length + scheduled.length ? ` (${overdue.length + scheduled.length})` : ''}`, icon: ICONS.calendar },
+          { value: 'repeat', label: `Repeating${weekly.length + monthly.length ? ` (${weekly.length + monthly.length})` : ''}`, icon: 'M17 2l3 3-3 3M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 01-4 4H4' },
+          { value: 'backlog', label: `Backlog${undated.length ? ` (${undated.length})` : ''}`, icon: ICONS.box },
+          { value: 'done', label: 'Done', icon: ICONS.check },
+        ]}
+        value={allView} onChange={v => { setAllView(v); scrollToTop(); }}
+      />
 
-      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8 }}>One-time</div>
-      {overdue.length > 0 && (
+      {allView === 'once' && <>
+        {overdue.length === 0 && scheduled.length === 0 && (
+          <div style={{ fontSize: 14, color: T.muted }}>No one-time tasks coming up. Tasks with a date show here; ones without a date are in Backlog.</div>
+        )}
         <Section title="Overdue" count={overdue.length} color={T.red}>
           {overdue.map(({ task, missed }) => (
             <TaskItem
-              key={task.id} task={task} section="backlog" missed={missed}
+              key={task.id} task={task} section="backlog" missed={missed} scheduleButton
               onComplete={() => toggleTaskForDate(task.id, today)}
               onDelete={deleteTask}
               onReschedule={rescheduleTask}
@@ -511,94 +516,97 @@ export default function TasksTab({ hook, userId }) {
             />
           ))}
         </Section>
-      )}
-      <Section id="tasks-once" title="Scheduled" count={scheduled.length} defaultOpen={true}>
-        {scheduled.map(t => (
-          <TaskItem
-            key={t.id} task={t} section="scheduled"
-            onComplete={() => toggleTaskForDate(t.id, today)}
-            onDelete={deleteTask}
-            onReschedule={rescheduleTask}
-            onEdit={setEditing}
-          />
-        ))}
-      </Section>
+        <Section title="Scheduled" count={scheduled.length}>
+          {scheduled.map(t => (
+            <TaskItem
+              key={t.id} task={t} section="scheduled"
+              onComplete={() => toggleTaskForDate(t.id, today)}
+              onDelete={deleteTask}
+              onReschedule={rescheduleTask}
+              onEdit={setEditing}
+            />
+          ))}
+        </Section>
+      </>}
 
-      <Section title="No date" count={undated.length} defaultOpen={true}>
-        {undated.map(({ task, missed }) => (
-          <TaskItem
-            key={task.id} task={task} section="backlog" missed={missed}
-            onComplete={() => toggleTaskForDate(task.id, today)}
-            onDelete={deleteTask}
-            onReschedule={rescheduleTask}
-            onEdit={setEditing}
-          />
-        ))}
-      </Section>
-
-      {scheduled.length === 0 && undated.length === 0 && overdue.length === 0 && (
-        <div id="tasks-once" style={{ fontSize: 14, color: T.muted, ...JUMP }}>No one-time tasks waiting.</div>
-      )}
-
-      <div id="tasks-repeat" style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8, ...JUMP }}>Repeating</div>
-      {weekly.length === 0 && monthly.length === 0 && (
-        <div style={{ fontSize: 14, color: T.muted }}>No weekly or monthly tasks yet. Tap Add and choose how often it repeats.</div>
-      )}
-
-      {weekly.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
-            Weekly <span style={{ color: T.subtle }}>({weekly.length})</span>
+      {allView === 'repeat' && <>
+        {weekly.length === 0 && monthly.length === 0 && (
+          <div style={{ fontSize: 14, color: T.muted }}>No weekly or monthly tasks yet. Tap Add and choose how often it repeats.</div>
+        )}
+        {weekly.length > 0 && (
+          <div>
+            <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
+              Weekly <span style={{ color: T.subtle }}>({weekly.length})</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {weekly.map(t => (
+                <WeeklyItem key={t.id} task={t} today={today} onEdit={setEditing} onDelete={deleteTask} />
+              ))}
+            </div>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {weekly.map(t => (
-              <WeeklyItem key={t.id} task={t} today={today} onEdit={setEditing} onDelete={deleteTask} />
-            ))}
+        )}
+
+        {monthly.length > 0 && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
+                Monthly <span style={{ color: T.subtle }}>({monthly.length})</span>
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: viewYM === todayYM ? T.khaki : T.muted }}>
+                {formatMonthYear(calYear, calMonth)}
+              </span>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {monthly.map(t => (
+                <MonthlyItem
+                  key={t.id}
+                  task={t}
+                  viewYM={viewYM}
+                  todayYM={todayYM}
+                  todayDom={todayDom}
+                  onEdit={setEditing}
+                  onDelete={deleteTask}
+                  onShowHistory={setHistoryTask}
+                />
+              ))}
+            </div>
           </div>
+        )}
+
+      </>}
+
+      {allView === 'backlog' && <>
+        <div style={{ fontSize: 13, color: T.muted, lineHeight: 1.4 }}>Tasks without a date. Tap Schedule to give one a day.</div>
+        {undated.length === 0 && <div style={{ fontSize: 14, color: T.muted }}>Backlog is empty. Add a task without a date to park it here.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {undated.map(({ task, missed }) => (
+            <TaskItem
+              key={task.id} task={task} section="backlog" missed={missed} scheduleButton
+              onComplete={() => toggleTaskForDate(task.id, today)}
+              onDelete={deleteTask}
+              onReschedule={rescheduleTask}
+              onEdit={setEditing}
+            />
+          ))}
         </div>
-      )}
+      </>}
 
-      {monthly.length > 0 && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
-              Monthly <span style={{ color: T.subtle }}>({monthly.length})</span>
-            </span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: viewYM === todayYM ? T.khaki : T.muted }}>
-              {formatMonthYear(calYear, calMonth)}
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {monthly.map(t => (
-              <MonthlyItem
-                key={t.id}
-                task={t}
-                viewYM={viewYM}
-                todayYM={todayYM}
-                todayDom={todayDom}
-                onEdit={setEditing}
-                onDelete={deleteTask}
-                onShowHistory={setHistoryTask}
-              />
-            ))}
-          </div>
+      {allView === 'done' && <>
+        {doneList.length === 0 && <div style={{ fontSize: 14, color: T.muted }}>Finished one-time and backlog tasks show up here.</div>}
+        {doneList.length > 0 && <div style={{ fontSize: 13, color: T.muted }}>Newest first. Hold one to undo or delete it.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {doneList.map(t => (
+            <TaskItem
+              key={t.id} task={t} section="done"
+              onComplete={() => toggleTaskForDate(t.id, t.completedAt)}
+              onDelete={deleteTask}
+              onReschedule={rescheduleTask}
+              onEdit={setEditing}
+            />
+          ))}
         </div>
-      )}
-
-      <div id="tasks-done" style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8, ...JUMP }}>Done</div>
-      {doneList.length === 0 && <div style={{ fontSize: 14, color: T.muted }}>Finished one-time tasks show up here.</div>}
-      <Section title="Finished" count={doneList.length} defaultOpen={false}>
-        {doneList.map(t => (
-          <TaskItem
-            key={t.id} task={t} section="done"
-            onComplete={() => toggleTaskForDate(t.id, t.completedAt)}
-            onDelete={deleteTask}
-            onReschedule={rescheduleTask}
-            onEdit={setEditing}
-          />
-        ))}
-      </Section>
+      </>}
       </>}
 
       {view === 'calendar' && <TaskCalendar
