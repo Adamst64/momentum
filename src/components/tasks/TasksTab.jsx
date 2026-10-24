@@ -8,7 +8,7 @@ import { formatLongDate, formatMonthYear, todayStr, addDays, getDOW, DAYS_FULL, 
 import { weeklyDueOn } from '../../hooks/useTasks';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
-import TabBar, { ICONS, scrollToTop } from '../TabBar';
+import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
 
 const BLUE = '#8FA89B'; // slate-sage, the Tasks colour
 
@@ -262,11 +262,11 @@ function WeeklyItem({ task, today, onEdit, onDelete }) {
   );
 }
 
-function Section({ title, count, children, defaultOpen = true, color = T.muted }) {
+function Section({ title, count, children, defaultOpen = true, color = T.muted, id }) {
   const [open, setOpen] = useState(defaultOpen);
   if (count === 0) return null;
   return (
-    <div>
+    <div id={id} style={JUMP}>
       <button type="button" onClick={() => setOpen(o => !o)} style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         width: '100%', marginBottom: open ? 10 : 0,
@@ -280,16 +280,35 @@ function Section({ title, count, children, defaultOpen = true, color = T.muted }
   );
 }
 
+// Shortcut targets stop below the app's top bar
+const JUMP = { scrollMarginTop: 'calc(112px + env(safe-area-inset-top))' };
+
+// A task coming up in the next week (tap to edit; it's ticked off on its day)
+function UpcomingRow({ task, onEdit }) {
+  const repeat = task.type === 'recurring-weekly' ? 'Weekly' : task.type === 'recurring-monthly' ? 'Monthly' : null;
+  return (
+    <button type="button" onClick={() => onEdit(task)} style={{
+      display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+      padding: '11px 14px', borderRadius: 12, background: T.card, border: `1px solid ${T.cardBorder}`,
+    }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: repeat ? T.muted : BLUE, flexShrink: 0 }} />
+      <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.name}</span>
+      {repeat && <span style={{ fontSize: 11, color: T.muted }}>{repeat}</span>}
+      {task.notify?.enabled && task.notify?.time && <span style={{ fontSize: 11, color: T.muted }}>🔔 {task.notify.time}</span>}
+    </button>
+  );
+}
+
 export default function TasksTab({ hook, userId }) {
   const {
     addTask, deleteTask, rescheduleTask, updateTask,
     toggleTaskForDate, tasksForDate,
-    todayTasks, backlogTasks, scheduledTasks, monthlyTasks, weeklyTasks,
+    todayTasks, backlogTasks, scheduledTasks, monthlyTasks, weeklyTasks, tasks: allTasks = [],
   } = hook;
 
   const [showCreate, setShowCreate]     = useState(false);
-  // Tasks (overdue, today, upcoming, no date) · Repeating (weekly, monthly) · Calendar
-  const [view, setView]                 = useState('tasks');
+  // Today (overdue, today, the next 7 days) · All tasks (a task manager) · Calendar
+  const [view, setView]                 = useState('today');
   const [editing,    setEditing]        = useState(null);
   const [historyTask, setHistoryTask]   = useState(null);
   const [quick, setQuick]               = useState('');
@@ -327,6 +346,14 @@ export default function TasksTab({ hook, userId }) {
   const isDoneToday = t => (t.type === 'recurring-monthly' ? !!t.completedOccurrences?.[ym]
     : t.type === 'recurring-weekly' ? !!t.completedOccurrences?.[today]
     : t.completedAt === today);
+  // The next 7 days, day by day (not yet done)
+  const nextWeek = [1, 2, 3, 4, 5, 6, 7].map(n => {
+    const date = addDays(today, n);
+    return { date, items: tasksForDate(date).filter(x => !x.done).map(x => x.task) };
+  }).filter(d => d.items.length);
+  // Finished one-time and no-date tasks, newest first
+  const doneList = allTasks.filter(t => (t.type === 'one-time' || t.type === 'backlog') && t.completedAt)
+    .sort((a, b) => b.completedAt.localeCompare(a.completedAt)).slice(0, 60);
   const todayOpen = todays.filter(t => !isDoneToday(t));
   const todayDone = todays.filter(isDoneToday);
 
@@ -353,8 +380,8 @@ export default function TasksTab({ hook, userId }) {
 
       <TabBar
         items={[
-          { value: 'tasks', label: 'Tasks', icon: ICONS.check },
-          { value: 'repeating', label: 'Repeating', icon: 'M17 2l3 3-3 3M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 01-4 4H4' },
+          { value: 'today', label: 'Today', icon: ICONS.today },
+          { value: 'all', label: 'All tasks', icon: ICONS.list },
           { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
           { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
         ]}
@@ -362,7 +389,7 @@ export default function TasksTab({ hook, userId }) {
         onChange={v => { if (v === 'add') setShowCreate(true); else { setView(v); scrollToTop(); } }}
       />
 
-      {view === 'tasks' && <>
+      {view === 'today' && <>
       <Section title="Overdue" count={overdue.length} color={T.red}>
         {overdue.map(({ task, missed }) => (
           <TaskItem
@@ -445,7 +472,47 @@ export default function TasksTab({ hook, userId }) {
         )}
       </div>
 
-      <Section title="Upcoming" count={scheduled.length} defaultOpen={true}>
+      {/* The coming week, day by day */}
+      <div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>Next 7 days</div>
+        {nextWeek.length === 0 && <div style={{ fontSize: 14, color: T.muted, padding: '4px 2px' }}>Nothing planned for the week ahead.</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {nextWeek.map(d => (
+            <div key={d.date}>
+              <div style={{ fontSize: 12, color: T.khaki, fontWeight: 600, marginBottom: 6 }}>
+                {d.date === addDays(today, 1) ? 'Tomorrow' : new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {d.items.map(t => <UpcomingRow key={t.id} task={t} onEdit={setEditing} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      </>}
+
+      {view === 'all' && <>
+      <SubBar items={[
+        { value: 'tasks-once', label: 'One-time' },
+        { value: 'tasks-repeat', label: 'Repeating' },
+        { value: 'tasks-done', label: 'Done' },
+      ].map(x => ({ ...x, icon: x.value === 'tasks-once' ? ICONS.calendar : x.value === 'tasks-repeat' ? 'M17 2l3 3-3 3M4 11V9a4 4 0 014-4h12M7 22l-3-3 3-3M20 13v2a4 4 0 01-4 4H4' : ICONS.check, jump: true, onPress: () => jumpTo(x.value) }))} />
+
+      <div style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8 }}>One-time</div>
+      {overdue.length > 0 && (
+        <Section title="Overdue" count={overdue.length} color={T.red}>
+          {overdue.map(({ task, missed }) => (
+            <TaskItem
+              key={task.id} task={task} section="backlog" missed={missed}
+              onComplete={() => toggleTaskForDate(task.id, today)}
+              onDelete={deleteTask}
+              onReschedule={rescheduleTask}
+              onEdit={setEditing}
+            />
+          ))}
+        </Section>
+      )}
+      <Section id="tasks-once" title="Scheduled" count={scheduled.length} defaultOpen={true}>
         {scheduled.map(t => (
           <TaskItem
             key={t.id} task={t} section="scheduled"
@@ -457,7 +524,7 @@ export default function TasksTab({ hook, userId }) {
         ))}
       </Section>
 
-      <Section title="No date" count={undated.length} defaultOpen={false}>
+      <Section title="No date" count={undated.length} defaultOpen={true}>
         {undated.map(({ task, missed }) => (
           <TaskItem
             key={task.id} task={task} section="backlog" missed={missed}
@@ -469,15 +536,16 @@ export default function TasksTab({ hook, userId }) {
         ))}
       </Section>
 
-      </>}
-
-      {view === 'repeating' && weekly.length === 0 && monthly.length === 0 && (
-        <div style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '28px 16px', textAlign: 'center', color: T.muted, fontSize: 14 }}>
-          No weekly or monthly tasks yet. Tap Add and choose how often it repeats.
-        </div>
+      {scheduled.length === 0 && undated.length === 0 && overdue.length === 0 && (
+        <div id="tasks-once" style={{ fontSize: 14, color: T.muted, ...JUMP }}>No one-time tasks waiting.</div>
       )}
 
-      {view === 'repeating' && weekly.length > 0 && (
+      <div id="tasks-repeat" style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8, ...JUMP }}>Repeating</div>
+      {weekly.length === 0 && monthly.length === 0 && (
+        <div style={{ fontSize: 14, color: T.muted }}>No weekly or monthly tasks yet. Tap Add and choose how often it repeats.</div>
+      )}
+
+      {weekly.length > 0 && (
         <div>
           <div style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 10 }}>
             Weekly <span style={{ color: T.subtle }}>({weekly.length})</span>
@@ -490,7 +558,7 @@ export default function TasksTab({ hook, userId }) {
         </div>
       )}
 
-      {view === 'repeating' && monthly.length > 0 && (
+      {monthly.length > 0 && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <span style={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.8 }}>
@@ -517,6 +585,21 @@ export default function TasksTab({ hook, userId }) {
           </div>
         </div>
       )}
+
+      <div id="tasks-done" style={{ fontSize: 13, fontWeight: 800, color: T.text, marginBottom: -8, ...JUMP }}>Done</div>
+      {doneList.length === 0 && <div style={{ fontSize: 14, color: T.muted }}>Finished one-time tasks show up here.</div>}
+      <Section title="Finished" count={doneList.length} defaultOpen={false}>
+        {doneList.map(t => (
+          <TaskItem
+            key={t.id} task={t} section="done"
+            onComplete={() => toggleTaskForDate(t.id, t.completedAt)}
+            onDelete={deleteTask}
+            onReschedule={rescheduleTask}
+            onEdit={setEditing}
+          />
+        ))}
+      </Section>
+      </>}
 
       {view === 'calendar' && <TaskCalendar
         today={today}
