@@ -1,0 +1,41 @@
+name: probe
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: functions
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+      - name: Inspect
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          cat > probe.js <<'JS'
+          const admin = require('firebase-admin');
+          admin.initializeApp({ projectId: 'momentum-4acf1' });
+          const db = admin.firestore();
+          (async () => {
+            const users = await db.collection('users').get();
+            for (const u of users.docs) {
+              for (const sym of ['GLD', 'GDX', 'UBER']) {
+                const d = (await u.ref.collection('invAssets').doc(sym).get()).data();
+                if (!d) continue;
+                const a = d.about || {};
+                console.log(sym, JSON.stringify({ aboutV: d.aboutV, aboutAt: d.aboutAt, partial: a.partial, descSrc: a.descriptionSource, hasDesc: !!a.description, hasFund: !!a.fund, aboutKeys: Object.keys(a).filter(k => a[k] != null), analystSrc: d.analyst?.source, analystTried: d.analyst?.tried, autoEvents: (d.autoEvents || []).length, autoEventsAt: d.autoEventsAt, metricsV: d.metricsV }));
+              }
+            }
+            const av = (await db.doc('config/alphavantage').get()).exists;
+            console.log('alphavantage key configured:', av);
+            // Yahoo from this runner (GitHub IP; Cloud Functions may differ)
+            const inv = require('./investing.js');
+          })().catch(e => { console.error('ERR', e.message); process.exit(1); });
+          JS
+          node probe.js
