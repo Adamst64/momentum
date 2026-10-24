@@ -22,20 +22,16 @@ jobs:
           const admin = require('firebase-admin');
           admin.initializeApp({ projectId: 'momentum-4acf1' });
           const db = admin.firestore();
+          const fs = require('fs'), Module = require('module');
+          const m = new Module('inv', module); m.paths = module.paths;
+          m._compile(fs.readFileSync('investing.js', 'utf8') + '\nmodule.exports.fetchAbout = fetchAbout;', require('path').resolve('investing.js'));
           (async () => {
-            const users = await db.collection('users').get();
-            for (const u of users.docs) {
-              for (const sym of ['GLD', 'GDX', 'UBER']) {
-                const d = (await u.ref.collection('invAssets').doc(sym).get()).data();
-                if (!d) continue;
-                const a = d.about || {};
-                console.log(sym, JSON.stringify({ aboutV: d.aboutV, aboutAt: d.aboutAt, partial: a.partial, descSrc: a.descriptionSource, hasDesc: !!a.description, hasFund: !!a.fund, aboutKeys: Object.keys(a).filter(k => a[k] != null), analystSrc: d.analyst?.source, analystTried: d.analyst?.tried, autoEvents: (d.autoEvents || []).length, autoEventsAt: d.autoEventsAt, metricsV: d.metricsV }));
-              }
+            for (const sym of ['GLD', 'GDX', 'UBER']) {
+              try {
+                const a = await m.exports.fetchAbout(db, sym);
+                console.log(sym, JSON.stringify({ ...a, description: a.description && a.description.slice(0, 160) }));
+              } catch (e) { console.log(sym, 'ERR', e.message); }
             }
-            const av = (await db.doc('config/alphavantage').get()).exists;
-            console.log('alphavantage key configured:', av);
-            // Yahoo from this runner (GitHub IP; Cloud Functions may differ)
-            const inv = require('./investing.js');
           })().catch(e => { console.error('ERR', e.message); process.exit(1); });
           JS
           node probe.js

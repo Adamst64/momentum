@@ -391,7 +391,7 @@ const analystStale = a => {
 // ── Company / fund details for the holding screen ───────────────────────────
 // Bump to refetch cached docs after adding fields
 const METRICS_V = 2;
-const ABOUT_V = 2;
+const ABOUT_V = 3;
 
 // Today's open / high / low / volume and the 30-day average volume, from
 // Yahoo's chart endpoint (keyless; also works for ETFs and funds)
@@ -486,21 +486,43 @@ function fundDetails(r) {
   };
 }
 
-// Wikidata (by ticker on NYSE / Nasdaq) for the founding year, and its English
-// Wikipedia intro as a fallback description
-async function wikiAbout(sym) {
+// Wikidata (by ticker on a US exchange) for the founding year, and its English
+// Wikipedia intro as a fallback description. Funds often aren't linked by
+// ticker, so with no match the fund's name is searched on Wikipedia instead.
+const WIKI_UA = { 'User-Agent': 'MomentumApp/1.0 (personal finance app)' };
+const US_EXCHANGE = /nyse|nasdaq|cboe|bats|american stock exchange|iex/i;
+
+async function wikiSummary(title) {
+  const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`, { headers: WIKI_UA });
+  return w.ok ? (await w.json())?.extract || null : null;
+}
+
+async function wikiByName(name) {
+  const res = await fetch(`https://en.wikipedia.org/w/api.php?action=query&list=search&format=json&srlimit=1&srsearch=${encodeURIComponent(name)}`, { headers: WIKI_UA });
+  if (!res.ok) return null;
+  const title = (await res.json())?.query?.search?.[0]?.title;
+  if (!title) return null;
+  const extract = await wikiSummary(title);
+  // Only a page that is actually about a fund
+  if (!extract || !/exchange[- ]traded|\bETF\b|\bfund\b|\btrust\b/i.test(extract)) return null;
+  return { description: extract, wikiUrl: `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}` };
+}
+
+async function wikiAbout(sym, name) {
   if (!/^[A-Z0-9.\-]{1,10}$/.test(sym)) return null;
-  const q = `SELECT ?item ?inception ?emp ?ceoLabel ?hqLabel ?article WHERE {
-    ?item p:P414 ?st . ?st pq:P249 "${sym}" . ?st ps:P414 ?ex . VALUES ?ex { wd:Q13677 wd:Q82059 }
+  const q = `SELECT ?item ?exLabel ?inception ?emp ?ceoLabel ?hqLabel ?article WHERE {
+    ?item p:P414 ?st . ?st pq:P249 "${sym}" . ?st ps:P414 ?ex .
     OPTIONAL { ?item wdt:P571 ?inception } OPTIONAL { ?item wdt:P1128 ?emp }
     OPTIONAL { ?item wdt:P169 ?ceo } OPTIONAL { ?item wdt:P159 ?hq }
     OPTIONAL { ?article schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> }
-    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 10`;
-  const UA = { 'User-Agent': 'MomentumApp/1.0 (personal finance app)' };
-  const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(q)}`, { headers: { ...UA, Accept: 'application/sparql-results+json' } });
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "en". } } LIMIT 30`;
+  const res = await fetch(`https://query.wikidata.org/sparql?query=${encodeURIComponent(q)}`, { headers: { ...WIKI_UA, Accept: 'application/sparql-results+json' } });
   if (!res.ok) throw new Error(`Wikidata ${res.status}`);
-  const rows = (await res.json())?.results?.bindings || [];
-  if (!rows.length) return null;
+  const all = (await res.json())?.results?.bindings || [];
+  // The same ticker can exist abroad: keep the US listing's company
+  const usItem = all.find(r => US_EXCHANGE.test(r.exLabel?.value || ''))?.item?.value;
+  const rows = usItem ? all.filter(r => r.item?.value === usItem) : [];
+  if (!rows.length) return name ? wikiByName(name) : null;
   const val = k => rows.map(r => r[k]?.value).find(v => v && !/^Q\d+$/.test(v)) || null; // skip unlabeled items
   const years = rows.map(r => r.inception?.value).filter(Boolean).map(v => parseInt(v.replace(/^\+/, '').slice(0, 4), 10)).filter(y => y > 1600);
   const emps = rows.map(r => Number(r.emp?.value)).filter(n => n > 0);
@@ -513,39 +535,103 @@ async function wikiAbout(sym) {
     wikiUrl: val('article'),
   };
   if (out.wikiUrl) {
-    try {
-      const title = out.wikiUrl.split('/wiki/')[1];
-      const w = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${title}`, { headers: UA });
-      if (w.ok) out.description = (await w.json())?.extract || null;
-    } catch { /* optional */ }
+    try { out.description = await wikiSummary(decodeURIComponent(out.wikiUrl.split('/wiki/')[1])); } catch { /* optional */ }
   }
+  if (!out.description && name) Object.assign(out, (await wikiByName(name).catch(() => null)) || {});
   return out;
 }
 
-async function fetchAbout(sym) {
-  const [y, w] = await Promise.all([yahooAbout(sym).catch(() => null), wikiAbout(sym).catch(() => null)]);
-  if (!y && !w) throw new Error('No company details');
-  const pick = (...v) => v.find(x => x !== null && x !== undefined && x !== '') ?? null;
+// Name and kind (EQUITY / ETF / MUTUALFUND) from Yahoo's keyless chart endpoint
+async function chartMeta(sym) {
+  const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d`, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+  const m = res.ok ? (await res.json())?.chart?.result?.[0]?.meta : null;
+  return m ? { type: m.instrumentType || null, name: m.longName || m.shortName || null } : null;
+}
+
+// Alpha Vantage (free key at config/alphavantage, ~25 calls a day; cached weekly):
+// ETF_PROFILE for funds (holdings, sectors, expense ratio…), OVERVIEW for stocks.
+// Used because Yahoo's detailed data refuses the server (429).
+async function getAvKey(db) {
+  const snap = await db.doc('config/alphavantage').get();
+  return snap.exists ? String(snap.data().key || '').trim() : '';
+}
+const titleCase = s => String(s || '').toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()).replace(/\bAnd\b/g, 'and');
+async function alphaVantage(fn, sym, avKey) {
+  const res = await fetch(`https://www.alphavantage.co/query?function=${fn}&symbol=${encodeURIComponent(sym)}&apikey=${encodeURIComponent(avKey)}`);
+  if (!res.ok) throw new Error(`Alpha Vantage ${res.status}`);
+  const o = await res.json();
+  if (o?.Note || o?.Information || o?.['Error Message']) throw new Error('Alpha Vantage limit or error');
+  return o;
+}
+const avNum = v => (v === undefined || v === null || v === '' || v === 'None' || v === 'n/a' || v === '-' ? null : Number.isFinite(Number(v)) ? Number(v) : null);
+
+async function avFund(sym, avKey) {
+  const o = await alphaVantage('ETF_PROFILE', sym, avKey);
+  if (!o || (!o.holdings && !o.net_assets)) return null;
+  const holdings = (o.holdings || []).map(h => ({ symbol: h.symbol && h.symbol !== 'n/a' ? h.symbol : null, name: titleCase(h.description || h.symbol || ''), pct: avNum(h.weight) }))
+    .filter(h => h.name && h.pct > 0).slice(0, 10);
+  const sectors = (o.sectors || []).map(x => ({ name: titleCase(x.sector), pct: avNum(x.weight) })).filter(x => x.name && x.pct > 0.0005).sort((a, b) => b.pct - a.pct);
+  const year = parseInt(String(o.inception_date || '').slice(0, 4), 10);
   return {
-    description: pick(y?.description, w?.description),
-    descriptionSource: y?.description ? 'Yahoo Finance' : w?.description ? 'Wikipedia' : null,
-    founded: pick(w?.founded, y?.fundInception),
-    employees: pick(y?.employees, w?.employees),
-    ceo: pick(y?.ceo, w?.ceo),
-    hq: pick(y?.hq, w?.hq),
-    sector: pick(y?.sector),
-    industry: pick(y?.industry),
-    website: pick(y?.website),
+    expenseRatio: avNum(o.net_expense_ratio),
+    netAssets: avNum(o.net_assets),
+    fundInception: year > 1900 ? year : null,
+    fund: {
+      holdings, sectors, mix: [],
+      topTenPct: holdings.length ? holdings.reduce((a, h) => a + h.pct, 0) : null,
+      yield: avNum(o.dividend_yield), turnover: avNum(o.portfolio_turnover),
+      ytdReturn: null, return1y: null, return3y: null, return5y: null, beta3y: null, pe: null,
+      legalType: o.leveraged === 'YES' ? 'Leveraged ETF' : null,
+    },
+  };
+}
+
+async function avCompany(sym, avKey) {
+  const o = await alphaVantage('OVERVIEW', sym, avKey);
+  if (!o?.Symbol) return null;
+  return {
+    description: o.Description && o.Description !== 'None' ? o.Description : null,
+    sector: o.Sector && o.Sector !== 'None' ? titleCase(o.Sector) : null,
+    industry: o.Industry && o.Industry !== 'None' ? titleCase(o.Industry) : null,
+    hq: o.Address && o.Address !== 'None' ? titleCase(o.Address.split(',').slice(-3, -1).join(',').trim()) || null : null,
+    website: /^https?:\/\//.test(o.OfficialSite || '') ? o.OfficialSite : null,
+    forwardPE: avNum(o.ForwardPE),
+    sharesOutstanding: avNum(o.SharesOutstanding),
+  };
+}
+
+async function fetchAbout(db, sym) {
+  const meta = await chartMeta(sym).catch(() => null);
+  const isFund = meta?.type === 'ETF' || meta?.type === 'MUTUALFUND';
+  const avKey = await getAvKey(db).catch(() => '');
+  const [y, w] = await Promise.all([yahooAbout(sym).catch(() => null), wikiAbout(sym, isFund ? meta?.name : null).catch(() => null)]);
+  // Yahoo usually refuses the server; Alpha Vantage fills in what it can
+  let av = null;
+  if (!y && avKey) av = await (isFund ? avFund(sym, avKey) : avCompany(sym, avKey)).catch(() => null);
+  if (!y && !w && !av) throw new Error('No company details');
+  const pick = (...v) => v.find(x => x !== null && x !== undefined && x !== '') ?? null;
+  const description = pick(y?.description, w?.description, av?.description);
+  return {
+    description,
+    descriptionSource: !description ? null : description === y?.description ? 'Yahoo Finance' : description === w?.description ? 'Wikipedia' : 'Alpha Vantage',
+    founded: pick(w?.founded, y?.fundInception, av?.fundInception),
+    employees: isFund ? null : pick(y?.employees, w?.employees),
+    ceo: isFund ? null : pick(y?.ceo, w?.ceo),
+    hq: isFund ? null : pick(y?.hq, w?.hq, av?.hq),
+    sector: pick(y?.sector, av?.sector),
+    industry: pick(y?.industry, av?.industry),
+    website: pick(y?.website, av?.website),
     wikiUrl: pick(w?.wikiUrl),
     fundFamily: pick(y?.fundFamily),
     category: pick(y?.category),
-    expenseRatio: pick(y?.expenseRatio),
-    netAssets: pick(y?.netAssets),
-    forwardPE: pick(y?.forwardPE),
-    sharesOutstanding: pick(y?.sharesOutstanding),
+    expenseRatio: pick(y?.expenseRatio, av?.expenseRatio),
+    netAssets: pick(y?.netAssets, av?.netAssets),
+    forwardPE: pick(y?.forwardPE, av?.forwardPE),
+    sharesOutstanding: pick(y?.sharesOutstanding, av?.sharesOutstanding),
     shortPercentFloat: pick(y?.shortPercentFloat),
-    fund: y?.fund || null,
-    partial: !y,
+    fund: y?.fund || av?.fund || (isFund ? { holdings: [], sectors: [], mix: [], legalType: meta.type === 'ETF' ? 'Exchange traded fund' : 'Mutual fund' } : null),
+    name: meta?.name || null,
+    partial: !y && !av,
   };
 }
 
@@ -603,7 +689,7 @@ async function stockInfo(db, request) {
   }
   // Weekly; a day when only part of it came through (Yahoo was down)
   if (isStale(cached.aboutAt, HOURS(cached.about?.partial ? 24 : 24 * 7)) || cached.aboutV !== ABOUT_V) {
-    try { update.about = await fetchAbout(sym); update.aboutAt = new Date().toISOString(); update.aboutV = ABOUT_V; }
+    try { update.about = await fetchAbout(db, sym); update.aboutAt = new Date().toISOString(); update.aboutV = ABOUT_V; }
     catch { /* optional */ }
   }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
