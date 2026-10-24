@@ -422,7 +422,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             ...(filteredAccount ? [
               { value: 'in', label: filteredAccount.type === 'credit' ? 'Pay off' : '+ Add money', onPress: () => setMoneyMode('in') },
               { value: 'out', label: '− Take out', onPress: () => setMoneyMode('out') },
-              { value: 'edit', label: 'Edit account', onPress: () => setEditingAcct(filteredAccount) },
+              { value: 'edit', label: 'Edit', onPress: () => setEditingAcct(filteredAccount) },
             ] : []),
             { value: 'month', label: 'Month' }, { value: 'year', label: 'Year' }, { value: 'all', label: 'All time' },
           ]}

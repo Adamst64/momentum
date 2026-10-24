@@ -24,7 +24,7 @@ export const inputStyle = {
 
 export function Card({ children, style, id }) {
   return (
-    <div id={id} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '14px 16px', scrollMarginTop: 'calc(64px + env(safe-area-inset-top))', ...style }}>
+    <div id={id} style={{ background: T.card, border: `1px solid ${T.cardBorder}`, borderRadius: 14, padding: '14px 16px', scrollMarginTop: 'calc(112px + env(safe-area-inset-top))' /* clear of the app's top bar when a shortcut jumps here */, ...style }}>
       {children}
     </div>
   );

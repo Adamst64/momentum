@@ -200,7 +200,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
             ...(asset.analyst ? [{ value: 'h-analyst', label: 'Analysts' }] : []),
             ...(asset.about?.fund ? [] : [{ value: 'h-earnings', label: 'Earnings' }]),
           ] : []),
-          { value: 'h-price', label: 'Price & alerts' },
+          { value: 'h-price', label: 'Alerts' },
         ].map(x => ({ ...x, jump: true, onPress: () => jumpTo(x.value) }))} />
 
         <div id="h-chart" style={JUMP} />

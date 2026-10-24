@@ -117,7 +117,7 @@ function KeepOrClear({ onKeep, onClear, onCancel }) {
 // A second, smaller row of switches right above the main bar, for the view
 // that's open (e.g. Routines → All routines: Active · Paused · Add).
 // items: [{ value, label, onPress? }]
-export const SUBBAR_H = 44;
+export const SUBBAR_H = 48;
 
 // Only the newest sub-bar shows (an Add form's over the page it was opened from)
 const subStack = [];
@@ -143,40 +143,74 @@ function useTopSubBar() {
   return top === id;
 }
 
+// Icons for sub-bar buttons, picked from the label (an item can pass its own icon)
+const SUB_ICONS = [
+  [/cancel/, 'M6 6l12 12M18 6L6 18'],
+  [/add money|pay off/, 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 8v8M8 12h8'],
+  [/take out/, 'M12 3a9 9 0 100 18 9 9 0 000-18zM8 12h8'],
+  [/^\+|add|new|set up/, 'M12 5v14M5 12h14'],
+  [/reset/, 'M4 4v6h6M5.5 15a7 7 0 1 0 1.6-7.3L4 10'],
+  [/manage/, 'M4 6h16M4 12h16M4 18h16M8 4v4M16 10v4M10 16v4'],
+  [/edit/, 'M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4'],
+  [/scan|camera/, 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 100-7 3.5 3.5 0 000 7z'],
+  [/photo/, 'M4 5h16v14H4zM4 16l5-5 4 4 3-3 4 4M15 9.5h.01'],
+  [/transfer/, 'M4 8h14l-3-3M20 16H6l3 3'],
+  [/^active/, 'M7 5l12 7-12 7z'],
+  [/paused/, 'M8 5v14M16 5v14'],
+  [/by account|accounts/, 'M3 10l9-6 9 6M5 10v8M10 10v8M14 10v8M19 10v8M3 20h18'],
+  [/^all time/, 'M7 9a3 3 0 100 6c2 0 3-1.5 5-3s3-3 5-3a3 3 0 110 6c-2 0-3-1.5-5-3S9 9 7 9z'],
+  [/^all$/, 'M4 7h16M4 12h16M4 17h10'],
+  [/^month$/, 'M4 7a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7zM4 10h16M8 3v4M16 3v4M9 15h2'],
+  [/^year$/, 'M4 7a2 2 0 012-2h12a2 2 0 012 2v12a2 2 0 01-2 2H6a2 2 0 01-2-2V7zM4 10h16M8 3v4M16 3v4M8 14h8M8 17h8'],
+  [/investments|^chart/, 'M3 17l5-6 4 3 6-8 3 3'],
+  [/net worth/, 'M4 11l8-7 8 7v9a1 1 0 01-1 1h-4v-6H9v6H5a1 1 0 01-1-1v-9z'],
+  [/allocation/, 'M12 3v9h9A9 9 0 1112 3zM15 3.5A9 9 0 0120.5 9H15V3.5z'],
+  [/sectors/, 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z'],
+  [/performers/, 'M4 17l6-6 4 4 6-8M15 7h5v5'],
+  [/monthly|stats/, 'M5 20V12M10 20V6M15 20v-9M20 20V9'],
+  [/totals/, 'M18 4H6l6 8-6 8h12'],
+  [/transactions/, 'M6 3h12v18l-3-2-3 2-3-2-3 2V3zM9 8h6M9 12h6M9 16h4'],
+  [/position/, 'M4 8h16v11H4zM9 8V5h6v3M4 13h16'],
+  [/about/, 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 11v6M12 7.5h.01'],
+  [/holdings/, 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01'],
+  [/analysts/, 'M9 11a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 6.5M18 14a5.5 5.5 0 013.5 6'],
+  [/earnings/, 'M3 7h18v10H3zM12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5zM6 10v4M18 10v4'],
+  [/price|alert/, 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0'],
+];
+const LEADING = /^[\s+↺✎⇄−📷🖼️️]+/u;
+const subIcon = v => v.icon || (SUB_ICONS.find(([re]) => re.test(String(v.label).replace(LEADING, '').toLowerCase()) || re.test(String(v.label).toLowerCase())) || [])[1] || 'M12 12h.01';
+
 export function SubBar({ items, value, onChange }) {
   // Acts within the open view, so unlike the main bar it doesn't close anything first
   const press = v => (v.onPress ? v.onPress() : onChange(v.value));
   const kb = useKeyboardUp();
   const shown = useTopSubBar();
   if (!shown) return null;
-  const many = items.length > 4;
   return (
-    <div style={{
+    <nav style={{
       position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430, height: SUBBAR_H, boxSizing: 'border-box',
       ...(kb
         ? { top: `calc(var(--vv-top, 0px) + var(--vv-height, 100vh) - ${TABBAR_H + SUBBAR_H}px)` }
         : { bottom: `calc(env(safe-area-inset-bottom) + ${TABBAR_H}px)` }),
-      background: T.bg, borderTop: `1px solid ${T.cardBorder}`,
-      display: 'flex', alignItems: 'center', gap: 6, padding: '0 10px',
-      ...(many ? { overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } : {}),
+      background: T.bg, borderTop: `1px solid ${T.cardBorder}`, display: 'flex',
     }}>
       {items.map(v => {
         const on = !v.onPress && v.value === value;
-        const action = v.onPress && !v.jump; // jump = a shortcut to a section of the page
+        const color = on ? T.khaki : v.onPress && !v.jump ? T.oliveLight : T.muted;
         return (
           <button key={v.value} onClick={() => press(v)} aria-current={on ? 'true' : undefined}
-            style={{
-              ...(many ? { flex: '0 0 auto', padding: '0 14px' } : { flex: 1, minWidth: 0 }),
-              height: 32, borderRadius: 16, fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              background: on ? T.olive : action ? 'transparent' : T.card,
-              color: on ? '#fff' : action ? T.khaki : v.jump ? T.text : T.muted,
-              border: `1px solid ${on ? T.olive : action ? T.khaki : T.cardBorder}`,
-            }}>
-            {v.label}
+            style={{ flex: 1, minWidth: 0, height: SUBBAR_H, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, position: 'relative' }}>
+            {on && <span style={{ position: 'absolute', top: 0, left: '25%', right: '25%', height: 2, borderRadius: 1, background: T.khaki }} />}
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+              <path d={subIcon(v)} stroke={color} strokeWidth={on ? 2.2 : 1.8} strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <span style={{ fontSize: items.length > 5 ? 9.5 : 10, letterSpacing: items.length > 5 ? -0.2 : 0, fontWeight: on ? 700 : 500, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '100%', padding: '0 1px' }}>
+              {String(v.label).replace(LEADING, '')}
+            </span>
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
