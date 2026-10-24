@@ -7,6 +7,7 @@ import BirthdayRow from './BirthdayRow';
 import BirthdayForm from './BirthdayForm';
 import BirthdayCalendar from './BirthdayCalendar';
 import { daysUntil, turningAge } from '../../utils/birthdayUtils';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 const PINK = '#D9805F'; // terracotta, the Birthdays colour
 
@@ -133,30 +134,14 @@ export default function BirthdaysTab({ hook, userId }) {
         );
       })()}
 
-      <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2 }}>
-        {['list', 'calendar'].map(v => (
-          <button key={v} onClick={() => setView(v)} style={{
-            flex: 1, padding: '7px 0', borderRadius: 8,
-            background: view === v ? T.card : 'transparent',
-            color: view === v ? T.text : T.muted,
-            fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
-          }}>
-            {v === 'list' ? 'Upcoming' : 'Calendar'}
-          </button>
-        ))}
-      </div>
-
-      <button
-        onClick={() => { setEditing(null); setShowForm(true); }}
-        style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-          padding: 14, borderRadius: 14,
-          border: `1.5px dashed ${T.cardBorder}`,
-          color: T.muted, fontSize: 15, background: 'transparent',
-        }}
-      >
-        <span style={{ fontSize: 20, lineHeight: 1 }}>+</span> Add Birthday
-      </button>
+      <TabBar
+        items={[
+          { value: 'list', label: 'Upcoming', icon: ICONS.cake },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
+          { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14', onPress: () => { setEditing(null); setShowForm(true); } },
+        ]}
+        value={view} onChange={v => { setView(v); scrollToTop(); }}
+      />
 
       {view === 'list' ? (
         <>

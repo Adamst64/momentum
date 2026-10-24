@@ -8,6 +8,7 @@ import ShareSheet from './ShareSheet';
 import InventoryTab from './InventoryTab';
 import { FULL_PAGE } from '../../utils/pageStyle';
 import { useBackHandler } from '../../hooks/useBackHandler';
+import TabBar, { ICONS, scrollToTop } from '../TabBar';
 
 // Inventory items where every typed word is the start of some word in the
 // item's name ("bacon" → "Crumbled bacon"). Full-name prefix matches first.
@@ -141,33 +142,19 @@ export default function ShoppingTab({ hook, userId }) {
               border: `1px dashed ${T.cardBorder}`,
             }}>+</button>
           </div>
-          <button onClick={() => setShowShare(true)} style={{ flexShrink: 0, padding: 6, background: 'none', border: 'none' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <circle cx="18" cy="5" r="3" stroke={T.olive} strokeWidth="1.8" />
-              <circle cx="6" cy="12" r="3" stroke={T.olive} strokeWidth="1.8" />
-              <circle cx="18" cy="19" r="3" stroke={T.olive} strokeWidth="1.8" />
-              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" stroke={T.olive} strokeWidth="1.8" strokeLinecap="round" />
-              <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" stroke={T.olive} strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-          </button>
         </div>
       )}
 
-      {/* List / Inventory toggle — shown when inventory is enabled or list already has inventory items */}
-      {(activeList?.hasInventory || inventory.length > 0) && (
-        <div style={{ display: 'flex', background: T.subtle, borderRadius: 10, padding: 3, gap: 2, margin: '0 16px 12px' }}>
-          {['list', 'inventory'].map(v => (
-            <button key={v} onClick={() => setView(v)} style={{
-              flex: 1, padding: '7px 0', borderRadius: 8,
-              background: view === v ? T.card : 'transparent',
-              color: view === v ? T.text : T.muted,
-              fontSize: 13, fontWeight: 600, transition: 'background 0.15s, color 0.15s',
-              textTransform: 'capitalize',
-            }}>
-              {v === 'inventory' ? `Inventory${inventory.length > 0 ? ` (${inventory.length})` : ''}` : 'List'}
-            </button>
-          ))}
-        </div>
+      {/* List · Inventory (when it's on) · Share, along the bottom */}
+      {activeList && (
+        <TabBar
+          items={[
+            { value: 'list', label: 'List', icon: ICONS.cart },
+            ...((activeList.hasInventory || inventory.length > 0) ? [{ value: 'inventory', label: `Inventory${inventory.length ? ` (${inventory.length})` : ''}`, icon: ICONS.box }] : []),
+            { value: 'share', label: 'Share', icon: 'M18 8a3 3 0 100-6 3 3 0 000 6zM6 15a3 3 0 100-6 3 3 0 000 6zM18 22a3 3 0 100-6 3 3 0 000 6zM8.6 13.5l6.8 4M15.4 6.5l-6.8 4', onPress: () => setShowShare(true) },
+          ]}
+          value={view} onChange={v => { setView(v); scrollToTop(); }}
+        />
       )}
 
       {view === 'inventory' && (activeList?.hasInventory || inventory.length > 0) ? (
