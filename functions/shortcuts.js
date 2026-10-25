@@ -5,6 +5,7 @@
 // Keys live in shortcutKeys/{key} = { uid } (server only); users/{uid}.shortcutKey
 // remembers the current one so a new key replaces it.
 const crypto = require('crypto');
+const Anthropic = require('@anthropic-ai/sdk');
 const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
@@ -33,12 +34,47 @@ const splitItems = text => String(text || '')
   .map(s => s.charAt(0).toUpperCase() + s.slice(1))
   .slice(0, 20);
 
+// What was said → separate items, reworded to match what's already known (the list's
+// inventory and items): "bread milk eggs" → 3 items; "marinated cucumbers" →
+// "Pickled cucumbers". Claude Haiku (key at config/anthropic, like receipts);
+// without it, the simple split above.
+const PARSE_SCHEMA = {
+  type: 'object',
+  properties: { items: { type: 'array', items: { type: 'string' } } },
+  required: ['items'],
+  additionalProperties: false,
+};
+async function parseItems(db, text, known, kind) {
+  try {
+    const apiKey = (await db.doc('config/anthropic').get()).data()?.key;
+    if (!apiKey) return splitItems(text);
+    const client = new Anthropic({ apiKey });
+    const prompt = kind === 'task'
+      ? `Someone dictated to-do tasks to Siri: "${text}". Return each separate task as a short, clean task name (capitalized). Only split when they are clearly different tasks; "buy milk and eggs" is one task.`
+      : `Someone dictated items for a shopping list to Siri: "${text}". Dictation often drops commas, so "bread milk eggs apples" is four items, while "peanut butter" or "orange juice" is one item.
+Return each separate item. If an item means the same thing as one of these already known items (different wording, a synonym, singular/plural, a description or a type of it, e.g. "marinated cucumbers" or "dill pickles" for "Pickled cucumbers"), return the known name exactly as written. Otherwise return a clean name with a capital first letter. Keep quantities only if said (e.g. "2 lemons").
+Known items: ${known.length ? known.slice(0, 400).map(k => `"${k}"`).join(', ') : '(none)'}`;
+    const res = await client.messages.create({
+      model: 'claude-haiku-5-5',
+      max_tokens: 1000,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: PARSE_SCHEMA } },
+      messages: [{ role: 'user', content: prompt }],
+    });
+    const out = JSON.parse(res.content.find(b => b.type === 'text')?.text || '{}');
+    const items = (out.items || []).map(x => String(x).trim()).filter(Boolean).slice(0, 20);
+    return items.length ? items : splitItems(text);
+  } catch (e) {
+    console.warn('parseItems fell back to splitting:', e.message);
+    return splitItems(text);
+  }
+}
+
 const localToday = tz => {
   const d = new Date(new Date().toLocaleString('en-US', { timeZone: tz || 'America/New_York' }));
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-async function addToShopping(db, uid, names, listName) {
+async function addToShopping(db, uid, text, listName) {
   const lists = (await db.collection('lists').where('members', 'array-contains', uid).get()).docs
     .map(d => ({ id: d.id, ref: d.ref, ...d.data() }))
     .sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
@@ -48,7 +84,10 @@ async function addToShopping(db, uid, names, listName) {
     || (want && lists.find(l => String(l.name || '').toLowerCase().includes(want)))
     || lists.find(l => l.ownerId === uid) || lists[0];
   const items = (await list.ref.collection('items').get()).docs.map(d => ({ ref: d.ref, ...d.data() }));
-  const inventory = list.hasInventory ? (await list.ref.collection('inventory').get()).docs.map(d => d.data()) : [];
+  const inventory = (await list.ref.collection('inventory').get()).docs.map(d => d.data());
+  const known = [...new Set([...inventory, ...items].map(x => String(x.name || '').trim()).filter(Boolean))];
+  const names = await parseItems(db, text, known, 'shopping');
+  if (!names.length) return "I didn't catch what to add.";
   const batch = db.batch();
   names.forEach((name, i) => {
     const existing = items.find(it => String(it.name || '').toLowerCase() === name.toLowerCase());
@@ -62,7 +101,9 @@ async function addToShopping(db, uid, names, listName) {
   return `Added ${joinNames(names)} to ${list.name || 'your shopping list'}.`;
 }
 
-async function addTasks(db, uid, names) {
+async function addTasks(db, uid, text) {
+  const names = await parseItems(db, text, [], 'task');
+  if (!names.length) return "I didn't catch the task.";
   const user = (await db.collection('users').doc(uid).get()).data() || {};
   const today = localToday(user.preferences?.dailyReview?.timezone);
   const batch = db.batch();
@@ -87,12 +128,12 @@ exports.siriAdd = onRequest(async (req, res) => {
   const found = await db.collection('shortcutKeys').doc(key).get();
   if (!found.exists) return res.status(401).send('This shortcut key is no longer valid. Make a new one in Momentum settings.');
   const uid = found.data().uid;
-  const names = splitItems(p.item || p.text);
-  if (!names.length) return res.status(400).send("I didn't catch what to add.");
+  const text = String(p.item || p.text || '').trim().slice(0, 500);
+  if (!text) return res.status(400).send("I didn't catch what to add.");
   try {
     const reply = String(p.type || 'shopping') === 'task'
-      ? await addTasks(db, uid, names)
-      : await addToShopping(db, uid, names, p.list);
+      ? await addTasks(db, uid, text)
+      : await addToShopping(db, uid, text, p.list);
     await found.ref.update({ usedAt: FieldValue.serverTimestamp() });
     return res.send(reply);
   } catch (e) {
