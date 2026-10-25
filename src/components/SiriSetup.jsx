@@ -14,6 +14,7 @@ export default function SiriSetup({ userId }) {
   const [key, setKey] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [copied, setCopied] = useState(null);
 
   useEffect(() => {
     if (!open || !userId || key) return;
@@ -27,10 +28,31 @@ export default function SiriSetup({ userId }) {
     finally { setBusy(false); }
   };
   const link = type => `${ENDPOINT}?key=${key}${type === 'task' ? '&type=task' : ''}&item=`;
-  const copy = async text => {
-    try { await navigator.clipboard.writeText(text); setMsg('Copied ✓ Now paste it in the Shortcuts app.'); }
-    catch { setMsg('Could not copy. Press and hold the link to copy it.'); }
+  const copy = async type => {
+    const text = link(type);
+    setMsg(null);
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      // Older iOS: copy through a hidden text box
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, text.length);
+      const ok = document.execCommand('copy');
+      ta.remove();
+      if (!ok) { setMsg('Could not copy. Press and hold the link to copy it.'); return; }
+    }
+    setCopied(type);
+    setTimeout(() => setCopied(c => (c === type ? null : c)), 2500);
   };
+  const linkBlock = (type, title) => (
+    <>
+      <div style={{ fontSize: 12, color: T.muted }}>{title}</div>
+      <div style={{ fontSize: 11, color: T.text, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '8px 10px', wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>{link(type)}</div>
+      <button onClick={() => copy(type)} style={{ padding: 11, borderRadius: 12, background: copied === type ? T.green : T.olive, color: '#fff', fontSize: 14, fontWeight: 600, transition: 'background 0.2s' }}>
+        {copied === type ? '✓ Link copied' : `Copy ${type === 'task' ? 'task' : 'shopping'} link`}
+      </button>
+    </>
+  );
 
   const step = (n, text) => (
     <div style={{ display: 'flex', gap: 10, fontSize: 13, color: T.text, lineHeight: 1.45 }}>
@@ -61,9 +83,7 @@ export default function SiriSetup({ userId }) {
             </>
           ) : (
             <>
-              <div style={{ fontSize: 12, color: T.muted }}>Your shopping list link (keep it private):</div>
-              <div style={{ fontSize: 11, color: T.text, background: T.bg, border: `1px solid ${T.cardBorder}`, borderRadius: 10, padding: '8px 10px', wordBreak: 'break-all', userSelect: 'all', WebkitUserSelect: 'all' }}>{link('shopping')}</div>
-              <button onClick={() => copy(link('shopping'))} style={{ padding: 11, borderRadius: 12, background: T.olive, color: '#fff', fontSize: 14, fontWeight: 600 }}>Copy shopping link</button>
+              {linkBlock('shopping', 'Shopping list link (keep it private):')}
 
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 4 }}>Make the shortcut (once, about a minute)</div>
               {step(1, <>Open the <b>Shortcuts</b> app → tap <b>+</b>. Name it <b>Add to shopping list</b> (that's what you'll say to Siri).</>)}
@@ -74,10 +94,14 @@ export default function SiriSetup({ userId }) {
               {step(6, <>Say <b>"Hey Siri, add to shopping list"</b>, then "milk, eggs and bread".</>)}
 
               <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
-                Several items at once: separate them with "and" or commas. Another list: add <b>&amp;list=Costco</b> before <b>&amp;item=</b>.
-                For tasks, make a second shortcut ("Add a task") with this link, which adds to today's tasks:
+                Say several items at once ("bread milk eggs"). Another list: add <b>&amp;list=Costco</b> before <b>&amp;item=</b>.
               </div>
-              <button onClick={() => copy(link('task'))} style={{ padding: 10, borderRadius: 12, border: `1px solid ${T.cardBorder}`, color: T.khaki, fontSize: 13, fontWeight: 600 }}>Copy task link</button>
+
+              <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 8 }}>Tasks (optional)</div>
+              <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
+                Tasks use a different link (it ends with <b>type=task</b>). Make a second shortcut the same way, named <b>Add a task</b>, with this link. It adds to today's tasks.
+              </div>
+              {linkBlock('task', 'Task link (keep it private):')}
               <button onClick={makeKey} disabled={busy} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.muted, padding: '4px 0' }}>
                 {busy ? 'Making…' : 'Make a new link (the old one stops working)'}
               </button>
