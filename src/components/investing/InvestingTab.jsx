@@ -548,7 +548,7 @@ export default function InvestingTab({ hook, userId, budget, requested }) {
         {txs.length > 0 && (
           <>
             <div style={{ marginTop: 12 }}>
-              <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} onRange={setSpan} />
+              <ValueChart points={chartPoints} hide={hide} onScrub={setScrub} onRange={setSpan} zeroSplit={returnsMode} />
             </div>
             <div style={{ marginTop: 10 }}>
               <Chips small options={PERIODS.map(p => ({ value: p.key, label: p.label }))} value={period} onChange={v => { setPeriod(v); setScrub(null); }} />

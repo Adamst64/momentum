@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useId } from 'react';
 import { T } from '../../theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
@@ -16,8 +16,9 @@ export const NOTE_COLOR = '#FFD60A'; // your own marks on a chart
 // trades: buy/sell dots [{ id, date, price, type }] drawn at the trade price;
 // a tap (not a drag) on or next to one calls onTradeTap(id), elsewhere onTradeTap(null).
 // onRange({ from, to } | null): two fingers on the chart select the period between them.
-export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText }) {
+export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText, zeroSplit = false }) {
   const [hover, setHoverState] = useState(null);
+  const gradId = useId().replace(/[^a-zA-Z0-9]/g, '');
   const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
   const [range, setRangeState] = useState(null); // [fromIndex, toIndex]
   const setRange = r => {
@@ -100,6 +101,10 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
   const up = vals[vals.length - 1] >= vals[0];
   const color = up ? T.oliveLight : T.red;
+  // zeroSplit (returns): the line is green above 0 and red below it
+  const zeroY = zeroSplit && min < 0 && max > 0 ? y(0) : null;
+  const stroke = zeroY !== null ? `url(#zs${gradId})` : zeroSplit ? (min >= 0 ? T.oliveLight : T.red) : color;
+  const colorAt = v => (zeroSplit ? (v >= 0 ? T.oliveLight : T.red) : color);
 
   // Screen ↔ chart coordinates (the SVG keeps its aspect ratio, centered)
   const toChartX = clientX => {
@@ -258,7 +263,15 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
             <text x={x(t.i) + 2} y={H - 3} fontSize="8" fill={T.muted}>{t.year}</text>
           </g>
         ))}
-        <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {zeroY !== null && (
+          <defs>
+            <linearGradient id={`zs${gradId}`} gradientUnits="userSpaceOnUse" x1={0} x2={0} y1={0} y2={H}>
+              <stop offset={zeroY / H} stopColor={T.oliveLight} />
+              <stop offset={zeroY / H} stopColor={T.red} />
+            </linearGradient>
+          </defs>
+        )}
+        <path d={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         {tradeDots.map(t => {
           const buy = t.type === 'buy';
           const sel = selectedTrade === t.id;
@@ -330,7 +343,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
           return (
             <>
               <line x1={x(hover)} x2={x(hover)} y1={14} y2={H} stroke={T.muted} strokeWidth={1} strokeDasharray="3 3" />
-              <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={color} stroke={T.card} strokeWidth={2} />
+              <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={colorAt(hp.value)} stroke={T.card} strokeWidth={2} />
               <rect x={px} y={0} width={w} height={13} rx={6.5} fill={T.subtle} />
               <text x={px + w / 2} y={9.5} textAnchor="middle" fontSize="9" fontWeight="700" fill={T.text}>{label}</text>
             </>
