@@ -1,0 +1,36 @@
+name: probe
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: functions
+      - name: Write service account key
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
+      - name: Parse
+        working-directory: functions
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          cat > probe.js <<'JS'
+          const admin = require('firebase-admin');
+          admin.initializeApp({ projectId: 'momentum-4acf1' });
+          const fs = require('fs'), Module = require('module');
+          const m = new Module('sc', module); m.paths = module.paths;
+          m._compile(fs.readFileSync('shortcuts.js', 'utf8') + '\nmodule.exports.parseItems = parseItems;', require('path').resolve('shortcuts.js'));
+          const db = admin.firestore();
+          const known = ['Pickled cucumbers', 'Bananas', 'Whole milk', 'Sourdough bread', 'Greek yogurt', 'Peanut butter'];
+          (async () => {
+            for (const t of ['bread milk eggs apples bananas', 'marinated cucumbers', 'dill pickles and some yogurt', 'peanut butter and jelly', '2 lemons orange juice']) {
+              console.log(JSON.stringify(t), '→', JSON.stringify(await m.exports.parseItems(db, t, known, 'shopping')));
+            }
+            console.log('task', JSON.stringify(await m.exports.parseItems(db, 'call mom and pay the electric bill', [], 'task')));
+          })();
+          JS
+          node probe.js
