@@ -43,6 +43,11 @@ exports.marketEvents  = onCall(request => investing.marketEvents(getFirestore(),
 exports.searchSymbols = onCall(request => investing.searchSymbols(getFirestore(), request));
 exports.priceHistory  = onCall(request => investing.priceHistory(getFirestore(), request));
 
+// Siri / Apple Shortcuts: add to the shopping list (or today's tasks) by voice
+const shortcuts = require('./shortcuts');
+exports.createShortcutKey = shortcuts.createShortcutKey;
+exports.siriAdd = shortcuts.siriAdd;
+
 // ── Budget: read a receipt photo into categorized items ─────────────────────
 
 exports.scanReceipt = onCall({ timeoutSeconds: 180, memory: '512MiB' }, request => receipts.scanReceipt(getFirestore(), request));

@@ -10,6 +10,7 @@ import { registerPushToken } from '../utils/pushNotifications';
 import { RESET_CATEGORIES, resetData } from '../utils/resetData';
 import { useBackHandler } from '../hooks/useBackHandler';
 import { FULL_PAGE } from '../utils/pageStyle';
+import SiriSetup from './SiriSetup';
 
 
 export default function SettingsModal({ user, onChangePassword, onSignOut, onClose, routines, tasks, shoppingLists, features, onUnlockFeature, tabOrder, setTabOrder, showWork, notes, personalLists, dailyReview, onSaveDailyReview, userId }) {
@@ -193,6 +194,10 @@ export default function SettingsModal({ user, onChangePassword, onSignOut, onClo
               </button>
             </div>
           )}
+        </Group>
+
+        <Group>
+          <SiriSetup userId={userId} />
         </Group>
 
         <Group>
