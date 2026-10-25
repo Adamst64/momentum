@@ -10,7 +10,7 @@ import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDial
 import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
 import TransferSheet from '../TransferSheet';
-import { stockEvents } from './PositionCalendar';
+import { stockEvents, EventBell, colorOf } from './PositionCalendar';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
@@ -25,6 +25,7 @@ const VIEWS = [
   { value: 'portfolio', label: 'Portfolio', icon: ICONS.list },
   { value: 'watchlist', label: 'Watchlist', icon: ICONS.star },
   { value: 'insights',  label: 'Insights',  icon: ICONS.bulb },
+  { value: 'calendar',  label: 'Calendar',  icon: ICONS.calendar },
 ];
 
 const ADD_ACTIONS = [
@@ -558,7 +559,7 @@ export default function InvestingTab({ hook, userId, budget }) {
         />
       )}
 
-      {txs.length === 0 && view !== 'watchlist' && (
+      {txs.length === 0 && (view === 'overview' || view === 'portfolio') && (
         <div style={{ textAlign: 'center', color: T.muted, fontSize: 14, padding: '24px 12px', lineHeight: 1.5 }}>
           Tap <b style={{ color: T.text }}>+</b> to get started. For what you already own, choose <b style={{ color: T.text }}>Buy</b> → <b style={{ color: T.text }}>Already owned</b> — that includes
           money market funds like FDRXX. New money goes in with <b style={{ color: T.text }}>Add money</b> (into a fund), and buys are paid from that fund. Past trades are fine — just pick their real date.
@@ -595,6 +596,8 @@ export default function InvestingTab({ hook, userId, budget }) {
       {view === 'watchlist' && (
         <WatchHome hook={hook} items={watch} onOpenList={setOpenListId} />
       )}
+
+      {view === 'calendar' && <EventsCalendar hook={hook} today={today} onOpen={setOpen} />}
 
       {view === 'insights' && txs.length > 0 && (
         <>
@@ -1394,5 +1397,81 @@ function CoreFundRow({ g, coreFund, onSetCore, hide }) {
         </div>
       )}
     </Card>
+  );
+}
+
+// Calendar tab: the events you asked to be reminded of, and everything coming
+// up for what you hold or watch (plus Fed, CPI and jobs dates), each with a 🔔
+function EventsCalendar({ hook, today, onOpen }) {
+  const { assets, portfolio, eventAlerts = [], removeEventAlert, marketEvents } = hook;
+  const [tab, setTab] = useState('reminders');
+  const [market, setMarket] = useState([]);
+  useEffect(() => {
+    let live = true;
+    marketEvents?.().then(ev => live && setMarket(ev)).catch(() => {});
+    return () => { live = false; };
+  }, [marketEvents]);
+
+  const held = new Set(portfolio.holdings.filter(h => h.qty > 0).map(h => h.symbol));
+  const followed = Object.values(assets).filter(a => held.has(a.symbol) || a.watch || (a.lists || []).length > 0);
+  const horizon = addDays(today, 75);
+  const upcoming = [
+    ...followed.flatMap(a => stockEvents(a).filter(e => e.date >= today && e.date <= horizon).map(e => ({ ...e, symbol: a.symbol }))),
+    ...market.filter(e => e.date >= today && e.date <= horizon).map((e, i) => ({ ...e, id: `mkt-${e.date}-${i}`, symbol: null })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || (a.symbol || '').localeCompare(b.symbol || ''));
+  const reminders = eventAlerts.filter(a => !a.sentAt && a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+
+  const dayTitle = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+  const byDay = list => list.reduce((g, e) => { (g[e.date] = g[e.date] || []).push(e); return g; }, {});
+  const renderDays = (list, row) => Object.entries(byDay(list)).map(([date, items]) => (
+    <div key={date}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.khaki, margin: '4px 0 6px' }}>{date === today ? 'Today' : dayTitle(date)}</div>
+      <Card style={{ padding: '2px 14px' }}>{items.map((e, i) => row(e, i))}</Card>
+    </div>
+  ));
+  const line = (e, right, i) => (
+    <div key={e.id || `${e.symbol}-${e.date}-${e.label}`} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+      <span style={{ width: 8, height: 8, borderRadius: 4, background: e.symbol ? colorOf(e) : '#5AC8FA', flexShrink: 0 }} />
+      <button onClick={() => e.symbol && onOpen(e.symbol)} style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+        <span style={{ display: 'block', fontSize: 14, color: T.text, fontWeight: 600 }}>
+          {e.symbol ? <span style={{ color: T.khaki }}>{e.symbol} </span> : <span style={{ color: '#5AC8FA' }}>Market </span>}{e.label}
+        </span>
+        {(e.note || e.notifyOn) && (
+          <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 1 }}>
+            {[e.note, e.notifyOn ? `Reminder ${e.notifyOn === today ? 'today' : new Date(e.notifyOn + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, 9 AM` : null].filter(Boolean).join(' · ')}
+          </span>
+        )}
+      </button>
+      {right}
+    </div>
+  );
+
+  return (
+    <>
+      <SubBar
+        items={[
+          { value: 'reminders', label: `Reminders${reminders.length ? ` (${reminders.length})` : ''}`, icon: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0' },
+          { value: 'upcoming', label: 'Upcoming', icon: ICONS.calendar },
+        ]}
+        value={tab} onChange={v => { setTab(v); scrollToTop(); }}
+      />
+      {tab === 'reminders' && (
+        reminders.length === 0 ? (
+          <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, padding: '8px 2px' }}>
+            No reminders yet. Tap 🔔 on any date in Upcoming (or in a stock's calendar or earnings) to get a notification at 9 AM the business day before.
+          </div>
+        ) : renderDays(reminders, (a, i) => line(a, (
+          <button onClick={() => removeEventAlert(a.id)} aria-label="Remove reminder" style={{ fontSize: 18, color: T.muted, padding: '0 6px' }}>×</button>
+        ), i))
+      )}
+      {tab === 'upcoming' && (
+        upcoming.length === 0 ? (
+          <div style={{ fontSize: 14, color: T.muted, padding: '8px 2px' }}>Nothing in the next few weeks for what you hold or watch.</div>
+        ) : <>
+          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>The next 10 weeks for what you hold or watch, plus Fed decisions, CPI and jobs reports. 🔔 = remind me the business day before, 9 AM.</div>
+          {renderDays(upcoming, (e, i) => line(e, <EventBell hook={hook} event={e} symbol={e.symbol} />, i))}
+        </>
+      )}
+    </>
   );
 }

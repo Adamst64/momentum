@@ -8,8 +8,8 @@ import { db } from '../firebase';
 // so "loaded" (used before anything is synced or cleaned up) can wait for that
 const META = { includeMetadataChanges: true };
 import { genId } from '../utils/id';
-import { priceDate, easternDate } from '../utils/marketCalendar';
-import { toDateStr } from '../utils/dateUtils';
+import { priceDate, easternDate, lastMarketDay } from '../utils/marketCalendar';
+import { toDateStr, addDays } from '../utils/dateUtils';
 import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 
 // users/{uid}/invTransactions — every deposit, withdrawal, buy, sell, dividend
@@ -17,6 +17,9 @@ import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 //                                   priceUpdatedAt, targetPct, watch } (an old 'cash' doc, if any, is ignored)
 // users/{uid}/invSnapshots/{date} — { date, value, cash, netDeposits } for the value chart and returns
 // users/{uid}/invAlerts/{id} — { symbol, direction: 'above'|'below', target, enabled, triggeredAt }
+// users/{uid}/invEventAlerts/{key} — an event you asked to be reminded of:
+//   { symbol (null for a market-wide date), date, label, kind, notifyOn, time, timezone, sentAt }
+//   notifyOn is the business day before (9 AM, your time); weekends and market holidays skipped
 // users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
 // users/{uid}/invWatchLists/{id} — { name, order } named watchlists; a stock's asset doc lists them in
 //   lists: [id] with listAdded.{id}: date and listAddedPrice.{id}: price when added
@@ -28,10 +31,11 @@ export function useInvesting(userId) {
   const [alerts, setAlerts]       = useState([]);
   const [accountDocs, setAccountDocs] = useState([]);
   const [listDocs, setListDocs] = useState([]);
+  const [eventAlerts, setEventAlerts] = useState([]);
   const [txsLoaded, setTxsLoaded] = useState(false);
 
   useEffect(() => {
-    if (!userId) { setTxsLoaded(false); setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); setListDocs([]); return; }
+    if (!userId) { setTxsLoaded(false); setTxs([]); setAssetDocs([]); setSnapshots([]); setAlerts([]); setAccountDocs([]); setListDocs([]); setEventAlerts([]); return; }
     const col = name => collection(db, 'users', userId, name);
     const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const unsubs = [
@@ -41,6 +45,7 @@ export function useInvesting(userId) {
       onSnapshot(col('invAlerts'),       s => setAlerts(rows(s))),
       onSnapshot(col('invAccounts'),     s => setAccountDocs(rows(s))),
       onSnapshot(col('invWatchLists'),   s => setListDocs(rows(s))),
+      onSnapshot(col('invEventAlerts'),  s => setEventAlerts(rows(s))),
     ];
     return () => unsubs.forEach(u => u());
   }, [userId]);
@@ -244,6 +249,32 @@ export function useInvesting(userId) {
     return (await fn({ symbol })).data;
   }, []);
 
+  // Reminders for single events (earnings, dividends, Fed meetings…)
+  // One reminder per stock, day and kind (earnings "expected" or confirmed is the same event);
+  // market dates and your own ones also by name (CPI and jobs can share a day)
+  const eventKey = e => `${e.symbol || 'MKT'}_${e.date}_${e.kind || 'other'}${e.kind === 'earnings' || e.kind === 'dividend' ? '' : '_' + String(e.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}`;
+  const addEventAlert = useCallback(e => {
+    const notifyOn = lastMarketDay(addDays(e.date, -1));
+    let timezone = 'America/New_York';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch { /* keep New York */ }
+    return setDoc(ref('invEventAlerts', eventKey(e)), {
+      symbol: e.symbol || null, date: e.date, label: e.label, kind: e.kind || 'other', note: e.note || null,
+      notifyOn, time: '09:00', timezone, sentAt: null, createdAt: new Date().toISOString(),
+    });
+  }, [ref]);
+  const removeEventAlert = useCallback(id => deleteDoc(ref('invEventAlerts', id)), [ref]);
+  const eventAlertFor = useCallback(e => eventAlerts.find(a => a.id === eventKey(e)) || null, [eventAlerts]);
+
+  // Market-wide dates (Fed decisions, CPI, jobs report), fetched by the server; cached for the session
+  const marketCache = useRef(null);
+  const marketEvents = useCallback(async () => {
+    if (marketCache.current) return marketCache.current;
+    const fn = httpsCallable(getFunctions(getApp()), 'marketEvents');
+    const events = (await fn({})).data?.events || [];
+    marketCache.current = events;
+    return events;
+  }, []);
+
   // Daily closes for a stock's chart, cached per symbol and range for 15 minutes
   const historyCache = useRef({});
   const priceHistory = useCallback(async (symbol, range) => {
@@ -297,5 +328,6 @@ export function useInvesting(userId) {
     addWatchList, renameWatchList, deleteWatchList, addToList, removeFromList, addMark, updateMark, deleteMark, setEvents,
     addTx, addTxs, replaceTxs, deleteTx, updateTx, setTxAccount, assignTxs, addAccount, renameAccount, setCoreFund, deleteAccount, setAsset, removeAsset, refreshPrices, ensureAsset, stockInfo, priceHistory, searchSymbols,
     addAlert, toggleAlert, deleteAlert, deleteHolding,
+    eventAlerts, addEventAlert, removeEventAlert, eventAlertFor, marketEvents,
   };
 }

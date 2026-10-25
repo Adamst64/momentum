@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
@@ -144,6 +144,13 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
   const [ask, setAsk]             = useState(null); // { title, message, action } for "are you sure?"
   const [editing, setEditing]     = useState(null); // { ids, init } of the transaction being edited
   const [showTx, setShowTx]       = useState(false); // the transactions page
+  // Market-wide dates (Fed, CPI, jobs) for the calendar
+  const [market, setMarket]       = useState([]);
+  useEffect(() => {
+    let live = true;
+    hook.marketEvents?.().then(ev => live && setMarket(ev)).catch(() => {});
+    return () => { live = false; };
+  }, [hook.marketEvents]); // eslint-disable-line react-hooks/exhaustive-deps
   const editTx = t => { const e = txEditInit(t, txs); if (e) setEditing(e); };
 
   const where = scoped ? ` from ${scoped.name}` : multi ? ' from all accounts' : '';
@@ -232,7 +239,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 
-        <PositionCalendar symbol={symbol} asset={asset} onSave={events => setEvents(symbol, events)} />
+        <PositionCalendar symbol={symbol} asset={asset} onSave={events => setEvents(symbol, events)} hook={hook} market={market} />
 
         {sold && (
           <div id={held ? undefined : 'h-position'} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, ...JUMP }}>
@@ -296,7 +303,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
         )}
 
         {asset.source === 'finnhub' && (
-          <StockInfo symbol={symbol} price={asset.price} stockInfo={stockInfo} hide={hide} />
+          <StockInfo symbol={symbol} price={asset.price} stockInfo={stockInfo} hide={hide} hook={hook} />
         )}
 
         <div id="h-price" style={JUMP}>

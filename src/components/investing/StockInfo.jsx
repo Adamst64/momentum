@@ -3,6 +3,7 @@ import { T } from '../../theme';
 import { formatShortDate } from '../../utils/dateUtils';
 import { money } from '../../utils/investing';
 import { SectionTitle } from './ui';
+import { EventBell } from './PositionCalendar';
 
 const HOUR_LABEL = { bmo: 'before market open', amc: 'after market close', dmh: 'during market hours' };
 
@@ -262,7 +263,7 @@ function AnalystTargets({ a, price, hide }) {
 }
 
 // Stats and earnings for one stock, loaded when the holding screen opens
-export default function StockInfo({ symbol, price, stockInfo, hide }) {
+export default function StockInfo({ symbol, price, stockInfo, hide, hook }) {
   const [data, setData]   = useState(null);
   const [error, setError] = useState(null);
 
@@ -359,7 +360,10 @@ export default function StockInfo({ symbol, price, stockInfo, hide }) {
         <SectionTitle>Earnings</SectionTitle>
         <div style={{ fontSize: 13, color: T.text, marginBottom: 8 }}>
           {data.nextEarnings
-            ? <>Next report: <b>{earningsLabel(data.nextEarnings)}</b>{data.nextEarnings.epsEstimate != null ? <span style={{ color: T.muted }}> · est. EPS ${data.nextEarnings.epsEstimate.toFixed(2)}</span> : null}</>
+            ? <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ flex: 1, minWidth: 0 }}>Next report: <b>{earningsLabel(data.nextEarnings)}</b>{data.nextEarnings.epsEstimate != null ? <span style={{ color: T.muted }}> · est. EPS ${data.nextEarnings.epsEstimate.toFixed(2)}</span> : null}</span>
+                <EventBell hook={hook} symbol={symbol} event={{ date: data.nextEarnings.date, kind: 'earnings', label: 'Earnings report', note: earningsLabel(data.nextEarnings) }} />
+              </span>
             : <span style={{ color: T.muted }}>No report scheduled in the next 5 weeks.</span>}
         </div>
         {data.earningsHistory.map(e => {

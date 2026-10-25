@@ -955,6 +955,85 @@ async function maybeRefreshEvents(userDoc, key) {
   for (const d of docs) await refreshAutoEvents(d.ref, d.id, key);
 }
 
+// ── Market-wide dates: Fed rate decisions, CPI and the jobs report ──────────
+// Read from the Fed's FOMC calendar and the BLS release schedules (both public
+// pages), cached in config/marketEvents for 3 days. They move the whole market,
+// rates and gold, so every holding's calendar shows them.
+const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, sept: 9, oct: 10, nov: 11, dec: 12,
+  january: 1, february: 2, march: 3, april: 4, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12 };
+const pad2 = n => String(n).padStart(2, '0');
+const PAGE_UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', Accept: 'text/html' };
+
+async function fomcDates() {
+  const html = await (await fetch('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', { headers: PAGE_UA })).text();
+  const out = [];
+  const heads = [...html.matchAll(/(\d{4}) FOMC Meetings/g)];
+  heads.forEach((h, k) => {
+    const year = Number(h[1]);
+    const part = html.slice(h.index, heads[k + 1]?.index ?? h.index + 60000);
+    for (const m of part.matchAll(/fomc-meeting__month[^>]*><strong>([^<]+)<\/strong>[\s\S]*?fomc-meeting__date[^>]*>([^<]+)</g)) {
+      // "April/May" + "30-1": the decision is on the last day, in the last month
+      const months = m[1].trim().toLowerCase().split('/');
+      const days = m[2].replace(/[^\d-]/g, '').split('-').filter(Boolean);
+      const month = MONTHS[months[months.length - 1]];
+      const day = Number(days[days.length - 1]);
+      if (!month || !day) continue;
+      const projections = m[2].includes('*');
+      out.push({ date: `${year}-${pad2(month)}-${pad2(day)}`, kind: 'market', label: 'Fed rate decision', note: `2:00 PM ET${projections ? ' · with new economic projections' : ''}` });
+    }
+  });
+  return out;
+}
+
+async function blsDates(page, label) {
+  const html = await (await fetch(`https://www.bls.gov/schedule/news_release/${page}.htm`, { headers: PAGE_UA })).text();
+  const out = [];
+  for (const m of html.matchAll(/<td>([A-Z][a-z]+\.? \d{1,2}, \d{4})<\/td>\s*<td>([^<]+)<\/td>/g)) {
+    const [, mon, day, year] = m[1].match(/([A-Za-z]+)\.? (\d{1,2}), (\d{4})/) || [];
+    const month = MONTHS[(mon || '').toLowerCase()];
+    if (month) out.push({ date: `${year}-${pad2(month)}-${pad2(Number(day))}`, kind: 'market', label, note: `${m[2].trim().replace(/^0/, '')} ET` });
+  }
+  return out;
+}
+
+async function marketEvents(db, request) {
+  if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
+  const ref = db.doc('config/marketEvents');
+  const cached = (await ref.get()).data();
+  if (cached?.events && !isStale(cached.at, HOURS(72))) return { events: cached.events };
+  const parts = await Promise.all([
+    fomcDates().catch(() => []),
+    blsDates('cpi', 'CPI inflation report').catch(() => []),
+    blsDates('empsit', 'Jobs report').catch(() => []),
+  ]);
+  const from = ymd(new Date(Date.now() - 400 * 864e5));
+  const events = parts.flat().filter(e => e.date >= from).sort((a, b) => a.date.localeCompare(b.date));
+  if (!events.length) return { events: cached?.events || [] };
+  await ref.set({ events, at: new Date().toISOString() });
+  return { events };
+}
+
+// ── Reminders for single events (the bell on a calendar date) ───────────────
+// 9 AM, your time, on the business day before (picked when you tap the bell)
+function zonedToday(tz) {
+  const now = new Date(new Date().toLocaleString('en-US', { timeZone: tz || 'America/New_York' }));
+  return { today: `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`, minutes: now.getHours() * 60 + now.getMinutes() };
+}
+
+async function maybeSendEventAlerts(userDoc, notify) {
+  const snap = await userDoc.ref.collection('invEventAlerts').where('sentAt', '==', null).get();
+  for (const d of snap.docs) {
+    const a = d.data();
+    const { today, minutes } = zonedToday(a.timezone);
+    const [h, m] = String(a.time || '09:00').split(':').map(Number);
+    if (a.date < today) { await d.ref.update({ sentAt: 'expired' }); continue; } // the event has passed
+    if (today < a.notifyOn || minutes < h * 60 + m) continue;
+    await d.ref.update({ sentAt: new Date().toISOString() });
+    const when = new Date(a.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    await notify(`📅 ${a.symbol ? `${a.symbol}: ` : ''}${a.label}`, `${a.date === today ? 'Today' : when}${a.note ? ` · ${a.note}` : ''}`);
+  }
+}
+
 // Evening before a holding reports earnings (7:00–8:00 PM ET), one push per day
 async function maybeEarningsReminder(userDoc, et, notify) {
   if (et.minutes < 19 * 60 || et.minutes >= 20 * 60) return;
@@ -989,6 +1068,8 @@ async function runInvestingJobs(db, userDoc, notify) {
   if (notify) {
     try { await maybeCheckAlerts(db, userDoc, key, et, notify); }
     catch (e) { console.error(`Alerts for ${userDoc.id} failed:`, e.message); }
+    try { await maybeSendEventAlerts(userDoc, notify); }
+    catch (e) { console.error(`Event reminders for ${userDoc.id} failed:`, e.message); }
     try { await maybeEarningsReminder(userDoc, et, notify); }
     catch (e) { console.error(`Earnings reminder for ${userDoc.id} failed:`, e.message); }
   }
@@ -1150,4 +1231,4 @@ async function searchSymbols(db, request) {
   return { results, exact };
 }
 
-module.exports = { refreshPrices, stockInfo, priceHistory, searchSymbols, runInvestingJobs, BENCHMARK };
+module.exports = { refreshPrices, stockInfo, priceHistory, searchSymbols, marketEvents, runInvestingJobs, BENCHMARK };

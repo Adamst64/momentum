@@ -10,11 +10,31 @@ export const EVENT_KINDS = [
   { value: 'other',    label: 'Other' },
 ];
 // Colored by who added it: your own dates green, automatic ones (Yahoo Finance
-// and the earnings calendar) yellow
+// and the earnings calendar) yellow, market-wide ones (Fed, CPI, jobs) blue
 export const OWN_COLOR = '#30D158';
 export const AUTO_COLOR = '#FFD60A';
-const colorOf = e => (e.own ? OWN_COLOR : AUTO_COLOR);
-const kindLabel = k => (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label;
+export const MARKET_COLOR = '#5AC8FA';
+export const colorOf = e => (e.own ? OWN_COLOR : e.kind === 'market' ? MARKET_COLOR : AUTO_COLOR);
+const kindLabel = k => (k === 'market' ? 'Market' : (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label);
+
+// 🔔 on an event: tap to be reminded 9 AM the business day before (see useInvesting)
+export function EventBell({ hook, event, symbol }) {
+  if (!hook?.addEventAlert || !event?.date || event.date < todayStr()) return null;
+  const e = { ...event, symbol: event.kind === 'market' ? null : symbol };
+  const on = hook.eventAlertFor(e);
+  return (
+    <button
+      onClick={ev => { ev.stopPropagation(); if (on) hook.removeEventAlert(on.id); else hook.addEventAlert(e); }}
+      aria-label={on ? 'Stop the reminder' : 'Remind me the business day before'}
+      style={{ flexShrink: 0, width: 34, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: on ? '#2A3A1A' : 'transparent', border: `1px solid ${on ? T.olive : T.cardBorder}` }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill={on ? T.khaki : 'none'}>
+        <path d="M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0" stroke={on ? T.khaki : T.muted} strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    </button>
+  );
+}
 const WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const pad = n => String(n).padStart(2, '0');
 
@@ -35,9 +55,11 @@ export function stockEvents(asset) {
   return [...own, ...auto].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export default function PositionCalendar({ symbol, asset, onSave }) {
+export default function PositionCalendar({ symbol, asset, onSave, hook, market = [] }) {
   const today = todayStr();
-  const events = stockEvents(asset);
+  // The stock's own dates plus the market-wide ones (Fed, CPI, jobs report)
+  const events = [...stockEvents(asset), ...market.map((m, i) => ({ ...m, id: `mkt-${m.date}-${i}`, auto: true }))]
+    .sort((a, b) => a.date.localeCompare(b.date));
   const [month, setMonth] = useState(today.slice(0, 7));
   const [picked, setPicked] = useState(null);       // a day tapped on the calendar
   const [form, setForm] = useState(null);           // { id?, date, label, kind, note }
@@ -82,6 +104,7 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
           </span>
           {e.note && <span style={{ display: 'block', fontSize: 12, color: T.text, marginTop: 2, whiteSpace: 'pre-wrap' }}>{e.note}</span>}
         </span>
+        <EventBell hook={hook} event={e} symbol={symbol} />
         {e.own && (
           <>
             <button onClick={() => setForm({ ...e, note: e.note || '' })} style={{ fontSize: 12, color: T.khaki, fontWeight: 600 }}>Edit</button>
@@ -172,9 +195,10 @@ export default function PositionCalendar({ symbol, asset, onSave }) {
             </div>
           </div>
         )}
-        <div style={{ display: 'flex', gap: 14, fontSize: 11, color: T.muted, padding: '4px 0 6px' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 11, color: T.muted, padding: '4px 0 6px' }}>
           <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: OWN_COLOR, marginRight: 5 }} />Yours</span>
-          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: AUTO_COLOR, marginRight: 5 }} />Automatic (Yahoo Finance)</span>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: AUTO_COLOR, marginRight: 5 }} />This stock</span>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: MARKET_COLOR, marginRight: 5 }} />Market (Fed, CPI, jobs)</span>
         </div>
         {shown.map(row)}
         {!shown.length && !form && (
