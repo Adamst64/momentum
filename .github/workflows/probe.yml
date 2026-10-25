@@ -11,14 +11,9 @@ jobs:
       - run: |
           cat > p.mjs <<'JS'
           const UA = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', Accept: 'text/html' };
-          const fed = await fetch('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', { headers: UA });
-          const fh = await fed.text();
-          console.log('fed', fed.status, fh.length);
-          const i = fh.indexOf('2026 FOMC Meetings'); console.log(fh.slice(i, i + 2500).replace(/\s+/g, ' '));
-          for (const u of ['https://www.bls.gov/schedule/news_release/cpi.htm', 'https://www.bls.gov/schedule/news_release/empsit.htm']) {
-            const r = await fetch(u, { headers: UA }); const t = await r.text();
-            console.log('bls', u, r.status, t.length);
-            const j = t.indexOf('<table'); console.log(t.slice(j, j + 1500).replace(/\s+/g, ' '));
-          }
+          const fh = await (await fetch('https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm', { headers: UA })).text();
+          for (const y of ['2026', '2027']) { const i = fh.indexOf(y + ' FOMC Meetings'); console.log(y, i, [...fh.slice(i, i + 40000).matchAll(/fomc-meeting__month[^>]*><strong>([^<]+)<\/strong>[\s\S]*?fomc-meeting__date[^>]*>([^<]+)</g)].slice(0, 9).map(m => m[1] + ' ' + m[2]).join(' | ')); }
+          const t = await (await fetch('https://www.bls.gov/schedule/news_release/cpi.htm', { headers: UA })).text();
+          const j = t.indexOf('Release Date'); console.log(t.slice(j - 300, j + 1500).replace(/\s+/g, ' '));
           JS
           node p.mjs
