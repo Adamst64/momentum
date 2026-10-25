@@ -23,7 +23,33 @@ const RANGES = [
 // livePrice replaces the last close so the chart ends at the current quote
 // (daily ranges only: the intraday ones are already live, after-hours included).
 // notes: your own marks [{ id, date, label, auto? }] (auto = from a watch list, not deletable here)
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = '6mo' }) {
+// Events that can be shown on the chart, by group (toggled under the chart, remembered)
+export const EVENT_GROUPS = [
+  { value: 'company', label: 'Company' },
+  { value: 'market', label: 'Market' },
+  { value: 'insider', label: 'Insiders' },
+  { value: 'politician', label: 'Politicians' },
+];
+const groupOf = e => (e.kind === 'market' ? 'market' : e.kind === 'insider' ? 'insider' : e.kind === 'politician' ? 'politician' : 'company');
+// Letter and color for an event's dot on the chart
+export function eventMark(e) {
+  if (e.kind === 'politician') return { letter: 'P', color: '#BF5AF2' };
+  if (e.kind === 'insider') return { letter: 'I', color: '#FF9F0A' };
+  if (e.kind === 'market') return { letter: /fed/i.test(e.label) ? 'F' : /cpi/i.test(e.label) ? 'C' : 'J', color: '#5AC8FA' };
+  if (e.kind === 'earnings') return { letter: 'E', color: '#FFD60A' };
+  if (e.kind === 'dividend') return { letter: '$', color: '#7BC96F' };
+  if (e.kind === 'filing' || e.kind === 'news') return { letter: 'N', color: '#FFD60A' };
+  return { letter: '•', color: e.own ? '#30D158' : '#FFD60A' };
+}
+const readGroups = () => { try { return JSON.parse(localStorage.getItem('momentum_chart_events') || '[]'); } catch { return []; } };
+
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = '6mo', events = [] }) {
+  const [groups, setGroupsState] = useState(readGroups);
+  const toggleGroup = g => setGroupsState(cur => {
+    const next = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];
+    try { localStorage.setItem('momentum_chart_events', JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
   const [adding, setAdding] = useState(false);
   const [noteLabel, setNoteLabel] = useState('');
   const [noteText, setNoteText] = useState('');
@@ -64,7 +90,17 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
     const pt = pts.find(p => p.date >= n.date) || (last && n.date > last.date ? last : null);
     return pt ? { ...n, id: `note:${n.id}`, noteId: n.id, type: 'note', date: pt.date, realDate: n.date, price: pt.value, priceThen: pt.value, priceNow: last.value } : null;
   }).filter(Boolean);
-  const allDots = [...trades, ...noteDots];
+  // Events on the chart: each on its day's price; several on one day stack upward
+  const lastPt = pts[pts.length - 1];
+  const perDay = {};
+  const eventDots = !pts.length ? [] : events
+    .filter(e => groups.includes(groupOf(e)) && e.date >= pts[0].date && e.date <= (lastPt?.date || ''))
+    .map((e, k) => {
+      const pt = pts.find(p => p.date >= e.date) || lastPt;
+      const stack = perDay[pt.date] = (perDay[pt.date] ?? -1) + 1;
+      return { ...e, id: `ev:${e.id || k}:${e.date}`, type: 'event', date: pt.date, realDate: e.date, price: pt.value, stack, ...eventMark(e) };
+    });
+  const allDots = [...trades, ...noteDots, ...eventDots];
   const trade = allDots.find(t => t.id === tradeId) || null;
   const first = pts[0];
   const shown = scrub || pts[pts.length - 1];
@@ -117,7 +153,20 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
           onClose={() => setAskNote(null)}
         />
       )}
-      {trade && trade.type !== 'note' && <TradeCard key={trade.id} t={trade} hide={hide} onClose={() => setTradeId(null)} onDelete={onDeleteTrade && (() => setAskDelete(trade))} onEdit={onEditTrade && (() => { onEditTrade(trade.id); setTradeId(null); })} />}
+      {trade?.type === 'event' && (
+        <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 12, background: T.bg, border: `1px solid ${trade.color}66` }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ display: 'block', fontSize: 14, fontWeight: 700, color: T.text }}>{trade.label}</span>
+              <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>{formatDateYear(trade.realDate)}{trade.note ? ` · ${trade.note}` : ''}</span>
+              {(trade.details || []).map(d => <span key={d} style={{ display: 'block', fontSize: 12, color: T.text, marginTop: 2 }}>{d}</span>)}
+              {/^https:\/\//.test(trade.url || '') && <a href={trade.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 12, color: T.khaki, marginTop: 6 }}>Open the report ↗</a>}
+            </span>
+            <button onClick={() => setTradeId(null)} aria-label="Close" style={{ fontSize: 18, color: T.muted, padding: '0 4px' }}>×</button>
+          </div>
+        </div>
+      )}
+      {trade && trade.type !== 'note' && trade.type !== 'event' && <TradeCard key={trade.id} t={trade} hide={hide} onClose={() => setTradeId(null)} onDelete={onDeleteTrade && (() => setAskDelete(trade))} onEdit={onEditTrade && (() => { onEditTrade(trade.id); setTradeId(null); })} />}
       {askDelete && (
         <ConfirmDialog
           title="Delete this transaction?"
@@ -130,6 +179,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         <div style={{ fontSize: 11, color: T.muted, marginTop: 6 }}>
           {trades.length > 0 && <><span style={{ color: '#30D158', fontWeight: 700 }}>B</span> buys · <span style={{ color: '#FF9F0A', fontWeight: 700 }}>S</span> sells · {trades.some(t => t.reinvest) && <><span style={{ color: DIV_COLOR, fontWeight: 700 }}>D</span> dividends reinvested · </>}</>}
           {noteDots.length > 0 && <><span style={{ color: NOTE_COLOR, fontWeight: 700 }}>★</span> your marks · </>}
+          {eventDots.length > 0 && <>events: <b style={{ color: '#FFD60A' }}>E</b> earnings <b style={{ color: '#7BC96F' }}>$</b> dividend <b style={{ color: '#FFD60A' }}>N</b> news <b style={{ color: '#5AC8FA' }}>F C J</b> Fed/CPI/jobs <b style={{ color: '#FF9F0A' }}>I</b> insider <b style={{ color: '#BF5AF2' }}>P</b> politician · </>}
           tap one for details · two fingers to compare dates
         </div>
       )}
@@ -153,6 +203,22 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
       <div style={{ marginTop: 10 }}>
         <Chips small options={RANGES} value={range} onChange={v => { setRange(v); setScrub(null); }} />
       </div>
+      {events.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+          <span style={{ fontSize: 12, color: T.muted, marginRight: 2 }}>Events on chart:</span>
+          {EVENT_GROUPS.filter(g => events.some(e => groupOf(e) === g.value)).map(g => {
+            const on = groups.includes(g.value);
+            return (
+              <button key={g.value} onClick={() => toggleGroup(g.value)} aria-pressed={on}
+                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 14, fontSize: 12, fontWeight: 600,
+                  background: on ? '#2A3A1A' : 'transparent', color: on ? T.text : T.muted, border: `1px solid ${on ? T.olive : T.cardBorder}` }}>
+                <span style={{ width: 13, height: 13, borderRadius: 3, border: `1.5px solid ${on ? T.khaki : T.muted}`, background: on ? T.khaki : 'transparent', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#000' }}>{on ? '✓' : ''}</span>
+                {g.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
       {notes.length > 0 && (
         <MarksList
           symbol={symbol} notes={notes} priceHistory={priceHistory} now={livePrice || pts[pts.length - 1]?.value} hide={hide}

@@ -8,7 +8,7 @@ import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
 import StockChart from './StockChart';
 import TxModal from './TxModal';
-import PositionCalendar from './PositionCalendar';
+import PositionCalendar, { stockEvents } from './PositionCalendar';
 import { SubBar, jumpTo } from '../TabBar';
 
 // Sections the shortcuts jump to stay clear of the back button
@@ -212,6 +212,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
 
         <div id="h-chart" style={JUMP} />
         <StockChart
+          events={[...stockEvents(asset), ...market]}
           symbol={symbol}
           priceHistory={priceHistory}
           livePrice={asset.source === 'finnhub' ? asset.price : null}

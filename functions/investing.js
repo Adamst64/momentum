@@ -717,7 +717,7 @@ async function stockInfo(db, request) {
   }
   if (Object.keys(update).length) await ref.set({ symbol: sym, ...update }, { merge: true });
   if (eventsStale({ ...cached, ...update })) {
-    try { await refreshAutoEvents(ref, sym, key); } catch { /* optional */ }
+    try { await refreshAutoEvents(ref, sym, key, db); } catch { /* optional */ }
   }
   let day = null;
   try { day = await yahooDayStats(sym); } catch { /* optional */ }
@@ -868,11 +868,193 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
 //  - Yahoo chart (keyless): past dividends (ex-dates, amount) and splits, 2 years
 //  - Yahoo quoteSummary calendarEvents: next earnings, ex-dividend and pay dates
 //  - Finnhub earnings calendar: past and upcoming report dates with EPS
-const EVENTS_V = 1;
+const EVENTS_V = 2;
 const fmtEps = v => (v == null ? '—' : `$${Number(v).toFixed(2)}`);
 const etDate = ts => easternNow(new Date(ts * 1000)).today;
 
-async function fetchAutoEvents(sym, key) {
+// ── More events: insider trades, SEC filings, news, House members' trades ───
+//  - Finnhub insider transactions: open-market buys (P) and sales (S), on the day filed
+//  - SEC EDGAR (official, free): 8-K filings = material events (contracts, deals, executives…)
+//  - Finnhub company news, kept when the headline is about a contract, deal, approval…
+//  - House members' trades: read from the House Clerk's reports (refreshPoliticianTrades)
+const SEC_UA = { 'User-Agent': 'Momentum App admin@momentumapp.dev', 'Accept-Encoding': 'gzip, deflate' };
+const ITEM_LABELS = {
+  '1.01': 'Signed a material agreement', '1.02': 'Ended a material agreement', '1.03': 'Bankruptcy or receivership',
+  '2.01': 'Completed an acquisition or sale', '2.02': 'Results announced', '2.03': 'Took on major debt',
+  '2.05': 'Restructuring or layoffs', '2.06': 'Impairment', '3.01': 'Listing notice', '3.02': 'Sold unregistered shares',
+  '4.01': 'Changed auditor', '4.02': 'Restated past results', '5.01': 'Change in control', '5.02': 'Executive or board change',
+  '5.03': 'Changed bylaws', '5.07': 'Shareholder vote results', '7.01': 'Company announcement', '8.01': 'Other material event',
+};
+const usd = n => `$${Number(n).toLocaleString('en-US', { maximumFractionDigits: n < 100 ? 2 : 0 })}`;
+
+let tickerCiks = null; // { AAPL: 320193, … } from the SEC, once per server instance
+async function cikFor(sym) {
+  if (!tickerCiks) {
+    const j = await (await fetch('https://www.sec.gov/files/company_tickers.json', { headers: SEC_UA })).json();
+    tickerCiks = Object.fromEntries(Object.values(j).map(r => [String(r.ticker).toUpperCase(), r.cik_str]));
+  }
+  return tickerCiks[sym.replace('.', '-')] || tickerCiks[sym] || null;
+}
+
+async function insiderEvents(sym, key, cik) {
+  const rows = (await finnhub(`stock/insider-transactions?symbol=${encodeURIComponent(sym)}`, key))?.data || [];
+  return rows.filter(r => (r.transactionCode === 'P' || r.transactionCode === 'S') && r.change && r.filingDate)
+    .slice(0, 60)
+    .map(r => {
+      const bought = r.change > 0, shares = Math.abs(r.change);
+      const who = String(r.name || 'An insider').replace(/\b([A-Z])([A-Z]+)\b/g, (m, a, b) => a + b.toLowerCase());
+      const acc = String(r.id || '').replace(/-/g, '');
+      return {
+        id: `ins-${r.id}-${r.change}`, date: r.filingDate, kind: 'insider',
+        label: `${who} ${bought ? 'bought' : 'sold'} ${shares.toLocaleString('en-US')} shares`,
+        note: r.transactionPrice ? `at ${usd(r.transactionPrice)} · ${usd(shares * r.transactionPrice)}` : null,
+        details: [`Traded ${r.transactionDate || '—'} · filed ${r.filingDate}`, `Holds ${Number(r.share || 0).toLocaleString('en-US')} shares after`],
+        ...(cik && acc ? { url: `https://www.sec.gov/Archives/edgar/data/${cik}/${acc}/` } : {}),
+      };
+    });
+}
+
+async function filingEvents(cik) {
+  if (!cik) return [];
+  const j = await (await fetch(`https://data.sec.gov/submissions/CIK${String(cik).padStart(10, '0')}.json`, { headers: SEC_UA })).json();
+  const r = j?.filings?.recent || {};
+  const out = [];
+  const cutoff = ymd(new Date(Date.now() - 2 * 365 * 864e5));
+  (r.form || []).forEach((form, i) => {
+    if (form !== '8-K' || r.filingDate[i] < cutoff) return;
+    const items = String(r.items[i] || '').split(',').map(x => x.trim()).filter(x => ITEM_LABELS[x] && x !== '9.01');
+    if (!items.length || (items.length === 1 && items[0] === '2.02')) return; // results are already the earnings dates
+    const main = items.find(x => x !== '7.01' && x !== '8.01') || items[0];
+    const acc = String(r.accessionNumber[i]).replace(/-/g, '');
+    out.push({
+      id: `8k-${r.accessionNumber[i]}`, date: r.filingDate[i], kind: 'filing', label: ITEM_LABELS[main],
+      note: 'SEC filing (8-K)', details: items.length > 1 ? [items.map(x => ITEM_LABELS[x]).join(' · ')] : [],
+      url: `https://www.sec.gov/Archives/edgar/data/${cik}/${acc}/${r.primaryDocument[i]}`,
+    });
+  });
+  return out.slice(0, 40);
+}
+
+const NEWS_WORDS = /\b(contract|agreement|deal|acquir|acquisition|merger|merge|partnership|partners with|award|wins|order|approval|approves|FDA|lawsuit|sued|settle|guidance|buyback|repurchase|layoff|recall|investigation|probe|launch|expands|stake|split|dividend|downgrade|upgrade)/i;
+async function newsEvents(sym, key) {
+  const from = ymd(new Date(Date.now() - 120 * 864e5)), to = ymd(new Date());
+  const rows = await finnhub(`company-news?symbol=${encodeURIComponent(sym)}&from=${from}&to=${to}`, key);
+  const seen = new Set();
+  return (Array.isArray(rows) ? rows : [])
+    .filter(n => n.headline && NEWS_WORDS.test(n.headline) && (n.related || '').split(',').includes(sym))
+    .filter(n => { const k = n.headline.toLowerCase().slice(0, 60); if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 40)
+    .map(n => ({
+      id: `news-${n.id}`, date: etDate(n.datetime), kind: 'news', label: n.headline.length > 110 ? n.headline.slice(0, 107) + '…' : n.headline,
+      note: n.source || 'News', details: n.summary ? [n.summary.slice(0, 220) + (n.summary.length > 220 ? '…' : '')] : [],
+      ...(/^https:\/\//.test(n.url || '') ? { url: n.url } : {}),
+    }));
+}
+
+async function politicianEvents(db, sym) {
+  const snap = await db.collection('politicianTrades').where('ticker', '==', sym).get();
+  return snap.docs.map(d => d.data()).sort((a, b) => b.filed.localeCompare(a.filed)).slice(0, 60).map(t => ({
+    id: `pol-${t.docId}-${t.n}`, date: t.filed, kind: 'politician',
+    label: `${t.name} ${t.type === 'P' ? 'bought' : t.type === 'E' ? 'exchanged' : 'sold'} ${sym}`,
+    note: `${t.amount}${t.party ? ` · ${t.party}` : ''}`,
+    details: [`Traded ${t.traded} · filed ${t.filed}`, `${t.chamber || 'House'} member · ${t.state}`, ...(t.owner ? [`Owner: ${t.owner}`] : [])],
+    url: t.url,
+  }));
+}
+
+// House members' trade reports (PTRs): the Clerk's yearly index lists each filing;
+// each report is a PDF with lines like "NVIDIA Corporation - Common Stock (NVDA) [ST]
+// P 10/01/2026 10/01/2026 $1,001 - $15,000". New reports are read and saved to the
+// politicianTrades collection (server only). Runs at most hourly.
+const PTR_LINE = /\(([A-Z][A-Z.]{0,5})\)\s*\[([A-Z]{2})\]\s*(P|S \(partial\)|S|E)\s*(\d\d\/\d\d\/\d{4})\s*(\d\d\/\d\d\/\d{4})\s*(\$[\d,]+(?:\s*-\s*\$[\d,]+)?|Over \$[\d,]+)/g;
+const mdy = s => { const [m, d, y] = s.split('/'); return `${y}-${m}-${d}`; };
+
+async function refreshPoliticianTrades(db) {
+  const ref = db.doc('config/housePtr');
+  const state = (await ref.get()).data() || {};
+  if (!isStale(state.at, HOURS(1))) return;
+  await ref.set({ at: new Date().toISOString() }, { merge: true });
+  const AdmZip = require('adm-zip');
+  const pdf = require('pdf-parse/lib/pdf-parse.js');
+  const year = new Date().getFullYear();
+  const buf = Buffer.from(await (await fetch(`https://disclosures-clerk.house.gov/public_disc/financial-pdfs/${year}FD.zip`)).arrayBuffer());
+  const entry = new AdmZip(buf).getEntries().find(e => e.entryName.endsWith('.xml'));
+  if (!entry) return;
+  const xml = entry.getData().toString('utf8');
+  const filings = [...xml.matchAll(/<Member>([\s\S]*?)<\/Member>/g)]
+    .map(m => Object.fromEntries([...m[1].matchAll(/<(\w+)>([^<]*)<\/\1>/g)].map(x => [x[1], x[2]])))
+    .filter(r => r.FilingType === 'P' && r.DocID && r.FilingDate);
+  const seen = new Set(state.seen || []);
+  // Newest first; the first run only looks back 45 days
+  const since = state.seen ? '' : ymd(new Date(Date.now() - 45 * 864e5));
+  const todo = filings.filter(r => !seen.has(r.DocID) && mdy(r.FilingDate) >= since)
+    .sort((a, b) => mdy(b.FilingDate).localeCompare(mdy(a.FilingDate))).slice(0, 25);
+  for (const r of todo) {
+    seen.add(r.DocID);
+    try {
+      const url = `https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/${year}/${r.DocID}.pdf`;
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const text = (await pdf(Buffer.from(await res.arrayBuffer()))).text.replace(/\u0000/g, '');
+      const name = [r.Prefix === 'Hon.' ? '' : r.Prefix, r.First, r.Last].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+      const batch = db.batch();
+      let n = 0;
+      for (const m of text.matchAll(PTR_LINE)) {
+        if (m[2] !== 'ST' && m[2] !== 'OP' && m[2] !== 'EF') continue; // stocks, options, funds
+        batch.set(db.collection('politicianTrades').doc(`${r.DocID}-${n}`), {
+          docId: r.DocID, n, ticker: m[1], name, chamber: 'House', state: r.StateDst || '',
+          type: m[3].startsWith('S') ? 'S' : m[3], partial: m[3].includes('partial'), traded: mdy(m[4]), notified: mdy(m[5]),
+          amount: m[6].replace(/\s+/g, ' '), filed: mdy(r.FilingDate), url, savedAt: new Date().toISOString(),
+        });
+        n++;
+      }
+      if (n) await batch.commit();
+    } catch (e) { console.warn(`PTR ${r.DocID} failed:`, e.message); }
+  }
+  await ref.set({ seen: [...seen].slice(-3000) }, { merge: true });
+}
+
+// Every 2 hours: new insider trades and House members' trades in what you hold or
+// watch → one notification, and those stocks' calendars refresh on the next run
+async function maybeNotifyTrades(db, userDoc, key, notify) {
+  const inv = userDoc.data().investing || {};
+  if (!isStale(inv.lastTradeCheck, HOURS(2))) return;
+  const since = inv.lastTradeCheck ? inv.lastTradeCheck.slice(0, 10) : ymd(new Date(Date.now() - 864e5));
+  await userDoc.ref.set({ investing: { lastTradeCheck: new Date().toISOString() } }, { merge: true });
+  const assets = (await userDoc.ref.collection('invAssets').where('source', '==', 'finnhub').get()).docs
+    .map(d => ({ ref: d.ref, ...d.data() })).filter(a => !(a.benchmark && !a.watch));
+  const syms = [...new Set(assets.map(a => a.symbol || a.ref.id))].slice(0, 30);
+  if (!syms.length) return;
+  const lines = [];
+  const touched = new Set();
+  // House members (from the shared collection)
+  for (let i = 0; i < syms.length; i += 10) {
+    // (one filter only, so no extra database index is needed)
+    const snap = await db.collection('politicianTrades').where('ticker', 'in', syms.slice(i, i + 10)).get();
+    snap.docs.map(d => d.data()).forEach(t => {
+      if (t.filed < since || t.savedAt < (inv.lastTradeCheck || '')) return;
+      touched.add(t.ticker);
+      lines.push(`${t.name} ${t.type === 'P' ? 'bought' : 'sold'} ${t.ticker} (${t.amount})`);
+    });
+  }
+  // Insiders (Finnhub, per stock)
+  if (key) {
+    for (const sym of syms) {
+      try {
+        const rows = (await finnhub(`stock/insider-transactions?symbol=${encodeURIComponent(sym)}&from=${since}`, key))?.data || [];
+        rows.filter(r => (r.transactionCode === 'P' || r.transactionCode === 'S') && r.filingDate >= since && r.change).forEach(r => {
+          touched.add(sym);
+          lines.push(`${sym} insider ${r.change > 0 ? 'bought' : 'sold'} ${Math.abs(r.change).toLocaleString('en-US')} sh${r.transactionPrice ? ` at ${usd(r.transactionPrice)}` : ''}`);
+        });
+      } catch { /* try next time */ }
+    }
+  }
+  if (!lines.length) return;
+  for (const a of assets) if (touched.has(a.symbol || a.ref.id)) await a.ref.set({ autoEventsAt: null }, { merge: true });
+  if (notify) await notify(`🏛️ ${lines.length} new trade report${lines.length > 1 ? 's' : ''}`, lines.slice(0, 4).join(' · ') + (lines.length > 4 ? ` · +${lines.length - 4} more` : ''));
+}
+
+async function fetchAutoEvents(sym, key, db) {
   const out = [];
   const add = (date, kind, label, note) => {
     if (!date) return;
@@ -929,17 +1111,27 @@ async function fetchAutoEvents(sym, key) {
     add(y.date, 'earnings', y.est ? 'Earnings report (expected)' : 'Earnings report', y.epsEstimate != null ? `est. EPS ${fmtEps(y.epsEstimate)}` : null);
   }
 
-  // One per day and kind (the same ex-date can come from two places)
+  // Insider trades, SEC filings, news and House members' trades
+  const cik = await cikFor(sym).catch(() => null);
+  const extra = (await Promise.all([
+    key ? insiderEvents(sym, key, cik).catch(() => []) : [],
+    filingEvents(cik).catch(() => []),
+    key ? newsEvents(sym, key).catch(() => []) : [],
+    db ? politicianEvents(db, sym).catch(() => []) : [],
+  ])).flat();
+
+  // One per day and kind for earnings / dividends / splits (the same ex-date can come
+  // from two places); every insider trade, filing, news item and House trade is kept
   const seen = new Set();
   const cutoff = ymd(new Date(Date.now() - 2 * 365 * 864e5));
-  return out
+  return [...out, ...extra]
     .filter(e => e.date >= cutoff)
     .sort((a, b) => a.date.localeCompare(b.date) || b.label.length - a.label.length)
-    .filter(e => { const k = `${e.date}|${e.kind}`; if (seen.has(k)) return false; seen.add(k); return true; });
+    .filter(e => { const k = e.id && /^(ins|8k|news|pol)-/.test(e.id) ? e.id : `${e.date}|${e.kind}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-async function refreshAutoEvents(ref, sym, key) {
-  const autoEvents = await fetchAutoEvents(sym, key);
+async function refreshAutoEvents(ref, sym, key, db) {
+  const autoEvents = await fetchAutoEvents(sym, key, db);
   const update = { autoEvents, autoEventsAt: new Date().toISOString(), autoEventsV: EVENTS_V };
   await ref.set(update, { merge: true });
   return update;
@@ -948,11 +1140,11 @@ const eventsStale = a => isStale(a.autoEventsAt, HOURS(20)) || a.autoEventsV !==
 
 // A few stale stocks per run (the job runs every 5 minutes), so every stock in
 // the portfolio and watch lists is refreshed about once a day
-async function maybeRefreshEvents(userDoc, key) {
+async function maybeRefreshEvents(db, userDoc, key) {
   const docs = (await userDoc.ref.collection('invAssets').where('source', '==', 'finnhub').get()).docs
     .filter(d => { const a = d.data(); return !(a.benchmark && !a.watch) && eventsStale(a); })
     .slice(0, 3);
-  for (const d of docs) await refreshAutoEvents(d.ref, d.id, key);
+  for (const d of docs) await refreshAutoEvents(d.ref, d.id, key, db);
 }
 
 // ── Market-wide dates: Fed rate decisions, CPI and the jobs report ──────────
@@ -1074,11 +1266,13 @@ async function runInvestingJobs(db, userDoc, notify) {
   catch (e) { console.error(`Snapshot for ${userDoc.id} failed:`, e.message); }
   try { await maybeRefreshExtended(userDoc, et); }
   catch (e) { console.error(`Extended prices for ${userDoc.id} failed:`, e.message); }
-  try { await maybeRefreshEvents(userDoc, key); }
+  try { await maybeRefreshEvents(db, userDoc, key); }
   catch (e) { console.error(`Calendar events for ${userDoc.id} failed:`, e.message); }
   if (notify) {
     try { await maybeCheckAlerts(db, userDoc, key, et, notify); }
     catch (e) { console.error(`Alerts for ${userDoc.id} failed:`, e.message); }
+    try { await maybeNotifyTrades(db, userDoc, key, notify); }
+    catch (e) { console.error(`Trade reports for ${userDoc.id} failed:`, e.message); }
     try { await maybeSendEventAlerts(userDoc, notify); }
     catch (e) { console.error(`Event reminders for ${userDoc.id} failed:`, e.message); }
     try { await maybeEarningsReminder(userDoc, et, notify); }
@@ -1242,4 +1436,4 @@ async function searchSymbols(db, request) {
   return { results, exact };
 }
 
-module.exports = { refreshPrices, stockInfo, priceHistory, searchSymbols, marketEvents, runInvestingJobs, BENCHMARK };
+module.exports = { refreshPrices, stockInfo, priceHistory, searchSymbols, marketEvents, runInvestingJobs, refreshPoliticianTrades, BENCHMARK };

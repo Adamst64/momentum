@@ -14,8 +14,11 @@ export const EVENT_KINDS = [
 export const OWN_COLOR = '#30D158';
 export const AUTO_COLOR = '#FFD60A';
 export const MARKET_COLOR = '#5AC8FA';
-export const colorOf = e => (e.own ? OWN_COLOR : e.kind === 'market' ? MARKET_COLOR : AUTO_COLOR);
-const kindLabel = k => (k === 'market' ? 'Market' : (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label);
+export const POLITICIAN_COLOR = '#BF5AF2';
+export const INSIDER_COLOR = '#FF9F0A';
+export const colorOf = e => (e.own ? OWN_COLOR : e.kind === 'market' ? MARKET_COLOR : e.kind === 'politician' ? POLITICIAN_COLOR : e.kind === 'insider' ? INSIDER_COLOR : AUTO_COLOR);
+const KIND_NAMES = { market: 'Market', insider: 'Insider trade', politician: 'Politician trade', filing: 'SEC filing', news: 'News' };
+const kindLabel = k => KIND_NAMES[k] || (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label;
 
 // 🔔 on an event: tap to be notified 9 AM the business day before and 8 AM on the day (see useInvesting)
 export function EventBell({ hook, event, symbol }) {
@@ -103,6 +106,8 @@ export default function PositionCalendar({ symbol, asset, onSave, hook, market =
             {formatDateYear(e.date)} · {when} · {kindLabel(e.kind)}{e.auto ? ' · automatic' : ''}
           </span>
           {e.note && <span style={{ display: 'block', fontSize: 12, color: T.text, marginTop: 2, whiteSpace: 'pre-wrap' }}>{e.note}</span>}
+          {(e.details || []).map(d => <span key={d} style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 1 }}>{d}</span>)}
+          {/^https:\/\//.test(e.url || '') && <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 12, color: T.khaki, marginTop: 3 }}>Open the report ↗</a>}
         </span>
         <EventBell hook={hook} event={e} symbol={symbol} />
         {e.own && (
@@ -199,6 +204,8 @@ export default function PositionCalendar({ symbol, asset, onSave, hook, market =
           <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: OWN_COLOR, marginRight: 5 }} />Yours</span>
           <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: AUTO_COLOR, marginRight: 5 }} />This stock</span>
           <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: MARKET_COLOR, marginRight: 5 }} />Market (Fed, CPI, jobs)</span>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: INSIDER_COLOR, marginRight: 5 }} />Insiders</span>
+          <span><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: POLITICIAN_COLOR, marginRight: 5 }} />Politicians</span>
         </div>
         {shown.map(row)}
         {!shown.length && !form && (

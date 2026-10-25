@@ -1440,6 +1440,7 @@ function EventsCalendar({ hook, today, onOpen }) {
         <span style={{ display: 'block', fontSize: 14, color: T.text, fontWeight: 600 }}>
           {e.symbol ? <span style={{ color: T.khaki }}>{e.symbol} </span> : <span style={{ color: '#5AC8FA' }}>Market </span>}{e.label}
         </span>
+        {(e.details || []).slice(0, 1).map(d => <span key={d} style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 1 }}>{d}</span>)}
         {(e.note || e.notifyOn) && (
           <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 1 }}>
             {[e.note, e.notifyOn ? `Reminders ${e.notifyOn === today ? 'today' : new Date(e.notifyOn + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' })} 9 AM + ${e.date === today ? 'today' : 'that day'} 8 AM` : null].filter(Boolean).join(' · ')}

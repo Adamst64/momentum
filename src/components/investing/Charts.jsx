@@ -92,6 +92,11 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const edgeCount = { top: 0, bottom: 0 };
   const x = i => PAD + (i / (points.length - 1)) * (W - PAD * 2);
   const y = v => PAD + (1 - (v - min) / span) * (H - PAD * 2);
+  // An event's dot: above the price, stacking upward; below it when there's no room
+  const eventY = t => {
+    const above = y(t.price) - 12 - (t.stack || 0) * 13;
+    return above >= 18 ? above : Math.min(H - 8, y(t.price) + 12 + (t.stack || 0) * 13);
+  };
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
   const up = vals[vals.length - 1] >= vals[0];
   const color = up ? T.oliveLight : T.red;
@@ -164,9 +169,14 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     downAt.current = null;
     if (onTradeTap && d && Math.abs(e.clientX - d.x) < 8 && Math.abs(e.clientY - d.y) < 8) {
       const cx = toChartX(e.clientX);
+      // Height matters too, so stacked events on one day can each be picked
+      const r = ref.current.getBoundingClientRect();
+      const scale = Math.min(r.width / W, r.height / H);
+      const cy = (e.clientY - r.top - (r.height - H * scale) / 2) / scale;
+      const dotY = t => (t.type === 'event' ? eventY(t) : y(t.price));
       const near = tradeDots
-        .map(t => ({ t, dist: Math.abs(x(t.i) - cx) }))
-        .filter(o => o.dist <= 14)
+        .map(t => ({ t, dx: Math.abs(x(t.i) - cx), dist: Math.hypot(x(t.i) - cx, (dotY(t) - cy) * 0.6) }))
+        .filter(o => o.dx <= 14)
         .sort((a, b) => a.dist - b.dist)[0];
       onTradeTap(near ? near.t.id : null);
     }
@@ -253,6 +263,18 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
           const buy = t.type === 'buy';
           const sel = selectedTrade === t.id;
           const cx = x(t.i), cy = y(t.price);
+          if (t.type === 'event') {
+            // An event: a faint line through the day and a lettered dot above the price
+            const ey = eventY(t);
+            return (
+              <g key={t.id} style={{ pointerEvents: 'none' }}>
+                <line x1={cx} x2={cx} y1={ey} y2={H} stroke={t.color} strokeWidth={0.8} strokeDasharray="2 3" opacity={0.5} />
+                {sel && <circle cx={cx} cy={ey} r={8.5} fill="none" stroke={T.text} strokeWidth={1.5} />}
+                <circle cx={cx} cy={ey} r={5.5} fill={t.color} stroke={T.card} strokeWidth={1.2} />
+                <text x={cx} y={ey + 2.5} textAnchor="middle" fontSize="7" fontWeight="800" fill="#000">{t.letter}</text>
+              </g>
+            );
+          }
           if (t.type === 'note') {
             // Your own mark: a thin line through the day and a ★ on the price
             return (

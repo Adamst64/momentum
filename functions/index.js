@@ -279,6 +279,9 @@ exports.sendTaskNotifications = onSchedule(
     const db        = getFirestore();
     const messaging = getMessaging();
 
+    // Shared: House members' new trade reports (hourly), before each user's checks
+    await guarded('House trade reports', 'all', () => investing.refreshPoliticianTrades(db));
+
     const usersSnap = await db.collection('users').get();
 
     await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
