@@ -86,12 +86,13 @@ export default function SiriSetup({ userId }) {
               {linkBlock('shopping', 'Shopping list link (keep it private):')}
 
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 4 }}>Make the shortcut (once, about a minute)</div>
-              {step(1, <>Open the <b>Shortcuts</b> app → tap <b>+</b>. Name it <b>Add to shopping list</b> (that's what you'll say to Siri).</>)}
-              {step(2, <>Add the action <b>Dictate Text</b> (Siri will ask what to add).</>)}
-              {step(3, <>Add the action <b>Text</b> and paste your link into it. Right after <b>item=</b>, insert the variable <b>Dictated Text</b>.</>)}
-              {step(4, <>Add <b>Get Contents of URL</b> (it uses the Text above).</>)}
-              {step(5, <>Add <b>Show Result</b> so Siri reads back "Added Milk to Groceries".</>)}
-              {step(6, <>Say <b>"Hey Siri, add to shopping list"</b>, then "milk, eggs and bread".</>)}
+              {step(1, <>Open the <b>Shortcuts</b> app → tap <b>+</b>. Ignore the suggested actions; you'll use the <b>Search Actions</b> bar at the bottom.</>)}
+              {step(2, <>Search <b>Dictate Text</b> and tap it (Siri will ask what to add).</>)}
+              {step(3, <>Search <b>Text</b> and tap it. Tap inside its box, paste your link, then tap <b>Dictated Text</b> in the bar above the keyboard so it lands right after <b>item=</b>.</>)}
+              {step(4, <>Search <b>Get Contents of URL</b> and tap it (it uses the Text above).</>)}
+              {step(5, <>Search <b>Show Result</b> and tap it, so Siri reads back "Added Milk to Groceries".</>)}
+              {step(6, <>Tap the name at the top → <b>Rename</b> → <b>Add to shopping list</b> (that's what you'll say), then <b>Done</b>.</>)}
+              {step(7, <>Say <b>"Hey Siri, add to shopping list"</b>, then "milk, eggs and bread".</>)}
 
               <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
                 Say several items at once ("bread milk eggs"). Another list: add <b>&amp;list=Costco</b> before <b>&amp;item=</b>.
