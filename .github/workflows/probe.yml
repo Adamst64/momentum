@@ -1,0 +1,27 @@
+name: probe
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci
+        working-directory: functions
+      - name: Parse
+        working-directory: functions
+        run: |
+          cat > probe.js <<'JS'
+          const fs = require('fs'), Module = require('module');
+          const m = new Module('inv', module); m.paths = module.paths;
+          m._compile(fs.readFileSync('investing.js', 'utf8') + '\nmodule.exports.t = { fomcDates, blsDates };', require('path').resolve('investing.js'));
+          (async () => {
+            const f = await m.exports.t.fomcDates(); console.log('FOMC', f.length, JSON.stringify(f.filter(e => e.date >= '2026-10-01').slice(0, 4)));
+            const c = await m.exports.t.blsDates('cpi', 'CPI'); console.log('CPI', c.length, JSON.stringify(c.slice(0, 3)));
+            const j = await m.exports.t.blsDates('empsit', 'Jobs'); console.log('JOBS', j.length, JSON.stringify(j.slice(0, 3)));
+          })();
+          JS
+          node probe.js
