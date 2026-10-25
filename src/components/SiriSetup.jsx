@@ -89,8 +89,8 @@ export default function SiriSetup({ userId }) {
               {step(1, <>Open the <b>Shortcuts</b> app → tap <b>+</b>. Ignore the suggested actions; you'll use the <b>Search Actions</b> bar at the bottom.</>)}
               {step(2, <>Search <b>Dictate Text</b> and tap it (Siri will ask what to add).</>)}
               {step(3, <>Search <b>Text</b> and tap it. Tap inside its box, paste your link, then tap <b>Dictated Text</b> in the bar above the keyboard so it lands right after <b>item=</b>.</>)}
-              {step(4, <>Search <b>Get Contents of URL</b> and tap it (it uses the Text above).</>)}
-              {step(5, <>Search <b>Show Result</b> and tap it, so Siri reads back "Added Milk to Groceries".</>)}
+              {step(4, <>Search <b>Get Contents of URL</b> (green icon) and tap it. It should read "Get contents of Text".</>)}
+              {step(5, <>Search <b>Speak Text</b> and tap it, so Siri says "Added Milk to Groceries" (optional; it adds either way).</>)}
               {step(6, <>Tap the name at the top → <b>Rename</b> → <b>Add to shopping list</b> (that's what you'll say), then <b>Done</b>.</>)}
               {step(7, <>Say <b>"Hey Siri, add to shopping list"</b>, then "milk, eggs and bread".</>)}
 
