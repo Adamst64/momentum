@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - run: npm ci
+      - run: npm ci && npm i --no-save pdf-parse@1.1.1 adm-zip@0.5.16
         working-directory: functions
       - name: Write service account key
         run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/sa.json"
@@ -22,16 +22,18 @@ jobs:
           const admin = require('firebase-admin');
           admin.initializeApp({ projectId: 'momentum-4acf1' });
           (async () => {
-            for (const ua of ['Momentum App admin@momentumapp.dev', 'Mozilla/5.0 (compatible; MomentumApp/1.0; +mailto:admin@momentumapp.dev)']) {
-              const r = await fetch('https://data.sec.gov/submissions/CIK0001045810.json', { headers: { 'User-Agent': ua, 'Accept-Encoding': 'gzip, deflate' } });
-              const t = await r.text(); console.log('edgar', ua.slice(0, 20), r.status, t.slice(0, 120).replace(/\s+/g, ' '));
-              if (r.ok) { const j = JSON.parse(t); const x = j.filings.recent; console.log(x.form.slice(0, 20).map((f, i) => `${x.filingDate[i]} ${f} ${x.items[i] || ''}`).join(' | ')); break; }
+            const AdmZip = require('adm-zip'); const pdf = require('pdf-parse');
+            const buf = Buffer.from(await (await fetch('https://disclosures-clerk.house.gov/public_disc/financial-pdfs/2026FD.zip')).arrayBuffer());
+            const zip = new AdmZip(buf); console.log(zip.getEntries().map(e => e.entryName));
+            const xml = zip.getEntries().find(e => e.entryName.endsWith('.xml')).getData().toString('utf8');
+            const rows = [...xml.matchAll(/<Member>([\s\S]*?)<\/Member>/g)].map(m => Object.fromEntries([...m[1].matchAll(/<(\w+)>([^<]*)<\/\1>/g)].map(x => [x[1], x[2]])));
+            const ptr = rows.filter(r => r.FilingType === 'P').sort((a, b) => new Date(b.FilingDate) - new Date(a.FilingDate));
+            console.log('rows', rows.length, 'ptr', ptr.length, JSON.stringify(ptr.slice(0, 3)));
+            for (const r of ptr.slice(0, 3)) {
+              const u = `https://disclosures-clerk.house.gov/public_disc/ptr-pdfs/2026/${r.DocID}.pdf`;
+              const p = await fetch(u); const b = Buffer.from(await p.arrayBuffer());
+              try { const t = (await pdf(b)).text; console.log('PDF', r.Last, p.status, b.length, JSON.stringify(t.slice(0, 1500))); } catch (e) { console.log('pdf fail', r.Last, p.status, e.message); }
             }
-            const B = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', Accept: 'application/json', Origin: 'https://www.capitoltrades.com', Referer: 'https://www.capitoltrades.com/' };
-            for (const u of ['https://bff.capitoltrades.com/trades?pageSize=5&issuer=nvda', 'https://bff.capitoltrades.com/trades?pageSize=3']) {
-              try { const r = await fetch(u, { headers: B }); const t = await r.text(); console.log('ct', r.status, t.slice(0, 700)); } catch (e) { console.log('ct fail', e.message); }
-            }
-            try { const r = await fetch('https://disclosures-clerk.house.gov/public_disc/financial-pdfs/2026FD.zip'); console.log('house clerk', r.status, r.headers.get('content-length')); } catch (e) { console.log('clerk fail', e.message); }
           })().catch(e => console.log('ERR', e.message));
           JS
           node probe.js
