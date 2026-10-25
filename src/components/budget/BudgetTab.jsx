@@ -625,8 +625,9 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
         );
       })()}
       {/* Add: instead of typing it in, scan a receipt or move money between accounts */}
-      {/* They open on top of the Add form, so the bar stays on Add and closing them returns to it */}
-      {editingTx === 'new' && !transfer && !receiptFile && (
+      {/* They open on top of the Add form with this sub-bar still showing (switch between them
+          or back to typing it in); closing them returns to the Add form */}
+      {editingTx === 'new' && (
         <SubBar items={[
           { value: 'camera', label: '📷 Scan receipt', onPress: () => cameraRef.current?.click() },
           { value: 'photos', label: '🖼️ From photos', onPress: () => libraryRef.current?.click() },

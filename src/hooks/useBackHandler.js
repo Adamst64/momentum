@@ -46,3 +46,10 @@ export function useBackDepth() {
 export function closeAll() {
   [...stack].reverse().forEach(e => e.run());
 }
+
+// How many screens are open on top right now, and closing just the ones opened
+// after that point (a sub-bar closes the form it opened before switching)
+export const stackDepth = () => stack.length;
+export function closeAbove(depth) {
+  stack.slice(depth).reverse().forEach(e => e.run());
+}

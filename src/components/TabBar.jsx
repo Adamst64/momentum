@@ -1,7 +1,7 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { T } from '../theme';
-import { closeAll } from '../hooks/useBackHandler';
+import { closeAll, closeAbove, stackDepth } from '../hooks/useBackHandler';
 import { hasUnsaved, keepDrafts } from '../utils/drafts';
 
 // Switcher along the bottom of a section (like Robinhood's): its views, and
@@ -130,10 +130,11 @@ const subChanged = () => {
   if (top?.bar) s.setProperty('--subbar-h', `${SUBBAR_H}px`); else s.removeProperty('--subbar-h');
   subListeners.forEach(fn => fn(top?.id));
 };
-function useSubLayer(bar, useMountEffect) {
+function useSubLayer(bar, useMountEffect, skip = false) {
   const [id] = useState(() => Symbol(bar ? 'subbar' : 'page'));
   const [top, setTop] = useState(null);
   useMountEffect(() => {
+    if (skip) return undefined;
     const entry = { id, bar };
     subListeners.add(setTop);
     subStack.push(entry);
@@ -149,7 +150,12 @@ function useSubLayer(bar, useMountEffect) {
 const useTopSubBar = () => useSubLayer(true, useEffect);
 // For full pages and forms (Modal, BudgetPage, custom sheets). Registers before
 // the page's own sub-bar does (layout effects run first), so that one stays on top.
-export function useSubBarBlock() { useSubLayer(false, useLayoutEffect); }
+export function useSubBarBlock() {
+  // A form opened from a sub-bar button keeps that sub-bar (see SubBar)
+  const [keep] = useState(() => { const k = Date.now() - keepSubBarAt < 1500; keepSubBarAt = 0; return k; });
+  useSubLayer(false, useLayoutEffect, keep);
+}
+let keepSubBarAt = 0;
 
 // Icons for sub-bar buttons, picked from the label (an item can pass its own icon)
 const SUB_ICONS = [
@@ -190,8 +196,18 @@ const LEADING = /^[\s+↺✎⇄−📷🖼️️]+/u;
 const subIcon = v => v.icon || (SUB_ICONS.find(([re]) => re.test(String(v.label).replace(LEADING, '').toLowerCase()) || re.test(String(v.label).toLowerCase())) || [])[1] || 'M12 12h.01';
 
 export function SubBar({ items, value, onChange }) {
-  // Acts within the open view, so unlike the main bar it doesn't close anything first
-  const press = v => (v.onPress ? v.onPress() : onChange(v.value));
+  // Acts within the open view, so unlike the main bar it doesn't close the page.
+  // A form one of its buttons opened stays under it with the sub-bar still showing;
+  // tapping any of its buttons again closes that form first.
+  const opened = useRef(null); // how many screens were open when a button opened its form
+  const press = v => {
+    if (opened.current !== null) { closeAbove(opened.current); opened.current = null; }
+    if (v.onPress) {
+      opened.current = stackDepth();
+      keepSubBarAt = Date.now();
+      v.onPress();
+    } else onChange(v.value);
+  };
   const kb = useKeyboardUp();
   const shown = useTopSubBar();
   if (!shown) return null;
