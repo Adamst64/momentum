@@ -254,20 +254,38 @@ const TASK_BODY = {
   'recurring-weekly':  'Weekly task due today',
 };
 
+// The local-day fields taskDueToday needs, for any 'YYYY-MM-DD'
+const dayCtx = d => ({ ym: d.slice(0, 7), dom: Number(d.slice(8, 10)), today: d });
+const plusDays = (d, n) => new Date(Date.parse(d + 'T12:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+
+// Each reminder is a day (0 = the due day, 1 = the day before…) and a time; tasks
+// saved before reminders existed have just notify.time (the due day)
 async function sendTaskReminders(db, messaging, userDoc, tokens) {
   const tasksSnap = await userDoc.ref.collection('tasks').get();
   for (const taskDoc of tasksSnap.docs) {
     const task = taskDoc.data();
-    if (!task.notify?.enabled || !task.notify?.time) continue;
+    if (!task.notify?.enabled) continue;
+    const reminders = task.notify.reminders?.length ? task.notify.reminders
+      : task.notify.time ? [{ daysBefore: 0, time: task.notify.time }] : [];
+    if (!reminders.length) continue;
 
     const now = localNow(task.notify.timezone || 'UTC');
-    if (!isDue(task.notify.time, now.minutes)) continue;
-    if (task.notify.lastSentDate === now.today) continue;
-    if (!taskDueToday(task, now)) continue;
+    for (const r of reminders) {
+      if (!r.time || !isDue(r.time, now.minutes)) continue;
+      const before = Number(r.daysBefore) || 0;
+      const key = `d${before}_${r.time.replace(':', '')}`;
+      if (task.notify.sent?.[key] === now.today) continue;
+      if (!task.notify.reminders?.length && task.notify.lastSentDate === now.today) continue;
+      const dueDay = plusDays(now.today, before);
+      if (!taskDueToday(task, dayCtx(dueDay))) continue;
 
-    // Mark first so an overlapping run can't double-send
-    await taskDoc.ref.update({ 'notify.lastSentDate': now.today });
-    await sendPush(db, messaging, userDoc.id, tokens, task.name, TASK_BODY[task.type] || 'Task due today', APP_URL + '?tab=tasks');
+      // Mark first so an overlapping run can't double-send
+      await taskDoc.ref.update({ [`notify.sent.${key}`]: now.today, 'notify.lastSentDate': now.today });
+      const body = before === 0 ? (TASK_BODY[task.type] || 'Task due today')
+        : before === 1 ? 'Due tomorrow'
+        : `Due ${new Date(dueDay + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+      await sendPush(db, messaging, userDoc.id, tokens, task.name, body, APP_URL + '?tab=tasks');
+    }
   }
 }
 

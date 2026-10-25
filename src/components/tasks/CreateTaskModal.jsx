@@ -4,6 +4,7 @@ import { useDraft } from '../../utils/drafts';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr, getDOW, DAYS_SHORT } from '../../utils/dateUtils';
+import { BEFORE_OPTIONS, remindersOf } from '../../utils/taskReminders';
 
 const inputStyle = {
   width: '100%', padding: '12px 14px', borderRadius: 10,
@@ -31,7 +32,15 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
   const [dom,          setDom]          = useDraft(dk('dom'), String(initial?.dayOfMonth || 1));
   const [dow,          setDow]          = useDraft(dk('dow'), initial?.dayOfWeek ?? getDOW(todayStr()));
   const [notifyOn,     setNotifyOn]     = useDraft(dk('notifyOn'), initial?.notify?.enabled || false);
-  const [notifyTime,   setNotifyTime]   = useDraft(dk('notifyTime'), initial?.notify?.time || '09:00');
+  const [reminders,    setReminders]    = useDraft(dk('reminders'), remindersOf(initial?.notify).length ? remindersOf(initial.notify) : [{ daysBefore: 0, time: '09:00' }]);
+  const setReminder = (i, patch) => setReminders(rs => rs.map((r, k) => (k === i ? { ...r, ...patch } : r)));
+  // One-time tasks: show the actual day each reminder lands on
+  const dayLabel = before => {
+    if (type !== 'one-time' || !date) return '';
+    const d = new Date(date + 'T12:00:00');
+    d.setDate(d.getDate() - before);
+    return ` (${d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })})`;
+  };
 
   const valid = name.trim() && (
     type === 'backlog' ||
@@ -47,10 +56,14 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
     if (type === 'recurring-monthly') data.dayOfMonth = Math.min(31, Math.max(1, parseInt(dom, 10) || 1));
     if (type === 'recurring-weekly')  data.dayOfWeek  = dow;
     if (type !== 'backlog') {
-      if (notifyOn) {
+      // Same day and time twice is one reminder
+      const list = [...new Map(reminders.filter(r => r.time).map(r => [`${r.daysBefore}@${r.time}`, r])).values()]
+        .sort((a, b) => b.daysBefore - a.daysBefore || a.time.localeCompare(b.time));
+      if (notifyOn && list.length) {
         data.notify = {
           enabled: true,
-          time: notifyTime,
+          time: list[0].time,
+          reminders: list,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         };
       } else {
@@ -180,12 +193,35 @@ export default function CreateTaskModal({ initial, onSave, onClose }) {
               </button>
             </div>
             {notifyOn && (
-              <input
-                type="time"
-                value={notifyTime}
-                onChange={e => setNotifyTime(e.target.value)}
-                style={{ ...inputStyle, colorScheme: 'dark', width: 'auto' }}
-              />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {reminders.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <select
+                      value={r.daysBefore}
+                      onChange={e => setReminder(i, { daysBefore: Number(e.target.value) })}
+                      style={{ ...inputStyle, flex: 1, minWidth: 0, colorScheme: 'dark', fontSize: 14, padding: '11px 10px' }}
+                    >
+                      {BEFORE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}{dayLabel(o.value)}</option>)}
+                    </select>
+                    <input
+                      type="time"
+                      value={r.time}
+                      onChange={e => setReminder(i, { time: e.target.value })}
+                      style={{ ...inputStyle, colorScheme: 'dark', width: 'auto', fontSize: 14, padding: '11px 10px' }}
+                    />
+                    {reminders.length > 1 && (
+                      <button type="button" onClick={() => setReminders(rs => rs.filter((_, k) => k !== i))} aria-label="Remove reminder"
+                        style={{ fontSize: 18, color: T.muted, padding: '0 4px', flexShrink: 0 }}>×</button>
+                    )}
+                  </div>
+                ))}
+                {reminders.length < 5 && (
+                  <button type="button" onClick={() => setReminders(rs => [...rs, { daysBefore: 1, time: rs[rs.length - 1]?.time || '09:00' }])}
+                    style={{ alignSelf: 'flex-start', fontSize: 13, fontWeight: 600, color: T.khaki, padding: '4px 0' }}>
+                    + Add another reminder
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

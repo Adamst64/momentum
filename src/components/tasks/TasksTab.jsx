@@ -9,6 +9,7 @@ import { weeklyDueOn } from '../../hooks/useTasks';
 import { registerPushToken } from '../../utils/pushNotifications';
 import { useLongPress } from '../../hooks/useLongPress';
 import TabBar, { SubBar, ICONS, scrollToTop } from '../TabBar';
+import { remindersSummary } from '../../utils/taskReminders';
 
 const BLUE = '#8FA89B'; // slate-sage, the Tasks colour
 
@@ -230,7 +231,7 @@ function WeeklyItem({ task, today, onEdit, onDelete }) {
           }}>{task.name}</div>
           <div style={{ fontSize: 11, color: T.muted, marginTop: 2 }}>
             Every {DAYS_FULL[task.dayOfWeek]}
-            {task.notify?.enabled && task.notify.time && ` · ${task.notify.time}`}
+            {task.notify?.enabled && remindersSummary(task.notify) && ` · ${remindersSummary(task.notify)}`}
           </div>
         </div>
 
@@ -291,7 +292,7 @@ function UpcomingRow({ task, onEdit }) {
       <span style={{ width: 8, height: 8, borderRadius: 4, background: repeat ? T.muted : BLUE, flexShrink: 0 }} />
       <span style={{ flex: 1, minWidth: 0, fontSize: 15, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.name}</span>
       {repeat && <span style={{ fontSize: 11, color: T.muted }}>{repeat}</span>}
-      {task.notify?.enabled && task.notify?.time && <span style={{ fontSize: 11, color: T.muted }}>🔔 {task.notify.time}</span>}
+      {task.notify?.enabled && remindersSummary(task.notify) && <span style={{ fontSize: 11, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 140 }}>🔔 {remindersSummary(task.notify)}</span>}
     </button>
   );
 }
