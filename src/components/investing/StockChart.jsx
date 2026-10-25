@@ -31,10 +31,14 @@ export const EVENT_GROUPS = [
   { value: 'politician', label: 'Politicians' },
 ];
 const groupOf = e => (e.kind === 'market' ? 'market' : e.kind === 'insider' ? 'insider' : e.kind === 'politician' ? 'politician' : 'company');
-// Letter and color for an event's dot on the chart
+// Letter and color for an event's dot on the chart. Insider and politician
+// trades: green when bought, red when sold, so you can tell before tapping
+export const BOUGHT_COLOR = '#30D158';
+export const SOLD_COLOR = '#FF453A';
+const tradeSide = e => (/\bbought\b/i.test(e.label || '') ? BOUGHT_COLOR : /\bsold\b/i.test(e.label || '') ? SOLD_COLOR : null);
 export function eventMark(e) {
-  if (e.kind === 'politician') return { letter: 'P', color: '#BF5AF2' };
-  if (e.kind === 'insider') return { letter: 'I', color: '#FF9F0A' };
+  if (e.kind === 'politician') return { letter: 'P', color: tradeSide(e) || '#BF5AF2' };
+  if (e.kind === 'insider') return { letter: 'I', color: tradeSide(e) || '#FF9F0A' };
   if (e.kind === 'market') return { letter: /fed/i.test(e.label) ? 'F' : /cpi/i.test(e.label) ? 'C' : 'J', color: '#5AC8FA' };
   if (e.kind === 'earnings') return { letter: 'E', color: '#FFD60A' };
   if (e.kind === 'dividend') return { letter: '$', color: '#7BC96F' };
@@ -217,6 +221,12 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
               </button>
             );
           })}
+          {groups.some(g => g === 'insider' || g === 'politician') && events.some(e => (e.kind === 'insider' && groups.includes('insider')) || (e.kind === 'politician' && groups.includes('politician'))) && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 11, color: T.muted, width: '100%', marginTop: 2 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: BOUGHT_COLOR }} />Bought</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, borderRadius: 4, background: SOLD_COLOR }} />Sold</span>
+            </span>
+          )}
         </div>
       )}
       {notes.length > 0 && (
