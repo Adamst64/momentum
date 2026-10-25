@@ -868,7 +868,7 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
 //  - Yahoo chart (keyless): past dividends (ex-dates, amount) and splits, 2 years
 //  - Yahoo quoteSummary calendarEvents: next earnings, ex-dividend and pay dates
 //  - Finnhub earnings calendar: past and upcoming report dates with EPS
-const EVENTS_V = 2;
+const EVENTS_V = 3;
 const fmtEps = v => (v == null ? '—' : `$${Number(v).toFixed(2)}`);
 const etDate = ts => easternNow(new Date(ts * 1000)).today;
 
@@ -953,10 +953,17 @@ async function newsEvents(sym, key) {
 
 async function politicianEvents(db, sym) {
   const snap = await db.collection('politicianTrades').where('ticker', '==', sym).get();
-  return snap.docs.map(d => d.data()).sort((a, b) => b.filed.localeCompare(a.filed)).slice(0, 60).map(t => ({
+  // The same trade listed twice in one report (two accounts) shows once, "×2"
+  const merged = new Map();
+  snap.docs.map(d => d.data()).forEach(t => {
+    t = { ...t, filed: fixYmd(t.filed), traded: fixYmd(t.traded) };
+    const k = `${t.docId}|${t.type}|${t.traded}|${t.amount}`;
+    if (merged.has(k)) merged.get(k).times++; else merged.set(k, { ...t, times: 1 });
+  });
+  return [...merged.values()].sort((a, b) => b.filed.localeCompare(a.filed)).slice(0, 60).map(t => ({
     id: `pol-${t.docId}-${t.n}`, date: t.filed, kind: 'politician',
     label: `${t.name} ${t.type === 'P' ? 'bought' : t.type === 'E' ? 'exchanged' : 'sold'} ${sym}`,
-    note: `${t.amount}${t.party ? ` · ${t.party}` : ''}`,
+    note: `${t.amount}${t.times > 1 ? ` ×${t.times}` : ''}${t.party ? ` · ${t.party}` : ''}`,
     details: [`Traded ${t.traded} · filed ${t.filed}`, `${t.chamber || 'House'} member · ${t.state}`, ...(t.owner ? [`Owner: ${t.owner}`] : [])],
     url: t.url,
   }));
@@ -967,11 +974,24 @@ async function politicianEvents(db, sym) {
 // P 10/01/2026 10/01/2026 $1,001 - $15,000". New reports are read and saved to the
 // politicianTrades collection (server only). Runs at most hourly.
 const PTR_LINE = /\(([A-Z][A-Z.]{0,5})\)\s*\[([A-Z]{2})\]\s*(P|S \(partial\)|S|E)\s*(\d\d\/\d\d\/\d{4})\s*(\d\d\/\d\d\/\d{4})\s*(\$[\d,]+(?:\s*-\s*\$[\d,]+)?|Over \$[\d,]+)/g;
-const mdy = s => { const [m, d, y] = s.split('/'); return `${y}-${m}-${d}`; };
+// '9/22/2026' or '09/22/2026' → '2026-09-22' (the index doesn't pad, the reports do)
+const mdy = s => { const [m, d, y] = String(s).trim().split('/'); return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`; };
+const fixYmd = s => { const m = String(s || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : s; };
 
 async function refreshPoliticianTrades(db) {
   const ref = db.doc('config/housePtr');
   const state = (await ref.get()).data() || {};
+  if (!state.datesFixed) {
+    // Early saves kept the index's unpadded filing date ('2026-9-22'): repair them
+    const all = await db.collection('politicianTrades').get();
+    for (let i = 0; i < all.docs.length; i += 400) {
+      const batch = db.batch();
+      all.docs.slice(i, i + 400).forEach(d => { const t = d.data(); batch.update(d.ref, { filed: fixYmd(t.filed), traded: fixYmd(t.traded), notified: fixYmd(t.notified) }); });
+      await batch.commit();
+    }
+    await ref.set({ datesFixed: true, at: null }, { merge: true });
+    state.at = null;
+  }
   if (!isStale(state.at, HOURS(1))) return;
   await ref.set({ at: new Date().toISOString() }, { merge: true });
   const AdmZip = require('adm-zip');
@@ -1032,7 +1052,7 @@ async function maybeNotifyTrades(db, userDoc, key, notify) {
     // (one filter only, so no extra database index is needed)
     const snap = await db.collection('politicianTrades').where('ticker', 'in', syms.slice(i, i + 10)).get();
     snap.docs.map(d => d.data()).forEach(t => {
-      if (t.filed < since || t.savedAt < (inv.lastTradeCheck || '')) return;
+      if (fixYmd(t.filed) < since || t.savedAt < (inv.lastTradeCheck || '')) return;
       touched.add(t.ticker);
       lines.push(`${t.name} ${t.type === 'P' ? 'bought' : 'sold'} ${t.ticker} (${t.amount})`);
     });

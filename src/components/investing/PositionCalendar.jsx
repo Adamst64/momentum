@@ -48,7 +48,9 @@ const pad = n => String(n).padStart(2, '0');
 export function stockEvents(asset) {
   const own = (asset?.events || []).map(e => ({ ...e, own: true }));
   const near = (a, b) => Math.abs(new Date(a) - new Date(b)) <= 6 * 864e5;
-  const fetched = (asset?.autoEvents || []).map(e => ({ ...e, auto: true }));
+  // Dates always as YYYY-MM-DD (a few early saves lacked the leading zeros: '2026-9-22')
+  const fixDate = d => { const m = String(d || '').match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/); return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : d; };
+  const fetched = (asset?.autoEvents || []).map(e => ({ ...e, date: fixDate(e.date), auto: true }));
   // Before the first daily fetch: the next earnings date already known
   const ne = asset?.nextEarnings?.date;
   if (ne && !fetched.some(e => e.kind === 'earnings' && near(e.date, ne))) {
