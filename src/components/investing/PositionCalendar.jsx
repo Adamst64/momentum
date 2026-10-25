@@ -17,7 +17,7 @@ export const MARKET_COLOR = '#5AC8FA';
 export const colorOf = e => (e.own ? OWN_COLOR : e.kind === 'market' ? MARKET_COLOR : AUTO_COLOR);
 const kindLabel = k => (k === 'market' ? 'Market' : (EVENT_KINDS.find(x => x.value === k) || EVENT_KINDS[2]).label);
 
-// 🔔 on an event: tap to be reminded 9 AM the business day before (see useInvesting)
+// 🔔 on an event: tap to be notified 9 AM the business day before and 8 AM on the day (see useInvesting)
 export function EventBell({ hook, event, symbol }) {
   if (!hook?.addEventAlert || !event?.date || event.date < todayStr()) return null;
   const e = { ...event, symbol: event.kind === 'market' ? null : symbol };
@@ -25,7 +25,7 @@ export function EventBell({ hook, event, symbol }) {
   return (
     <button
       onClick={ev => { ev.stopPropagation(); if (on) hook.removeEventAlert(on.id); else hook.addEventAlert(e); }}
-      aria-label={on ? 'Stop the reminder' : 'Remind me the business day before'}
+      aria-label={on ? 'Stop the reminders' : 'Notify me the business day before and on the day'}
       style={{ flexShrink: 0, width: 34, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
         background: on ? '#2A3A1A' : 'transparent', border: `1px solid ${on ? T.olive : T.cardBorder}` }}
     >

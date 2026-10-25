@@ -1419,7 +1419,7 @@ function EventsCalendar({ hook, today, onOpen }) {
     ...followed.flatMap(a => stockEvents(a).filter(e => e.date >= today && e.date <= horizon).map(e => ({ ...e, symbol: a.symbol }))),
     ...market.filter(e => e.date >= today && e.date <= horizon).map((e, i) => ({ ...e, id: `mkt-${e.date}-${i}`, symbol: null })),
   ].sort((a, b) => a.date.localeCompare(b.date) || (a.symbol || '').localeCompare(b.symbol || ''));
-  const reminders = eventAlerts.filter(a => !a.sentAt && a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const reminders = eventAlerts.filter(a => !a.done && a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
 
   const dayTitle = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const byDay = list => list.reduce((g, e) => { (g[e.date] = g[e.date] || []).push(e); return g; }, {});
@@ -1438,7 +1438,7 @@ function EventsCalendar({ hook, today, onOpen }) {
         </span>
         {(e.note || e.notifyOn) && (
           <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 1 }}>
-            {[e.note, e.notifyOn ? `Reminder ${e.notifyOn === today ? 'today' : new Date(e.notifyOn + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}, 9 AM` : null].filter(Boolean).join(' · ')}
+            {[e.note, e.notifyOn ? `Reminders ${e.notifyOn === today ? 'today' : new Date(e.notifyOn + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' })} 9 AM + ${e.date === today ? 'today' : 'that day'} 8 AM` : null].filter(Boolean).join(' · ')}
           </span>
         )}
       </button>
@@ -1458,7 +1458,7 @@ function EventsCalendar({ hook, today, onOpen }) {
       {tab === 'reminders' && (
         reminders.length === 0 ? (
           <div style={{ fontSize: 14, color: T.muted, lineHeight: 1.5, padding: '8px 2px' }}>
-            No reminders yet. Tap 🔔 on any date in Upcoming (or in a stock's calendar or earnings) to get a notification at 9 AM the business day before.
+            No reminders yet. Tap 🔔 on any date in Upcoming (or in a stock's calendar or earnings) to be notified at 9 AM the business day before and at 8 AM on the day.
           </div>
         ) : renderDays(reminders, (a, i) => line(a, (
           <button onClick={() => removeEventAlert(a.id)} aria-label="Remove reminder" style={{ fontSize: 18, color: T.muted, padding: '0 6px' }}>×</button>
@@ -1468,7 +1468,7 @@ function EventsCalendar({ hook, today, onOpen }) {
         upcoming.length === 0 ? (
           <div style={{ fontSize: 14, color: T.muted, padding: '8px 2px' }}>Nothing in the next few weeks for what you hold or watch.</div>
         ) : <>
-          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>The next 10 weeks for what you hold or watch, plus Fed decisions, CPI and jobs reports. 🔔 = remind me the business day before, 9 AM.</div>
+          <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.4 }}>The next 10 weeks for what you hold or watch, plus Fed decisions, CPI and jobs reports. 🔔 = notify me 9 AM the business day before and 8 AM on the day.</div>
           {renderDays(upcoming, (e, i) => line(e, <EventBell hook={hook} event={e} symbol={e.symbol} />, i))}
         </>
       )}

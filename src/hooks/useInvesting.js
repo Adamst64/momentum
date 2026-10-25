@@ -19,7 +19,8 @@ import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 // users/{uid}/invAlerts/{id} — { symbol, direction: 'above'|'below', target, enabled, triggeredAt }
 // users/{uid}/invEventAlerts/{key} — an event you asked to be reminded of:
 //   { symbol (null for a market-wide date), date, label, kind, notifyOn, time, timezone, sentAt }
-//   notifyOn is the business day before (9 AM, your time); weekends and market holidays skipped
+//   Notifies 9 AM on notifyOn (the business day before; weekends and market holidays
+//   skipped) and 8 AM on the day itself, your time; sentAt / sentDayOf mark each
 // users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
 // users/{uid}/invWatchLists/{id} — { name, order } named watchlists; a stock's asset doc lists them in
 //   lists: [id] with listAdded.{id}: date and listAddedPrice.{id}: price when added
@@ -259,7 +260,7 @@ export function useInvesting(userId) {
     try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch { /* keep New York */ }
     return setDoc(ref('invEventAlerts', eventKey(e)), {
       symbol: e.symbol || null, date: e.date, label: e.label, kind: e.kind || 'other', note: e.note || null,
-      notifyOn, time: '09:00', timezone, sentAt: null, createdAt: new Date().toISOString(),
+      notifyOn, time: '09:00', timezone, sentAt: null, sentDayOf: null, done: false, createdAt: new Date().toISOString(),
     });
   }, [ref]);
   const removeEventAlert = useCallback(id => deleteDoc(ref('invEventAlerts', id)), [ref]);

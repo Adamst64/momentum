@@ -1020,17 +1020,28 @@ function zonedToday(tz) {
   return { today: `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`, minutes: now.getHours() * 60 + now.getMinutes() };
 }
 
+// Two notifications per event: 9 AM the business day before (notifyOn) and
+// 8 AM on the day itself, both in your time zone
 async function maybeSendEventAlerts(userDoc, notify) {
-  const snap = await userDoc.ref.collection('invEventAlerts').where('sentAt', '==', null).get();
+  const snap = await userDoc.ref.collection('invEventAlerts').get();
   for (const d of snap.docs) {
     const a = d.data();
+    if (a.done) continue;
     const { today, minutes } = zonedToday(a.timezone);
-    const [h, m] = String(a.time || '09:00').split(':').map(Number);
-    if (a.date < today) { await d.ref.update({ sentAt: 'expired' }); continue; } // the event has passed
-    if (today < a.notifyOn || minutes < h * 60 + m) continue;
-    await d.ref.update({ sentAt: new Date().toISOString() });
-    const when = new Date(a.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
-    await notify(`📅 ${a.symbol ? `${a.symbol}: ` : ''}${a.label}`, `${a.date === today ? 'Today' : when}${a.note ? ` · ${a.note}` : ''}`);
+    if (a.date < today) { await d.ref.update({ done: true }); continue; } // the event has passed
+    const title = `📅 ${a.symbol ? `${a.symbol}: ` : ''}${a.label}`;
+    const note = a.note ? ` · ${a.note}` : '';
+    // The business day before, 9 AM
+    if (!a.sentAt && today >= a.notifyOn && today < a.date && minutes >= 9 * 60) {
+      await d.ref.update({ sentAt: new Date().toISOString() });
+      const when = new Date(a.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      await notify(title, `${when}${note}`);
+    }
+    // The day itself, 8 AM
+    if (!a.sentDayOf && today === a.date && minutes >= 8 * 60) {
+      await d.ref.update({ sentDayOf: new Date().toISOString(), done: true });
+      await notify(title, `Today${note}`);
+    }
   }
 }
 
