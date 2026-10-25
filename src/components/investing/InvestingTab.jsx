@@ -16,6 +16,10 @@ import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
 
 const HIDE_KEY = 'momentum_hide_amounts';
+// The value history from last time, so a fresh open draws the exact chart right
+// away instead of the sparser saved snapshots while prices load (~2s)
+const HISTORY_KEY = 'momentum_value_history';
+const readHistory = () => { try { const h = JSON.parse(localStorage.getItem(HISTORY_KEY)); return Array.isArray(h) && h.length ? h : null; } catch { return null; } };
 const readHide = () => { try { return localStorage.getItem(HIDE_KEY) === '1'; } catch { return false; } };
 const writeHide = v => { try { localStorage.setItem(HIDE_KEY, v ? '1' : '0'); } catch { /* storage unavailable */ } };
 
@@ -146,8 +150,14 @@ export default function InvestingTab({ hook, userId, budget, requested }) {
     for (let d = firstDate; d < end; d = addDays(d, 1)) if (isMarketDay(d)) days.push(d);
     return buildValueHistory(txs, histories, assets, days);
   }, [histories, txs, assets, firstDate]);
-  // Until prices load, fall back to the values saved each day
-  const series = history || snapshots;
+  const [cachedHistory] = useState(readHistory);
+  useEffect(() => {
+    if (!history?.length) return;
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(history.map(h => ({ ...h, value: Math.round(h.value * 100) / 100 })))); }
+    catch { /* storage unavailable */ }
+  }, [history]);
+  // Until prices load: last time's history, else the values saved each day
+  const series = history || cachedHistory || snapshots;
 
   const ret = useMemo(() => periodReturn(txs, series, portfolio.value, period, today), [txs, series, portfolio.value, period, today]);
 
