@@ -858,7 +858,7 @@ async function maybeCheckAlerts(db, userDoc, key, et, notify) {
     await a.ref.update({ enabled: false, triggeredAt: new Date().toISOString(), triggeredPrice: q.price });
     const label = q.session === 'pre' ? ' (pre-market)' : q.session === 'post' ? ' (after hours)' : '';
     await notify(`📈 ${symbol} ${direction === 'above' ? 'rose above' : 'fell below'} $${target}`,
-      `Now $${q.price.toFixed(2)}${label}`);
+      `Now $${q.price.toFixed(2)}${label}`, `?tab=investing&symbol=${encodeURIComponent(symbol)}`);
   }
 }
 
@@ -1051,7 +1051,9 @@ async function maybeNotifyTrades(db, userDoc, key, notify) {
   }
   if (!lines.length) return;
   for (const a of assets) if (touched.has(a.symbol || a.ref.id)) await a.ref.set({ autoEventsAt: null }, { merge: true });
-  if (notify) await notify(`🏛️ ${lines.length} new trade report${lines.length > 1 ? 's' : ''}`, lines.slice(0, 4).join(' · ') + (lines.length > 4 ? ` · +${lines.length - 4} more` : ''));
+  const one = touched.size === 1 ? [...touched][0] : null;
+  const path = one ? `?tab=investing&symbol=${encodeURIComponent(one)}&section=calendar` : '?tab=investing&view=calendar&sub=recent';
+  if (notify) await notify(`🏛️ ${lines.length} new trade report${lines.length > 1 ? 's' : ''}`, lines.slice(0, 4).join(' · ') + (lines.length > 4 ? ` · +${lines.length - 4} more` : ''), path);
 }
 
 async function fetchAutoEvents(sym, key, db) {
@@ -1222,17 +1224,18 @@ async function maybeSendEventAlerts(userDoc, notify) {
     const { today, minutes } = zonedToday(a.timezone);
     if (a.date < today) { await d.ref.update({ done: true }); continue; } // the event has passed
     const title = `📅 ${a.symbol ? `${a.symbol}: ` : ''}${a.label}`;
+    const path = a.symbol ? `?tab=investing&symbol=${encodeURIComponent(a.symbol)}&section=calendar` : '?tab=investing&view=calendar&sub=reminders';
     const note = a.note ? ` · ${a.note}` : '';
     // The business day before, 9 AM
     if (!a.sentAt && today >= a.notifyOn && today < a.date && minutes >= 9 * 60) {
       await d.ref.update({ sentAt: new Date().toISOString() });
       const when = new Date(a.date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', timeZone: 'UTC' });
-      await notify(title, `${when}${note}`);
+      await notify(title, `${when}${note}`, path);
     }
     // The day itself, 8 AM
     if (!a.sentDayOf && today === a.date && minutes >= 8 * 60) {
       await d.ref.update({ sentDayOf: new Date().toISOString(), done: true });
-      await notify(title, `Today${note}`);
+      await notify(title, `Today${note}`, path);
     }
   }
 }
@@ -1256,7 +1259,8 @@ async function maybeEarningsReminder(userDoc, et, notify) {
   await userDoc.ref.set({ investing: { lastEarningsReminder: et.today } }, { merge: true });
   const when = h => (h === 'bmo' ? 'before the open' : h === 'amc' ? 'after the close' : '');
   const list = reporting.map(a => `${a.symbol}${when(a.nextEarnings.hour) ? ' ' + when(a.nextEarnings.hour) : ''}`).join(', ');
-  await notify('📊 Earnings tomorrow', `${list} report${reporting.length === 1 ? 's' : ''} tomorrow.`);
+  await notify('📊 Earnings tomorrow', `${list} report${reporting.length === 1 ? 's' : ''} tomorrow.`,
+    reporting.length === 1 ? `?tab=investing&symbol=${encodeURIComponent(reporting[0].symbol)}&section=calendar` : '?tab=investing&view=calendar&sub=upcoming');
 }
 
 async function runInvestingJobs(db, userDoc, notify) {

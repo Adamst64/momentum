@@ -113,7 +113,7 @@ const rowBtn = { fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius
 
 // account: opened from that account's row → starts showing just that account,
 // with a switch to all accounts. undefined → all accounts.
-export default function HoldingModal({ hook, budget, symbol, account, hide, userId, onTrade, onClose }) {
+export default function HoldingModal({ hook, budget, symbol, account, hide, userId, onTrade, onClose, initialSection }) {
   const { portfolio, assets, txs, accounts, watchLists = [], addMark, updateMark, deleteMark, setEvents, setTxAccount, alerts, setAsset, deleteTx, deleteHolding, addAlert, toggleAlert, deleteAlert, stockInfo, priceHistory } = hook;
   const h = [...portfolio.holdings, ...portfolio.closed].find(x => x.symbol === symbol);
   const asset = assets[symbol] || {};
@@ -144,6 +144,12 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
   const [ask, setAsk]             = useState(null); // { title, message, action } for "are you sure?"
   const [editing, setEditing]     = useState(null); // { ids, init } of the transaction being edited
   const [showTx, setShowTx]       = useState(false); // the transactions page
+  // Opened from a notification about one of its events: go straight to the calendar
+  useEffect(() => {
+    if (initialSection !== 'calendar') return undefined;
+    const t = setTimeout(() => jumpTo('h-calendar'), 450);
+    return () => clearTimeout(t);
+  }, [initialSection]);
   // Market-wide dates (Fed, CPI, jobs) for the calendar
   const [market, setMarket]       = useState([]);
   useEffect(() => {
@@ -240,7 +246,9 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
         />
 
-        <PositionCalendar symbol={symbol} asset={asset} onSave={events => setEvents(symbol, events)} hook={hook} market={market} />
+        <div id="h-calendar" style={JUMP}>
+          <PositionCalendar symbol={symbol} asset={asset} onSave={events => setEvents(symbol, events)} hook={hook} market={market} startOpen={initialSection === 'calendar'} />
+        </div>
 
         {sold && (
           <div id={held ? undefined : 'h-position'} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, ...JUMP }}>

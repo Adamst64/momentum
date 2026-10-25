@@ -287,7 +287,8 @@ exports.sendTaskNotifications = onSchedule(
     await Promise.allSettled(usersSnap.docs.map(async (userDoc) => {
       const uid    = userDoc.id;
       const tokens = userDoc.data().fcmTokens || [];
-      const push   = tokens.length ? (title, body) => sendPush(db, messaging, uid, tokens, title, body, APP_URL + '?tab=investing') : null;
+      // path: where tapping it opens inside Investing (a stock, the Events tab…)
+      const push   = tokens.length ? (title, body, path) => sendPush(db, messaging, uid, tokens, title, body, APP_URL + (path || '?tab=investing')) : null;
 
       // Time-sensitive reminders first, before anything that calls outside services
       if (tokens.length) {

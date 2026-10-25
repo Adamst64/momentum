@@ -61,12 +61,18 @@ export default function App() {
     return ALL_TABS.includes(t) ? t : 'home';
   });
   // Sub-view a notification link asked for (e.g. ?tab=work&view=pay); n changes on each request
-  const [subView, setSubView] = useState(() => ({ view: new URLSearchParams(window.location.search).get('view'), n: 0 }));
+  // Also a stock (&symbol=), a part of its page (&section=) or a sub-tab (&sub=)
+  const linkTarget = p => ({ view: p.get('view'), symbol: p.get('symbol'), section: p.get('section'), sub: p.get('sub') });
+  const [subView, setSubView] = useState(() => ({ ...linkTarget(new URLSearchParams(window.location.search)), n: 0 }));
   const [showSettings, setShowSettings] = useState(false);
   const [quickAdd, setQuickAdd]         = useState(null); // null | { mode }
   const [newTask, setNewTask]           = useState(false);
   const [newNote, setNewNote]           = useState(false);
   const [showReview, setShowReview]     = useState(false);
+  // When a notification's link last opened something other than the review
+  // (an app started from a notification has its link in the address already)
+  const linkOpenedAt = useRef((() => { const p = new URLSearchParams(window.location.search); return p.has('tab') && p.get('action') !== 'review' ? Date.now() : 0; })());
+  const reviewAutoOpened = useRef(false);
   const [dailyReview, setDailyReview]   = useState(null);
   const [urlAction] = useState(() => {
     const a = new URLSearchParams(window.location.search).get('action');
@@ -164,7 +170,18 @@ export default function App() {
       const p = new URL(url, window.location.href).searchParams;
       if (p.get('action') === 'review') setShowReview(true);
       if (ALL_TABS.includes(p.get('tab'))) setTab(p.get('tab'));
-      if (p.get('view')) setSubView(v => ({ view: p.get('view'), n: v.n + 1 }));
+      if (p.get('action') !== 'review') {
+        linkOpenedAt.current = Date.now();
+        // The review popped up on its own just before this link arrived: close it,
+        // and keep it unread (its banner stays) since it wasn't what was tapped
+        if (reviewAutoOpened.current) {
+          reviewAutoOpened.current = false;
+          setShowReview(false);
+          try { localStorage.removeItem(REVIEW_OPENED_KEY); } catch { /* storage unavailable */ }
+          setReviewOpenedFor(null);
+        }
+      }
+      if (p.get('view') || p.get('symbol') || p.get('sub')) setSubView(v => ({ ...linkTarget(p), n: v.n + 1 }));
     };
     // A push's notification still in Notification Center hasn't been tapped yet
     const stillShowing = async (tag) => {
@@ -237,7 +254,7 @@ export default function App() {
     try { localStorage.setItem(REVIEW_OPENED_KEY, String(reviewSentAt)); } catch { /* storage unavailable */ }
     setReviewOpenedFor(String(reviewSentAt));
   }, [reviewSentAt]);
-  useEffect(() => { if (showReview) markReviewOpened(); }, [showReview, markReviewOpened]);
+  useEffect(() => { if (showReview) markReviewOpened(); else reviewAutoOpened.current = false; }, [showReview, markReviewOpened]);
   const visibleSince = useRef(Date.now());
   useEffect(() => {
     const onVisible = () => { if (document.visibilityState === 'visible') visibleSince.current = Date.now(); };
@@ -253,11 +270,16 @@ export default function App() {
       // later), never in the middle of using the app
       if (Date.now() - visibleSince.current > 30 * 1000) return;
       try { if (localStorage.getItem(REVIEW_OPENED_KEY) === String(reviewSentAt)) return; } catch { /* storage unavailable */ }
+      // Another notification was tapped (an event, a price alert…): open that, not the review
+      if (Date.now() - linkOpenedAt.current < 60 * 1000) return;
+      reviewAutoOpened.current = true;
       setShowReview(true);
     };
-    check();
-    document.addEventListener('visibilitychange', check);
-    return () => document.removeEventListener('visibilitychange', check);
+    // Give a tapped notification's link a moment to arrive first
+    const later = () => setTimeout(check, 1800);
+    later();
+    document.addEventListener('visibilitychange', later);
+    return () => document.removeEventListener('visibilitychange', later);
   }, [reviewSentAt]);
 
   // One step back: the newest open screen (sheet, page, account…), else the main menu
@@ -381,7 +403,7 @@ export default function App() {
         {tab === 'work'      && showWork && <WorkTab hook={workHook} requestedView={subView} />}
         {tab === 'notes'     && <NotesTab hook={notesHook} />}
         {tab === 'lists'     && <ListsTab hook={listsHook} />}
-        {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} budget={budgetHook} />}
+        {tab === 'investing' && <InvestingTab hook={investingHook} userId={userId} budget={budgetHook} requested={subView} />}
         {tab === 'budget'    && <BudgetTab hook={budgetHook} workEnabled={showWork} investing={investingHook} />}
 
         {quickAdd && (

@@ -58,7 +58,7 @@ export function stockEvents(asset) {
   return [...own, ...auto].sort((a, b) => a.date.localeCompare(b.date));
 }
 
-export default function PositionCalendar({ symbol, asset, onSave, hook, market = [] }) {
+export default function PositionCalendar({ symbol, asset, onSave, hook, market = [], startOpen = false }) {
   const today = todayStr();
   // The stock's own dates plus the market-wide ones (Fed, CPI, jobs report)
   const events = [...stockEvents(asset), ...market.map((m, i) => ({ ...m, id: `mkt-${m.date}-${i}`, auto: true }))]
@@ -69,7 +69,7 @@ export default function PositionCalendar({ symbol, asset, onSave, hook, market =
   const [ask, setAsk] = useState(null);
   const [showPast, setShowPast] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);          // folded by default
+  const [open, setOpen] = useState(startOpen);      // folded unless opened from a notification
   const swipe = useRef(null);
 
   const [y, m] = month.split('-').map(Number);

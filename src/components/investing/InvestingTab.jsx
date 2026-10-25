@@ -58,7 +58,10 @@ const earningsBadge = (date, today) => {
   return d.toLocaleDateString('en-US', days < 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
 };
 
-export default function InvestingTab({ hook, userId, budget }) {
+// The last notification link handled (a link is acted on once, even if the tab reopens)
+let handledLink = null;
+
+export default function InvestingTab({ hook, userId, budget, requested }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('overview');
   // Each view opens at its top, not where the last one was scrolled to
@@ -71,6 +74,17 @@ export default function InvestingTab({ hook, userId, budget }) {
   const [trade, setTrade]     = useState(null);  // { type, symbol }
   const [adding, setAdding]   = useState(false);
   const [open, setOpen]       = useState(null);  // symbol, or { symbol, account } from an account's row
+  const [openSection, setOpenSection] = useState(null); // a part of the stock's page to show first (from a notification)
+  const [eventsSub, setEventsSub] = useState(null);     // Events sub-tab a notification asked for
+  // A notification's link: a stock (and part of its page), or a view and its sub-tab
+  useEffect(() => {
+    if (!requested || handledLink === requested.n) return; // once per link, not on every visit
+    handledLink = requested.n;
+    const { view: v, symbol, section, sub } = requested;
+    if (symbol) { setOpenSection(section || null); setOpen(symbol); }
+    if (v && VIEWS.some(x => x.value === v)) { setViewState(v); setOpenAccountId(null); setOpenListId(null); }
+    if (sub) setEventsSub({ sub, n: requested.n });
+  }, [requested?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const openSym = typeof open === 'object' && open ? open.symbol : open;
   const [byAccountPref, setByAccountPrefState] = useState(() => { try { return localStorage.getItem('momentum_by_account') !== '0'; } catch { return true; } });
   const setByAccountPref = v => { setByAccountPrefState(v); try { localStorage.setItem('momentum_by_account', v ? '1' : '0'); } catch { /* storage unavailable */ } };
@@ -357,6 +371,7 @@ export default function InvestingTab({ hook, userId, budget }) {
         <HoldingModal
           key={openSym}
           hook={hook} budget={budget} symbol={openSym} account={typeof open === 'object' ? open.account : undefined} hide={hide} userId={userId}
+          initialSection={openSection}
           onTrade={(type, symbol, acct) => {
             // The account being viewed, or the only one holding it
             const where = [...new Set(groups.filter(g => g.positions.some(p => p.symbol === symbol)).map(g => g.id))];
@@ -364,7 +379,7 @@ export default function InvestingTab({ hook, userId, budget }) {
             setOpen(null);
             setTrade({ type, symbol, ...(account !== undefined ? { account } : {}) });
           }}
-          onClose={() => setOpen(null)}
+          onClose={() => { setOpen(null); setOpenSection(null); }}
         />
       )}
       {targetFor && (
@@ -597,7 +612,7 @@ export default function InvestingTab({ hook, userId, budget }) {
         <WatchHome hook={hook} items={watch} onOpenList={setOpenListId} />
       )}
 
-      {view === 'calendar' && <EventsCalendar hook={hook} today={today} onOpen={setOpen} />}
+      {view === 'calendar' && <EventsCalendar hook={hook} today={today} onOpen={sym => { setOpenSection(null); setOpen(sym); }} requestedSub={eventsSub} />}
 
       {view === 'insights' && txs.length > 0 && (
         <>
@@ -1402,9 +1417,11 @@ function CoreFundRow({ g, coreFund, onSetCore, hide }) {
 
 // Calendar tab: the events you asked to be reminded of, and everything coming
 // up for what you hold or watch (plus Fed, CPI and jobs dates), each with a 🔔
-function EventsCalendar({ hook, today, onOpen }) {
+function EventsCalendar({ hook, today, onOpen, requestedSub }) {
   const { assets, portfolio, eventAlerts = [], removeEventAlert, marketEvents } = hook;
-  const [tab, setTab] = useState('reminders');
+  const [tab, setTab] = useState(() => requestedSub?.sub || 'reminders');
+  // A notification can ask for a sub-tab (e.g. new trade reports → Recent)
+  useEffect(() => { if (requestedSub?.sub) setTab(requestedSub.sub); }, [requestedSub?.n]); // eslint-disable-line react-hooks/exhaustive-deps
   const [market, setMarket] = useState([]);
   useEffect(() => {
     let live = true;
@@ -1424,6 +1441,10 @@ function EventsCalendar({ hook, today, onOpen }) {
     ...market.filter(e => e.date >= today && e.date <= horizon).map((e, i) => ({ ...e, id: `mkt-${e.date}-${i}`, symbol: null })),
   ].sort((a, b) => a.date.localeCompare(b.date) || (a.symbol || '').localeCompare(b.symbol || ''));
   const reminders = eventAlerts.filter(a => !a.done && a.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  // The last 30 days of trade reports, filings and news for what you hold or watch, newest first
+  const RECENT_KINDS = ['insider', 'politician', 'filing', 'news'];
+  const recent = allEvents.filter(e => RECENT_KINDS.includes(e.kind) && e.date <= today && e.date >= addDays(today, -30))
+    .sort((a, b) => b.date.localeCompare(a.date) || (a.symbol || '').localeCompare(b.symbol || ''));
 
   const dayTitle = d => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
   const byDay = list => list.reduce((g, e) => { (g[e.date] = g[e.date] || []).push(e); return g; }, {});
@@ -1458,6 +1479,7 @@ function EventsCalendar({ hook, today, onOpen }) {
           { value: 'reminders', label: `Reminders${reminders.length ? ` (${reminders.length})` : ''}`, icon: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0' },
           { value: 'upcoming', label: 'Upcoming', icon: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01' },
           { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
+          { value: 'recent', label: 'Recent', icon: 'M12 7v5l3 2M12 3a9 9 0 100 18 9 9 0 000-18z' },
         ]}
         value={tab} onChange={v => { setTab(v); scrollToTop(); }}
       />
@@ -1469,6 +1491,34 @@ function EventsCalendar({ hook, today, onOpen }) {
         ) : renderDays(reminders, (a, i) => line(a, (
           <button onClick={() => removeEventAlert(a.id)} aria-label="Remove reminder" style={{ fontSize: 18, color: T.muted, padding: '0 6px' }}>×</button>
         ), i))
+      )}
+      {tab === 'recent' && (
+        recent.length === 0 ? (
+          <div style={{ fontSize: 14, color: T.muted, padding: '8px 2px' }}>No insider or politician trades, filings or news in the last 30 days for what you hold or watch.</div>
+        ) : <>
+          <div style={{ fontSize: 12, color: T.muted }}>Last 30 days: insider and politician trades, SEC filings and news. Tap one for the details and the original report.</div>
+          {Object.entries(byDay(recent)).sort((a, b) => b[0].localeCompare(a[0])).map(([date, items]) => (
+            <div key={date}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: T.khaki, margin: '4px 0 6px' }}>{date === today ? 'Today' : dayTitle(date)}</div>
+              <Card style={{ padding: '2px 14px' }}>
+                {items.map((e, i) => (
+                  <div key={e.id || i} style={{ padding: '10px 0', borderTop: i ? `1px solid ${T.cardBorder}` : 'none' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 4, background: colorOf(e), flexShrink: 0, alignSelf: 'center' }} />
+                      <button onClick={() => onOpen(e.symbol)} style={{ fontSize: 14, fontWeight: 700, color: T.khaki }}>{e.symbol}</button>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: 14, color: T.text, fontWeight: 600 }}>{e.label}</span>
+                    </div>
+                    <div style={{ paddingLeft: 16 }}>
+                      {e.note && <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{e.note}</div>}
+                      {(e.details || []).map(d => <div key={d} style={{ fontSize: 12, color: T.muted, marginTop: 1 }}>{d}</div>)}
+                      {/^https:\/\//.test(e.url || '') && <a href={e.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', fontSize: 12, color: T.khaki, marginTop: 4 }}>Open the report ↗</a>}
+                    </div>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          ))}
+        </>
       )}
       {tab === 'calendar' && (
         <MonthEvents events={allEvents} today={today} renderDay={(date, items) => (
