@@ -40,6 +40,7 @@ export default function ShoppingTab({ hook, userId }) {
   const [pendingTagIds, setPendingTagIds] = useState([]);
   const [filterTagId, setFilterTagId]   = useState(null);
   const [tagPickerItem, setTagPickerItem] = useState(null);
+  const tagWalk = useRef(null); // { seen, total } while tagging untagged items one by one
   const [showShare, setShowShare]       = useState(false);
   const [showNewList, setShowNewList]   = useState(false);
   const [newListName, setNewListName]   = useState('');
@@ -100,9 +101,18 @@ export default function ShoppingTab({ hook, userId }) {
     } else if (tagPickerItem) {
       await updateItemTags(tagPickerItem.id, selectedIds);
     }
-    setTagPickerItem(null);
+    if (tagWalk.current && tagPickerItem !== 'new') {
+      tagWalk.current.seen.add(tagPickerItem.id);
+      const next = untagged.find(i => !tagWalk.current.seen.has(i.id));
+      if (next) { setTagPickerItem(next); return; }
+    }
+    closeTagPicker();
   };
+  const closeTagPicker = () => { tagWalk.current = null; setTagPickerItem(null); };
+  const startTagWalk = () => { tagWalk.current = { seen: new Set(), total: untagged.length }; setTagPickerItem(untagged[0]); };
 
+  // Items with no store tag (e.g. added by Siri) can't be found with the tag filter
+  const untagged      = tags.length ? items.filter(i => !i.checked && !(i.tagIds || []).length) : [];
   const filteredItems = filterTagId ? items.filter(i => i.tagIds?.includes(filterTagId)) : items;
   const unchecked     = filteredItems.filter(i => !i.checked);
   const checked       = filteredItems.filter(i => i.checked);
@@ -279,6 +289,22 @@ export default function ShoppingTab({ hook, userId }) {
           )}
         </div>
 
+        {/* Untagged items warning */}
+        {untagged.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12,
+            background: '#FF9F0A1A', border: '1px solid #FF9F0A55',
+          }}>
+            <span style={{ fontSize: 16 }}>⚠️</span>
+            <span style={{ flex: 1, fontSize: 13, color: T.text, lineHeight: 1.35 }}>
+              {untagged.length === 1 ? `"${untagged[0].name}" has no store tag` : `${untagged.length} items have no store tag`}
+            </span>
+            <button onClick={startTagWalk} style={{
+              padding: '6px 12px', borderRadius: 8, background: '#FF9F0A', color: '#1A1200', fontSize: 13, fontWeight: 700, flexShrink: 0,
+            }}>Add tags</button>
+          </div>
+        )}
+
         {/* Empty state */}
         {filteredItems.length === 0 && (
           <div style={{
@@ -342,13 +368,17 @@ export default function ShoppingTab({ hook, userId }) {
 
       {view === 'list' && tagPickerItem !== null && (
         <TagPickerSheet
+          key={tagPickerItem === 'new' ? 'new' : tagPickerItem.id}
+          title={tagWalk.current && tagPickerItem !== 'new'
+            ? `${tagPickerItem.name}${tagWalk.current.total > 1 ? ` (${tagWalk.current.seen.size + 1} of ${tagWalk.current.total})` : ''}`
+            : undefined}
           tags={tags}
           selectedIds={tagPickerItem === 'new' ? pendingTagIds : (tagPickerItem?.tagIds || [])}
           onAddTag={addTag}
           onUpdateTag={updateTag}
           onDeleteTag={deleteTag}
           onConfirm={handleTagPickerConfirm}
-          onClose={() => setTagPickerItem(null)}
+          onClose={closeTagPicker}
         />
       )}
 

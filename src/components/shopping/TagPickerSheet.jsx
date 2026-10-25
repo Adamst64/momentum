@@ -6,7 +6,7 @@ import { TAG_COLORS } from '../../hooks/useShoppingLists';
 import { useBackHandler } from '../../hooks/useBackHandler';
 import { FULL_PAGE } from '../../utils/pageStyle';
 
-export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
+export default function TagPickerSheet({ title, tags, selectedIds, onAddTag, onUpdateTag, onDeleteTag, onConfirm, onClose }) {
   useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [selected, setSelected] = useState(new Set(selectedIds));
@@ -60,7 +60,7 @@ export default function TagPickerSheet({ tags, selectedIds, onAddTag, onUpdateTa
         background: T.card, borderRadius: '20px 20px 0 0',
         padding: '20px 20px 32px', maxHeight: 'calc(var(--vv-height, 100vh) * 0.75)', overflowY: 'auto', ...FULL_PAGE }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <span style={{ fontSize: 16, fontWeight: 700, color: T.text }}>Tags</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: T.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: 10 }}>{title || 'Tags'}</span>
           <button
             onClick={() => onConfirm([...selected])}
             style={{ background: T.olive, color: T.text, fontSize: 14, fontWeight: 600, padding: '6px 18px', borderRadius: 8 }}
