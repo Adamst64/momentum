@@ -66,7 +66,7 @@ export default function SiriSetup({ userId }) {
       <button onClick={() => setOpen(o => !o)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', textAlign: 'left' }}>
         <span style={{ flex: 1 }}>
           <span style={{ display: 'block', fontSize: 15, color: T.text }}>Siri: add by voice</span>
-          <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>"Hey Siri, add to shopping list" → "milk"</span>
+          <span style={{ display: 'block', fontSize: 12, color: T.muted, marginTop: 2 }}>"Hey Siri, Momentum shopping" → "milk"</span>
         </span>
         <span style={{ color: T.muted, fontSize: 16, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }}>›</span>
       </button>
@@ -91,8 +91,8 @@ export default function SiriSetup({ userId }) {
               {step(3, <>Search <b>Text</b> and tap it. Tap inside its box, paste your link, then tap <b>Dictated Text</b> in the bar above the keyboard so it lands right after <b>item=</b>.</>)}
               {step(4, <>Search <b>Get Contents of URL</b> (green icon) and tap it. It should read "Get contents of Text".</>)}
               {step(5, <>Search <b>Speak Text</b> and tap it, so Siri says "Added Milk to Groceries" (optional; it adds either way).</>)}
-              {step(6, <>Tap the name at the top → <b>Rename</b> → <b>Add to shopping list</b> (that's what you'll say), then <b>Done</b>.</>)}
-              {step(7, <>Say <b>"Hey Siri, add to shopping list"</b>, then "milk, eggs and bread".</>)}
+              {step(6, <>Tap the name at the top → <b>Rename</b> → <b>Momentum shopping</b> (that's what you'll say; avoid "shopping list", Siri sends that to Reminders), then <b>Done</b>.</>)}
+              {step(7, <>Say <b>"Hey Siri, Momentum shopping"</b>, then "milk, eggs and bread".</>)}
 
               <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
                 Say several items at once ("bread milk eggs"). Another list: add <b>&amp;list=Costco</b> before <b>&amp;item=</b>.
@@ -100,7 +100,7 @@ export default function SiriSetup({ userId }) {
 
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 8 }}>Tasks (optional)</div>
               <div style={{ fontSize: 12, color: T.muted, lineHeight: 1.45 }}>
-                Tasks use a different link (it ends with <b>type=task</b>). Make a second shortcut the same way, named <b>Add a task</b>, with this link. It adds to today's tasks.
+                Tasks use a different link (it ends with <b>type=task</b>). Make a second shortcut the same way, named <b>Momentum task</b>, with this link. It adds to today's tasks.
               </div>
               {linkBlock('task', 'Task link (keep it private):')}
               <button onClick={makeKey} disabled={busy} style={{ alignSelf: 'flex-start', fontSize: 12, color: T.muted, padding: '4px 0' }}>
