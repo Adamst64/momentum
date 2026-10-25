@@ -88,13 +88,23 @@ async function addToShopping(db, uid, text, listName) {
   const known = [...new Set([...inventory, ...items].map(x => String(x.name || '').trim()).filter(Boolean))];
   const names = await parseItems(db, text, known, 'shopping');
   if (!names.length) return "I didn't catch what to add.";
+  // Same as adding in the app: the item takes its inventory entry's store tags, and a
+  // new name joins the inventory (when the list keeps one)
+  const invEnabled = list.hasInventory || inventory.length > 0;
+  const lc = x => String(x || '').trim().toLowerCase();
   const batch = db.batch();
   names.forEach((name, i) => {
-    const existing = items.find(it => String(it.name || '').toLowerCase() === name.toLowerCase());
-    if (existing) batch.update(existing.ref, { checked: false });
-    else batch.set(list.ref.collection('items').doc(genId()), { name, checked: false, order: Date.now() + i, tagIds: [] });
-    if (list.hasInventory && !inventory.some(v => String(v.name || '').toLowerCase() === name.toLowerCase())) {
-      batch.set(list.ref.collection('inventory').doc(genId()), { name, tagIds: [] });
+    const inv = inventory.find(v => lc(v.name) === lc(name));
+    const invTags = inv?.tagIds || [];
+    const existing = items.find(it => lc(it.name) === lc(name));
+    if (existing) {
+      batch.update(existing.ref, { checked: false, tagIds: [...new Set([...(existing.tagIds || []), ...invTags])] });
+    } else {
+      batch.set(list.ref.collection('items').doc(genId()), { name, checked: false, order: Date.now() + i, tagIds: invTags });
+    }
+    if (invEnabled && !inv) {
+      batch.set(list.ref.collection('inventory').doc(genId()), { name, tagIds: existing?.tagIds || [] });
+      inventory.push({ name, tagIds: [] });
     }
   });
   await batch.commit();
