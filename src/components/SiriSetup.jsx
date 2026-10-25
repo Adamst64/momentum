@@ -87,7 +87,7 @@ export default function SiriSetup({ userId }) {
 
               <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginTop: 4 }}>Make the shortcut (once, about a minute)</div>
               {step(1, <>Open the <b>Shortcuts</b> app → tap <b>+</b>. Ignore the suggested actions; you'll use the <b>Search Actions</b> bar at the bottom.</>)}
-              {step(2, <>Search <b>Dictate Text</b> and tap it (Siri will ask what to add).</>)}
+              {step(2, <>Search <b>Dictate Text</b> and tap it (Siri will ask what to add). Tap its <b>›</b> arrow and set <b>Stop Listening</b> to <b>After Pause</b> (or <b>On Tap</b>), so Siri doesn't cut you off after the first word.</>)}
               {step(3, <>Search <b>Text</b> and tap it. Tap inside its box, paste your link, then tap <b>Dictated Text</b> in the bar above the keyboard so it lands right after <b>item=</b>.</>)}
               {step(4, <>Search <b>Get Contents of URL</b> (green icon) and tap it. It should read "Get contents of Text".</>)}
               {step(5, <>Search <b>Speak Text</b> and tap it, so Siri says "Added Milk to Groceries" (optional; it adds either way).</>)}
