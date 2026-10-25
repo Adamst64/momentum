@@ -25,7 +25,7 @@ const VIEWS = [
   { value: 'portfolio', label: 'Portfolio', icon: ICONS.list },
   { value: 'watchlist', label: 'Watchlist', icon: ICONS.star },
   { value: 'insights',  label: 'Insights',  icon: ICONS.bulb },
-  { value: 'calendar',  label: 'Calendar',  icon: ICONS.calendar },
+  { value: 'calendar',  label: 'Events',    icon: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0' },
 ];
 
 const ADD_ACTIONS = [
@@ -1415,6 +1415,10 @@ function EventsCalendar({ hook, today, onOpen }) {
   const held = new Set(portfolio.holdings.filter(h => h.qty > 0).map(h => h.symbol));
   const followed = Object.values(assets).filter(a => held.has(a.symbol) || a.watch || (a.lists || []).length > 0);
   const horizon = addDays(today, 75);
+  const allEvents = [
+    ...followed.flatMap(a => stockEvents(a).map(e => ({ ...e, symbol: a.symbol }))),
+    ...market.map((e, i) => ({ ...e, id: `mkt-${e.date}-${i}`, symbol: null })),
+  ];
   const upcoming = [
     ...followed.flatMap(a => stockEvents(a).filter(e => e.date >= today && e.date <= horizon).map(e => ({ ...e, symbol: a.symbol }))),
     ...market.filter(e => e.date >= today && e.date <= horizon).map((e, i) => ({ ...e, id: `mkt-${e.date}-${i}`, symbol: null })),
@@ -1451,7 +1455,8 @@ function EventsCalendar({ hook, today, onOpen }) {
       <SubBar
         items={[
           { value: 'reminders', label: `Reminders${reminders.length ? ` (${reminders.length})` : ''}`, icon: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0' },
-          { value: 'upcoming', label: 'Upcoming', icon: ICONS.calendar },
+          { value: 'upcoming', label: 'Upcoming', icon: 'M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01' },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
         ]}
         value={tab} onChange={v => { setTab(v); scrollToTop(); }}
       />
@@ -1464,6 +1469,16 @@ function EventsCalendar({ hook, today, onOpen }) {
           <button onClick={() => removeEventAlert(a.id)} aria-label="Remove reminder" style={{ fontSize: 18, color: T.muted, padding: '0 6px' }}>×</button>
         ), i))
       )}
+      {tab === 'calendar' && (
+        <MonthEvents events={allEvents} today={today} renderDay={(date, items) => (
+          <div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: T.khaki, margin: '4px 0 6px' }}>{date === today ? 'Today' : dayTitle(date)}</div>
+            {items.length === 0
+              ? <div style={{ fontSize: 13, color: T.muted }}>Nothing on this day.</div>
+              : <Card style={{ padding: '2px 14px' }}>{items.map((e, i) => line(e, <EventBell hook={hook} event={e} symbol={e.symbol} />, i))}</Card>}
+          </div>
+        )} />
+      )}
       {tab === 'upcoming' && (
         upcoming.length === 0 ? (
           <div style={{ fontSize: 14, color: T.muted, padding: '8px 2px' }}>Nothing in the next few weeks for what you hold or watch.</div>
@@ -1472,6 +1487,65 @@ function EventsCalendar({ hook, today, onOpen }) {
           {renderDays(upcoming, (e, i) => line(e, <EventBell hook={hook} event={e} symbol={e.symbol} />, i))}
         </>
       )}
+    </>
+  );
+}
+
+// A month grid of events: a colored dot per event (up to 3, then +n). Tap a day
+// to list everything on it; swipe or ‹ › to change month.
+function MonthEvents({ events, today, renderDay }) {
+  const [month, setMonth] = useState(today.slice(0, 7));
+  const [picked, setPicked] = useState(today);
+  const swipe = useRef(null);
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1).getDay();
+  const days = new Date(y, m, 0).getDate();
+  const pad = n => String(n).padStart(2, '0');
+  const byDay = {};
+  events.forEach(e => { (byDay[e.date] = byDay[e.date] || []).push(e); });
+  const shift = n => { const d = new Date(y, m - 1 + n, 1); setMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`); };
+  const dayItems = (byDay[picked] || []).slice().sort((a, b) => (a.symbol || '').localeCompare(b.symbol || ''));
+  return (
+    <>
+      <Card style={{ padding: '10px 12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
+          <button onClick={() => shift(-1)} aria-label="Previous month" style={{ color: T.khaki, fontSize: 20, padding: '0 10px' }}>‹</button>
+          <span style={{ flex: 1, textAlign: 'center', fontSize: 15, fontWeight: 700, color: T.text }}>
+            {new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </span>
+          <button onClick={() => shift(1)} aria-label="Next month" style={{ color: T.khaki, fontSize: 20, padding: '0 10px' }}>›</button>
+        </div>
+        <div
+          data-no-swipe-back
+          onTouchStart={e => { const t = e.touches[0]; swipe.current = { x: t.clientX, y: t.clientY }; }}
+          onTouchEnd={e => {
+            const s0 = swipe.current; swipe.current = null;
+            if (!s0) return;
+            const t = e.changedTouches[0], dx = t.clientX - s0.x, dy = t.clientY - s0.y;
+            if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.5) shift(dx < 0 ? 1 : -1);
+          }}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, textAlign: 'center', touchAction: 'pan-y' }}
+        >
+          {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <span key={i} style={{ fontSize: 10, color: T.muted, padding: '2px 0' }}>{d}</span>)}
+          {Array.from({ length: first }, (_, i) => <span key={`b${i}`} />)}
+          {Array.from({ length: days }, (_, i) => {
+            const ds = `${month}-${pad(i + 1)}`;
+            const evs = byDay[ds] || [];
+            const on = picked === ds;
+            return (
+              <button key={ds} onClick={() => setPicked(ds)}
+                style={{ padding: '6px 0 4px', borderRadius: 8, background: on ? '#2A3A1A' : 'transparent', border: `1px solid ${ds === today ? T.olive : 'transparent'}` }}>
+                <span style={{ display: 'block', fontSize: 13, color: ds < today ? T.muted : T.text, fontWeight: evs.length ? 700 : 400 }}>{i + 1}</span>
+                <span style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 2, height: 7, marginTop: 2 }}>
+                  {evs.slice(0, 3).map((e, k) => <span key={k} style={{ width: 5, height: 5, borderRadius: 3, background: e.symbol ? colorOf(e) : '#5AC8FA' }} />)}
+                  {evs.length > 3 && <span style={{ fontSize: 8, color: T.muted, lineHeight: 1 }}>+{evs.length - 3}</span>}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+      {renderDay(picked, dayItems)}
     </>
   );
 }
