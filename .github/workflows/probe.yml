@@ -22,18 +22,16 @@ jobs:
           const admin = require('firebase-admin');
           admin.initializeApp({ projectId: 'momentum-4acf1' });
           (async () => {
-            const key = (await admin.firestore().doc('config/finnhub').get()).data().key;
-            const fh = async p => { const r = await fetch(`https://finnhub.io/api/v1/${p}&token=${key}`); const t = await r.text(); return [r.status, t.slice(0, 600)]; };
-            console.log('insider', ...(await fh('stock/insider-transactions?symbol=NVDA')));
-            console.log('news', ...(await fh('company-news?symbol=NVDA&from=2026-10-01&to=2026-10-24')));
-            console.log('congress', ...(await fh('stock/congressional-trading?symbol=NVDA&from=2026-01-01&to=2026-10-24')));
-            for (const u of ['https://house-stock-watcher-data.s3-us-west-2.amazonaws.com/data/all_transactions.json', 'https://senate-stock-watcher-data.s3-us-west-2.amazonaws.com/aggregate/all_transactions.json']) {
-              try { const r = await fetch(u); const t = await r.text(); console.log('s3', u.slice(8, 40), r.status, t.length, t.slice(-400)); } catch (e) { console.log('s3 fail', e.message); }
+            for (const ua of ['Momentum App admin@momentumapp.dev', 'Mozilla/5.0 (compatible; MomentumApp/1.0; +mailto:admin@momentumapp.dev)']) {
+              const r = await fetch('https://data.sec.gov/submissions/CIK0001045810.json', { headers: { 'User-Agent': ua, 'Accept-Encoding': 'gzip, deflate' } });
+              const t = await r.text(); console.log('edgar', ua.slice(0, 20), r.status, t.slice(0, 120).replace(/\s+/g, ' '));
+              if (r.ok) { const j = JSON.parse(t); const x = j.filings.recent; console.log(x.form.slice(0, 20).map((f, i) => `${x.filingDate[i]} ${f} ${x.items[i] || ''}`).join(' | ')); break; }
             }
-            const UA = { 'User-Agent': 'Momentum personal finance app momentum-app@users.noreply.github.com' };
-            const sub = await fetch('https://data.sec.gov/submissions/CIK0001045810.json', { headers: UA });
-            const j = await sub.json(); const r = j.filings.recent;
-            console.log('edgar', sub.status, r.form.slice(0, 15).map((f, i) => `${r.filingDate[i]} ${f} ${r.items[i] || ''}`).join(' | '));
+            const B = { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15', Accept: 'application/json', Origin: 'https://www.capitoltrades.com', Referer: 'https://www.capitoltrades.com/' };
+            for (const u of ['https://bff.capitoltrades.com/trades?pageSize=5&issuer=nvda', 'https://bff.capitoltrades.com/trades?pageSize=3']) {
+              try { const r = await fetch(u, { headers: B }); const t = await r.text(); console.log('ct', r.status, t.slice(0, 700)); } catch (e) { console.log('ct fail', e.message); }
+            }
+            try { const r = await fetch('https://disclosures-clerk.house.gov/public_disc/financial-pdfs/2026FD.zip'); console.log('house clerk', r.status, r.headers.get('content-length')); } catch (e) { console.log('clerk fail', e.message); }
           })().catch(e => console.log('ERR', e.message));
           JS
           node probe.js
