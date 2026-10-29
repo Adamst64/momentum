@@ -1349,6 +1349,27 @@ function dropSpikes(points) {
   }
 }
 
+// Any intraday point (regular hours too) far from the prices just before and after
+// it, which agree with each other: a bad print, like the needle UBER showed around
+// the close. A real move is a step (the prices after it stay there), so it's kept.
+const median = a => { const s = [...a].sort((x, y) => x - y); return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2; };
+function dropOutliers(points) {
+  for (let pass = 0; pass < 2; pass++) {
+    const bad = new Set();
+    for (let i = 0; i < points.length; i++) {
+      const around = [];
+      for (let k = Math.max(0, i - 4); k <= Math.min(points.length - 1, i + 4); k++) if (k !== i) around.push(points[k].value);
+      if (around.length < 4) continue;
+      const med = median(around);
+      const spread = median(around.map(v => Math.abs(v - med)));
+      const off = Math.abs(points[i].value - med);
+      if (off / med > 0.006 && off > 6 * Math.max(spread, med * 0.0005)) bad.add(i);
+    }
+    if (!bad.size) return;
+    for (let i = points.length - 1; i >= 0; i--) if (bad.has(i)) points.splice(i, 1);
+  }
+}
+
 async function priceHistory(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const sym = String(request.data?.symbol || '').trim().toUpperCase();
@@ -1387,7 +1408,7 @@ async function priceHistory(db, request) {
     if (points.length && points[points.length - 1].date === date) points[points.length - 1].value = value;
     else points.push({ date, value });
   }
-  if (prePost) dropSpikes(points);
+  if (prePost) { dropSpikes(points); dropOutliers(points); }
   // 1D starts from yesterday's official close (4 PM), so the change matches the
   // day's move. The chart's own "previous close" can be the last after-hours
   // trade, so take it from the daily candles: the last one before today.

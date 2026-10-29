@@ -734,6 +734,7 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
   // The next date on this stock's calendar (yours or the earnings report) within 3 weeks
   const next = stockEvents(assets[h.symbol]).find(e => e.date >= today);
   const showEarn = next && next.date <= laterDate;
+  const [showNext, setShowNext] = useState(false);
   return (
     <button
       onClick={() => onOpen(h.account !== null && h.account !== undefined ? { symbol: h.symbol, account: h.account } : h.symbol)}
@@ -743,12 +744,18 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: T.text, display: 'flex', alignItems: 'center', gap: 7 }}>
             {h.symbol}
+            {/* Next date on its calendar: a small yellow 📅 (tap shows what it is) */}
             {showEarn && (
-              <span style={{
-                fontSize: 10, fontWeight: 600, padding: '2px 6px', borderRadius: 8,
-                color: next.date <= soonDate ? T.khaki : T.muted, background: next.date <= soonDate ? '#2A2616' : T.bg,
-              }}>
-                {next.kind === 'earnings' ? 'Earnings' : next.label.length > 16 ? next.label.slice(0, 15) + '…' : next.label} {earningsBadge(next.date, today)}
+              <span
+                role="button"
+                aria-label="What's coming up"
+                onClick={e => { e.stopPropagation(); setShowNext(v => !v); }}
+                style={{
+                  fontSize: 10, fontWeight: 700, padding: '2px 5px', borderRadius: 6, flexShrink: 0, lineHeight: 1.2, whiteSpace: 'nowrap',
+                  color: next.date <= soonDate ? '#000' : T.khaki, background: next.date <= soonDate ? T.khaki : '#2A2616',
+                }}
+              >
+                📅 {earningsBadge(next.date, today)}
               </span>
             )}
             {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
@@ -757,6 +764,11 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
           <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
           </div>
+          {showEarn && showNext && (
+            <div style={{ fontSize: 12, color: T.khaki, marginTop: 2 }}>
+              {next.kind === 'earnings' ? 'Earnings report' : next.label} · {formatDateYear(next.date)}
+            </div>
+          )}
           <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
         </div>
         <Sparkline symbol={h.symbol} />
