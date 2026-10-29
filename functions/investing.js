@@ -1379,8 +1379,8 @@ async function priceHistory(db, request) {
       const time = when.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
       const day = when.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' });
       const { minutes: m } = easternNow(when);
-      const ext = m < 9 * 60 + 30 || m >= closeMinutes(date);
-      points.push({ date, t: ts[i], value, label: range === 'i1d' ? `${time} ET` : `${day}, ${time}`, ...(ext ? { ext: true } : {}) });
+      const ext = m < 9 * 60 + 30 ? 'pre' : m >= closeMinutes(date) ? 'post' : null;
+      points.push({ date, t: ts[i], value, label: range === 'i1d' ? `${time} ET` : `${day}, ${time}`, ...(ext ? { ext } : {}) });
       continue;
     }
     // The live (unfinished) candle can share a date with the last one; keep the newest

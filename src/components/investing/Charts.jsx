@@ -16,6 +16,17 @@ export const NOTE_COLOR = '#FFD60A'; // your own marks on a chart
 // trades: buy/sell dots [{ id, date, price, type }] drawn at the trade price;
 // a tap (not a drag) on or next to one calls onTradeTap(id), elsewhere onTradeTap(null).
 // onRange({ from, to } | null): two fingers on the chart select the period between them.
+// Pre-market and after-hours stretches of an intraday chart get their own colors
+export const PRE_COLOR = '#64D2FF';
+export const POST_COLOR = '#BF8AFF';
+const ET_HOUR = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hourCycle: 'h23', timeZone: 'America/New_York' });
+// 'pre' | 'post' | null for a point (older points only say ext: true, so the hour decides)
+export function extSession(p) {
+  if (!p?.ext) return null;
+  if (p.ext === 'pre' || p.ext === 'post') return p.ext;
+  return p.t && Number(ET_HOUR.format(new Date(p.t * 1000))) >= 12 ? 'post' : 'pre';
+}
+
 export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText, zeroSplit = false }) {
   const [hover, setHoverState] = useState(null);
   const gradId = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -105,6 +116,20 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const zeroY = zeroSplit && min < 0 && max > 0 ? y(0) : null;
   const stroke = zeroY !== null ? `url(#zs${gradId})` : zeroSplit ? (min >= 0 ? T.oliveLight : T.red) : color;
   const colorAt = v => (zeroSplit ? (v >= 0 ? T.oliveLight : T.red) : color);
+  // Intraday: the line in runs, pre-market and after-hours in their own colors
+  // (a step touching extended hours counts as extended)
+  const sess = points.map(extSession);
+  const hasExt = sess.some(Boolean);
+  const runs = [];
+  if (hasExt) {
+    for (let i = 1; i < points.length; i++) {
+      const k = sess[i] || sess[i - 1] || 'reg';
+      const seg = `L${x(i).toFixed(1)},${y(points[i].value).toFixed(1)}`;
+      if (runs.length && runs[runs.length - 1].k === k) runs[runs.length - 1].d += seg;
+      else runs.push({ k, d: `M${x(i - 1).toFixed(1)},${y(points[i - 1].value).toFixed(1)}${seg}` });
+    }
+  }
+  const runColor = k => (k === 'pre' ? PRE_COLOR : k === 'post' ? POST_COLOR : stroke);
 
   // Screen ↔ chart coordinates (the SVG keeps its aspect ratio, centered)
   const toChartX = clientX => {
@@ -271,7 +296,9 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
             </linearGradient>
           </defs>
         )}
-        <path d={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+        {hasExt
+          ? runs.map((r, k) => <path key={k} d={r.d} fill="none" stroke={runColor(r.k)} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />)
+          : <path d={line} fill="none" stroke={stroke} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />}
         {tradeDots.map(t => {
           const buy = t.type === 'buy';
           const sel = selectedTrade === t.id;
@@ -337,19 +364,26 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
         })()}
         {hover !== null && !range && (() => {
           // Date pill at the top of the crosshair, flipped to stay inside the chart
-          const label = hp.label || formatDateYear(hp.date);
+          const sx = sess[hover];
+          const label = `${hp.label || formatDateYear(hp.date)}${sx === 'pre' ? ' · Pre-market' : sx === 'post' ? ' · After hours' : ''}`;
           const w = label.length * 5.2 + 10;
           const px = Math.min(Math.max(x(hover) - w / 2, 0), W - w);
           return (
             <>
               <line x1={x(hover)} x2={x(hover)} y1={14} y2={H} stroke={T.muted} strokeWidth={1} strokeDasharray="3 3" />
-              <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={colorAt(hp.value)} stroke={T.card} strokeWidth={2} />
+              <circle cx={x(hover)} cy={y(hp.value)} r={4.5} fill={sx ? runColor(sx) : colorAt(hp.value)} stroke={T.card} strokeWidth={2} />
               <rect x={px} y={0} width={w} height={13} rx={6.5} fill={T.subtle} />
               <text x={px + w / 2} y={9.5} textAnchor="middle" fontSize="9" fontWeight="700" fill={T.text}>{label}</text>
             </>
           );
         })()}
       </svg>
+      {hasExt && (
+        <div style={{ display: 'flex', gap: 12, fontSize: 11, color: T.muted, marginTop: 4 }}>
+          {sess.includes('pre') && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 3, borderRadius: 2, background: PRE_COLOR }} />Pre-market</span>}
+          {sess.includes('post') && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 10, height: 3, borderRadius: 2, background: POST_COLOR }} />After hours</span>}
+        </div>
+      )}
     </div>
   );
 }
