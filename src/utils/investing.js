@@ -53,6 +53,18 @@ export function extendedPrice(a, now = new Date()) {
   };
 }
 
+// This morning's pre-market move (vs yesterday's close), still known after the
+// open from the last pre-market price; null when there was none today
+export function premarketMove(a, now = new Date()) {
+  const price = a?.prePrice ?? a?.extPrice, time = a?.preTime ?? a?.extTime;
+  if (!price || !time || !a.price) return null;
+  const OPEN = 9 * 60 + 30;
+  const t = easternDate(new Date(time)), n = easternDate(now);
+  if (t.date !== n.date || t.minutes >= OPEN) return null;
+  const base = n.minutes < OPEN ? a.price : movedToday(a) ? a.prevClose : a.price;
+  return base ? (price - base) / base : null;
+}
+
 export function sortTx(txs) {
   return [...txs].sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt || '').localeCompare(b.createdAt || ''));
 }

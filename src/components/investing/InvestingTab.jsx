@@ -4,7 +4,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { T, gainColor } from './theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
+import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice, premarketMove } from '../../utils/investing';
 import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
 import { Card as BaseCard, SectionTitle, Chips, inputStyle, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, Sparkline, SparkContext, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
@@ -1169,8 +1169,20 @@ function WatchHome({ hook, items, onOpenList }) {
   return (
     <>
       {cards.map(c => {
-        const moves = c.items.map(dayPct).filter(x => x !== null);
-        const avg = moves.length ? moves.reduce((t, x) => t + x, 0) / moves.length : null;
+        // Averages over the list: the session happening now is bright, the others dim
+        // (pre-market: pre-market bright, the last session dim; open: today bright,
+        // this morning's pre-market dim; after hours: after hours bright, today dim)
+        const avgOf = f => { const v = c.items.map(f).filter(x => x !== null && x !== undefined); return v.length ? v.reduce((t, x) => t + x, 0) / v.length : null; };
+        const dc = dayContext();
+        const day = avgOf(dayPct);
+        const pre = avgOf(a => premarketMove(a));
+        const post = avgOf(a => { const e = extendedPrice(a); return e?.session === 'post' ? e.pct : null; });
+        const lines = dc.pre
+          ? [{ v: pre, label: 'pre-market', live: true }, { v: day, label: dc.word, live: false }]
+          : post !== null
+            ? [{ v: post, label: 'after hours', live: true }, { v: day, label: dc.word, live: false }]
+            : [{ v: day, label: dc.word, live: true }, { v: pre, label: 'pre-market', live: false }];
+        const shown = lines.filter(l => l.v !== null);
         return (
           <Card key={c.id} style={{ padding: '4px 16px' }}>
             <button onClick={() => onOpenList(c.id)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 0', textAlign: 'left' }}>
@@ -1180,7 +1192,16 @@ function WatchHome({ hook, items, onOpenList }) {
                   {c.items.length} item{c.items.length !== 1 ? 's' : ''}{c.items.length ? ` · ${c.items.slice(0, 4).map(a => a.symbol).join(', ')}${c.items.length > 4 ? '…' : ''}` : ''}
                 </span>
               </span>
-              {avg !== null && <span style={{ fontSize: 12, color: gainColor(avg), fontVariantNumeric: 'tabular-nums' }}>{pct(avg)} avg today</span>}
+              {shown.length > 0 && (
+                <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+                  {shown.map(l => (
+                    <span key={l.label} style={{ display: 'block', fontSize: l.live ? 13 : 11, fontWeight: l.live ? 700 : 400, color: gainColor(l.v), opacity: l.live ? 1 : 0.5 }}>
+                      {pct(l.v)} {l.label}
+                    </span>
+                  ))}
+                  <span style={{ display: 'block', fontSize: 10, color: T.muted }}>avg</span>
+                </span>
+              )}
               <span style={{ fontSize: 18, color: T.muted }}>›</span>
             </button>
           </Card>

@@ -111,7 +111,9 @@ const NO_EXT = { extPrice: null, extSession: null, extTime: null };
 // session, cleared during it. Errors leave the existing values alone.
 async function extendedFields(symbol, et) {
   if (isRegularSession(et)) return NO_EXT;
-  try { return (await extendedQuote(symbol)) || NO_EXT; }
+  // The last pre-market price is also kept on its own (prePrice / preTime), so the
+  // app can still show the morning's pre-market move after the open clears ext*
+  try { const q = await extendedQuote(symbol); return q ? { ...q, ...(q.extSession === 'pre' ? { prePrice: q.extPrice, preTime: q.extTime } : {}) } : NO_EXT; }
   catch (e) { console.warn(`Extended quote for ${symbol} failed:`, e.message); return {}; }
 }
 
