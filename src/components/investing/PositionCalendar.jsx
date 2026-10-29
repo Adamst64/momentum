@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { T } from '../../theme';
+import { T } from './theme';
 import { formatDateYear, todayStr } from '../../utils/dateUtils';
 import { genId } from '../../utils/id';
 import { Chips, ConfirmDialog, inputStyle } from './ui';

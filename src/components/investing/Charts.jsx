@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect, useId } from 'react';
-import { T } from '../../theme';
+import React, { useState, useRef, useEffect, useId, useContext, createContext } from 'react';
+import { T, gainColor } from './theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, pct } from '../../utils/investing';
-import { SERIES, OTHER_COLOR, gainColor, noSelect } from './ui';
+import { SERIES, OTHER_COLOR, noSelect } from './ui';
 
 export const DIV_COLOR = '#BF5AF2';
 export const NOTE_COLOR = '#FFD60A'; // your own marks on a chart
@@ -110,11 +110,11 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   };
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
   const up = vals[vals.length - 1] >= vals[0];
-  const color = up ? T.oliveLight : T.red;
+  const color = up ? T.green : T.red;
   // zeroSplit (returns): the line is green above 0 and red below it
   const zeroY = zeroSplit && min < 0 && max > 0 ? y(0) : null;
-  const stroke = zeroY !== null ? `url(#zs${gradId})` : zeroSplit ? (min >= 0 ? T.oliveLight : T.red) : color;
-  const colorAt = v => (zeroSplit ? (v >= 0 ? T.oliveLight : T.red) : color);
+  const stroke = zeroY !== null ? `url(#zs${gradId})` : zeroSplit ? (min >= 0 ? T.green : T.red) : color;
+  const colorAt = v => (zeroSplit ? (v >= 0 ? T.green : T.red) : color);
   // Intraday: which stretch (day + pre-market / regular / after hours) each point is in.
   // While scrubbing, the stretch under the finger stays bright and the rest dims.
   const sess = points.map(extSession);
@@ -294,7 +294,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
         {zeroY !== null && (
           <defs>
             <linearGradient id={`zs${gradId}`} gradientUnits="userSpaceOnUse" x1={0} x2={0} y1={0} y2={H}>
-              <stop offset={zeroY / H} stopColor={T.oliveLight} />
+              <stop offset={zeroY / H} stopColor={T.green} />
               <stop offset={zeroY / H} stopColor={T.red} />
             </linearGradient>
           </defs>
@@ -344,7 +344,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
           const [a, b] = range;
           const pa = points[a], pb = points[b];
           const up2 = pb.value >= pa.value;
-          const c2 = up2 ? T.oliveLight : T.red;
+          const c2 = up2 ? T.green : T.red;
           const la = pa.label || formatDateYear(pa.date), lb = pb.label || formatDateYear(pb.date);
           const wa = la.length * 5.2 + 10, wb = lb.length * 5.2 + 10;
           const xa = Math.max(0, Math.min(x(a) - wa, W - wa - wb));
@@ -382,6 +382,58 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
         })()}
       </svg>
     </div>
+  );
+}
+
+// ── Day sparkline (like Robinhood's watchlist) ───────────────────────────────
+
+// Where sparklines get today's prices (InvestingTab provides hook.priceHistory)
+export const SparkContext = createContext(null);
+
+// Today's moves for one stock, pre-market and after hours included: green if it's
+// up from yesterday's close (the dotted line), red if down. Loads once it's on screen.
+export function Sparkline({ symbol, width = 64, height = 30 }) {
+  const priceHistory = useContext(SparkContext);
+  const box = useRef(null);
+  const [seen, setSeen] = useState(false);
+  const [pts, setPts] = useState(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || seen) return undefined;
+    if (!('IntersectionObserver' in window)) { setSeen(true); return undefined; }
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) setSeen(true); }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [seen]);
+  useEffect(() => {
+    if (!seen || !priceHistory || !symbol) return undefined;
+    let live = true;
+    priceHistory(symbol, 'i1d').then(p => live && setPts(p)).catch(() => live && setPts([]));
+    return () => { live = false; };
+  }, [seen, symbol, priceHistory]);
+
+  const line = (pts || []).filter(p => !p.prev);
+  const base = pts?.[0]?.prev ? pts[0].value : line[0]?.value;
+  let body = null;
+  if (line.length >= 2 && base) {
+    const vals = [...line.map(p => p.value), base];
+    const lo = Math.min(...vals), hi = Math.max(...vals), sp = hi - lo || hi * 0.01 || 1;
+    const P = 2;
+    const x = i => P + (i / (line.length - 1)) * (width - P * 2);
+    const y = v => P + (1 - (v - lo) / sp) * (height - P * 2);
+    const d = line.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join('');
+    const c = line[line.length - 1].value >= base ? T.green : T.red;
+    body = (
+      <>
+        <line x1={0} x2={width} y1={y(base)} y2={y(base)} stroke={T.muted} strokeWidth={1} strokeDasharray="1.5 2.5" opacity={0.7} />
+        <path d={d} fill="none" stroke={c} strokeWidth={1.3} strokeLinejoin="round" strokeLinecap="round" />
+      </>
+    );
+  }
+  return (
+    <svg ref={box} width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ flexShrink: 0, display: 'block' }} aria-hidden="true">
+      {body}
+    </svg>
   );
 }
 

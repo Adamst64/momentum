@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { T } from '../../theme';
+import { T, gainColor } from './theme';
 import { formatDateYear } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt } from '../../utils/investing';
-import { Chips, gainColor, noSelect, ConfirmDialog, inputStyle } from './ui';
+import { Chips, noSelect, ConfirmDialog, inputStyle } from './ui';
 import { ValueChart, NOTE_COLOR, DIV_COLOR } from './Charts';
 
 const RANGES = [

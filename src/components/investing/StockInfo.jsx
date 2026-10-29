@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { T } from '../../theme';
+import { T } from './theme';
 import { formatShortDate } from '../../utils/dateUtils';
 import { money } from '../../utils/investing';
 import { SectionTitle } from './ui';

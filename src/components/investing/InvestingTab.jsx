@@ -1,19 +1,22 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import Modal from '../Modal';
 import { useBackHandler } from '../../hooks/useBackHandler';
-import { T } from '../../theme';
+import { T, gainColor } from './theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
 import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice } from '../../utils/investing';
 import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
-import { Card, SectionTitle, Chips, inputStyle, gainColor, noSelect, ConfirmDialog } from './ui';
-import { ValueChart, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
+import { Card as BaseCard, SectionTitle, Chips, inputStyle, noSelect, ConfirmDialog } from './ui';
+import { ValueChart, Sparkline, SparkContext, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
 import TxModal from './TxModal';
 import TransferSheet from '../TransferSheet';
 import { stockEvents, EventBell, colorOf } from './PositionCalendar';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
+
+// Cards in Investing's black look
+const Card = ({ style, ...props }) => <BaseCard {...props} style={{ background: T.card, borderColor: T.cardBorder, ...style }} />;
 
 const HIDE_KEY = 'momentum_hide_amounts';
 // The value history from last time, so a fresh open draws the exact chart right
@@ -65,7 +68,16 @@ const earningsBadge = (date, today) => {
 // The last notification link handled (a link is acted on once, even if the tab reopens)
 let handledLink = null;
 
-export default function InvestingTab({ hook, userId, budget, requested }) {
+// Sparklines anywhere in Investing load today's prices through the hook
+export default function InvestingTab(props) {
+  return (
+    <SparkContext.Provider value={props.hook.priceHistory}>
+      <InvestingTabInner {...props} />
+    </SparkContext.Provider>
+  );
+}
+
+function InvestingTabInner({ hook, userId, budget, requested }) {
   const { txs, portfolio, assets, snapshots, accounts, refreshPrices, deleteTx, setTxAccount, setAsset } = hook;
   const [view, setViewState] = useState('overview');
   // Each view opens at its top, not where the last one was scrolled to
@@ -355,7 +367,7 @@ export default function InvestingTab({ hook, userId, budget, requested }) {
     <>
       <TabBar items={VIEWS} value={view} onChange={setView} />
       {adding && (
-        <Modal title="Add" onClose={() => setAdding(false)}>
+        <Modal bg={T.bg} title="Add" onClose={() => setAdding(false)}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[...ADD_ACTIONS, ...(hasCash ? [{ type: 'transfer', label: '⇄ Transfer', hint: 'Between your bank accounts and investing (or bank to bank)' }] : [])].map(a => (
               <button
@@ -747,6 +759,7 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
           </div>
           <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
         </div>
+        <Sparkline symbol={h.symbol} />
         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
           {/* Total gain, then the day's move: live (today / pre-market / after hours) in color, the last session's in grey */}
@@ -808,7 +821,7 @@ function AccountsModal({ hook, onClose }) {
   const run = async fn => { setErr(null); try { await fn(); } catch (e) { setErr(e.message || 'Something went wrong'); } };
   const unassigned = txs.filter(t => !t.account && !isLegacyCash(t)).length;
   return (
-    <Modal title="Accounts" onClose={onClose}>
+    <Modal bg={T.bg} title="Accounts" onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {/* New account first, so it's never below a long list */}
         <div style={{ display: 'flex', gap: 8 }}>
@@ -934,7 +947,7 @@ function TargetModal({ label, initial, onSave, onClose }) {
     try { await onSave(val); onClose(); } catch (e) { setErr(e.message || 'Could not save'); }
   };
   return (
-    <Modal title={`Target for ${label}`} onClose={onClose}>
+    <Modal bg={T.bg} title={`Target for ${label}`} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <input value={v} onChange={e => setV(e.target.value)} inputMode="decimal" placeholder="% of portfolio, e.g. 25" style={inputStyle} />
         {err && <div style={{ fontSize: 13, color: T.red }}>{err}</div>}
@@ -1242,8 +1255,10 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
                 })()}
                 <TargetLine target={a.priceTarget} analyst={a.analyst?.targetMean} price={a.price} hide={hide} />
               </button>
-              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                <div style={{ fontSize: 14, color: T.text }}>{money(a.price, hide)}</div>
+              <Sparkline symbol={a.symbol} />
+              <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                {/* The price in a pill colored by today's move, like Robinhood */}
+                <div style={{ fontSize: 14, fontWeight: 700, color: day === null || day === undefined ? T.text : '#000', background: day === null || day === undefined ? T.subtle : gainColor(day), borderRadius: 8, padding: '5px 9px', minWidth: 70, textAlign: 'center' }}>{money(a.price, hide)}</div>
                 <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
                 {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
               </div>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { T } from '../../theme';
+import { T } from './theme';
 import { inputStyle } from './ui';
 
 // Lookups per query ({ results, exact }), kept for the session so retyping

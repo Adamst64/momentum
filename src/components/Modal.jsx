@@ -10,7 +10,7 @@ let openSheets = 0;
 
 // Every screen opened this way is a whole page (back with the round button or a
 // swipe). full={false}: a small sheet at the bottom, only for quick confirmations.
-export default function Modal({ title, onClose, children, full = true }) {
+export default function Modal({ title, onClose, children, full = true, bg }) {
   useSubBarBlock(); // the sub-bar of the page underneath doesn't show over this
   useBackHandler(true, onClose);
   const [kbHeight, setKbHeight] = useState(0);
@@ -64,7 +64,7 @@ export default function Modal({ title, onClose, children, full = true }) {
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
-          background: T.card,
+          background: bg || T.card,
           borderRadius: full ? 0 : '20px 20px 0 0',
           padding: full
             ? `calc(60px + env(safe-area-inset-top)) 20px ${kbHeight > 0 ? 'calc(20px + var(--bars-h, 0px))' : 'calc(20px + env(safe-area-inset-bottom) + var(--bars-h, 0px))'}`

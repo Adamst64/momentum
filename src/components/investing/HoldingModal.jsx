@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import Modal from '../Modal';
-import { T } from '../../theme';
+import { T, gainColor } from './theme';
 import { formatShortDate } from '../../utils/dateUtils';
 import { money, signedMoney, pct, qtyFmt, sortTx, extendedPrice, soldPositions, tradeDetails, accountGroups, txEditInit, isLegacyCash } from '../../utils/investing';
-import { Chips, inputStyle, gainColor, SectionTitle, ConfirmDialog } from './ui';
+import { Chips, inputStyle, SectionTitle, ConfirmDialog } from './ui';
 import { registerPushToken } from '../../utils/pushNotifications';
 import StockInfo, { ANALYST_COLOR } from './StockInfo';
 import StockChart from './StockChart';
@@ -182,9 +182,9 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
   );
 
   return (
-    <Modal title={symbol} onClose={onClose} full>
+    <Modal bg={T.bg} title={symbol} onClose={onClose} full>
       {showTx && (
-        <Modal title={`${symbol} transactions${scoped ? ` · ${scoped.name}` : ''}`} onClose={() => setShowTx(false)}>
+        <Modal bg={T.bg} title={`${symbol} transactions${scoped ? ` · ${scoped.name}` : ''}`} onClose={() => setShowTx(false)}>
           {scopeTx.length > 0
             ? <TxList txs={scopeTx} allTxs={txs} hide={hide} onDelete={id => deleteTx(id)} onEdit={editTx} accounts={accounts} onSetAccount={(id, acc) => run(() => setTxAccount(id, acc))} />
             : <div style={{ fontSize: 13, color: T.muted }}>No transactions.</div>}

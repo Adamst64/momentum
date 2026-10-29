@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Modal from '../Modal';
-import { T } from '../../theme';
+import { T } from './theme';
 import { toDateStr, formatDateYear } from '../../utils/dateUtils';
 import { validateTx, money, qtyFmt, accountHoldings } from '../../utils/investing';
 import { genId } from '../../utils/id';
@@ -203,7 +203,7 @@ export default function TxModal({ hook, budget, initialType = 'buy', initialSymb
   const flowLabel = { buy: 'Paid with', sell: 'Money goes to', dividend: 'Goes to', deposit: 'Into', withdraw: 'From' }[type];
 
   return (
-    <Modal title={editing ? 'Edit transaction' : 'New Transaction'} onClose={onClose}>
+    <Modal bg={T.bg} title={editing ? 'Edit transaction' : 'New Transaction'} onClose={onClose}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Chips options={TYPES} value={type} onChange={t => { setType(t); setPayWith(corePay(account, t)); }} />
 

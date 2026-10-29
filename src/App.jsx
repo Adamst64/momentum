@@ -13,6 +13,7 @@ import WorkTab from './components/work/WorkTab';
 import NotesTab from './components/notes/NotesTab';
 import ListsTab from './components/lists/ListsTab';
 import InvestingTab from './components/investing/InvestingTab';
+import { T as INV } from './components/investing/theme';
 import BudgetTab from './components/budget/BudgetTab';
 import { useMoneySync } from './hooks/useMoneySync';
 import NoteEditor from './components/notes/NoteEditor';
@@ -303,6 +304,14 @@ export default function App() {
   }, [userId]);
 
   // Still determining auth state
+  // Investing has its own black look (see components/investing/theme.js); the page
+  // behind (iOS overscroll) follows it
+  const pageBg = tab === 'investing' ? INV.bg : T.bg;
+  useEffect(() => {
+    document.body.style.background = pageBg;
+    document.documentElement.style.background = pageBg;
+  }, [pageBg]);
+
   if (user === undefined) {
     return (
       <div style={{ background: T.bg, minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -320,13 +329,13 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: T.bg, minHeight: '100dvh', maxWidth: 430, margin: '0 auto', position: 'relative' }}>
+    <div style={{ background: pageBg, minHeight: '100dvh', maxWidth: 430, margin: '0 auto', position: 'relative' }}>
       <header style={{
         position: 'sticky', top: 0, zIndex: 40,
         padding: '52px 20px 14px',
         paddingTop: 'calc(52px + env(safe-area-inset-top))',
-        background: T.bg,
-        borderBottom: `1px solid ${T.cardBorder}`,
+        background: pageBg,
+        borderBottom: `1px solid ${tab === 'investing' ? INV.cardBorder : T.cardBorder}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
