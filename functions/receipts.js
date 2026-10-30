@@ -8,7 +8,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 // Keep in sync with GROCERY_GROUPS in src/utils/budget.js (frozen was merged into prepared)
 const GROUPS = ['fruits', 'vegetables', 'meat', 'dairy', 'bakery', 'pantry', 'snacks', 'sweets', 'drinks', 'alcohol', 'prepared', 'household', 'pets', 'personal', 'health', 'tobacco', 'other'];
 
-const SCHEMA = {
+const schemaFor = groups => ({
   type: 'object',
   properties: {
     store: { type: 'string' },
@@ -22,7 +22,7 @@ const SCHEMA = {
         properties: {
           name: { type: 'string' },
           price: { type: 'number' },
-          group: { type: 'string', enum: GROUPS },
+          group: { type: 'string', enum: groups },
           taxed: { type: 'boolean', description: 'Sales tax was charged on this line' },
         },
         required: ['name', 'price', 'group', 'taxed'],
@@ -32,7 +32,7 @@ const SCHEMA = {
   },
   required: ['store', 'date', 'total', 'tax', 'items'],
   additionalProperties: false,
-};
+});
 
 const PROMPT = `This is a photo of a shopping receipt. Read every purchased line item.
 
@@ -56,13 +56,34 @@ For each item give:
   personal (toiletries and cosmetics: shampoo, soap, toothpaste, deodorant, razors, makeup, diapers and wipes)
   health (medicine, pain relief, cold and allergy, vitamins and supplements, first aid, prescriptions, contact lens solution, anything pharmacy-only)
   tobacco (cigarettes — including brand names or codes like Marlboro, Newport, Camel, "CIGS", "CIG PK", "CTN" — cigars, cigarillos, rolling tobacco, papers, vapes and e-cigarettes, pods and e-liquid, nicotine pouches like Zyn, chewing tobacco, lighters)
-  other (anything that fits none of these)
-
+{{CUSTOM}}  other (anything that fits none of these)
+{{LEARNED}}
 - taxed: whether sales tax was charged on that line. Receipts usually mark this with a letter or code next to the price (like T, TX, X, or a tax-group code such as A/B that the receipt's tax lines explain), and often mark tax-free food lines with F, N, E or FS. Use those marks when the receipt has them. If it has no marks, decide by Pennsylvania sales tax rules: most food and grocery items, including candy, gum and bottled water, are not taxed; household and cleaning supplies, paper products other than toilet paper, pet supplies, soft drinks, alcohol, tobacco and vapes, and hot or prepared food are taxed. If the receipt shows no tax at all, every line is false.
 
 Also give the store name, the purchase date as YYYY-MM-DD (empty string if not printed), the grand total, and the tax (sum of all tax lines, 0 if none).
 Some stores print no item names (only item codes or prices). Don't guess items from codes: if no line has a readable product name, return an empty items list but still give the store, date, total and tax. A department line with a total (e.g. "PRODUCE 12.40", "DAIRY 6.98") counts as an item named after the department.
 If the photo isn't a receipt or can't be read, return an empty items list and total 0.`;
+
+// The user's own groups and the items they've moved between groups (see
+// src/utils/receiptGroups.js), cleaned up: [{ id, label?, emoji?, examples }]
+const clean = (x, n) => String(x || '').replace(/[\r\n"]+/g, ' ').trim().slice(0, n);
+function userGroups(raw) {
+  const list = Array.isArray(raw) ? raw.slice(0, 40) : [];
+  return list.map(g => ({
+    id: /^[a-z0-9]{1,24}$/i.test(g?.id || '') ? g.id : null,
+    label: clean(g?.label, 40),
+    examples: (Array.isArray(g?.examples) ? g.examples : []).slice(-30).map(e => clean(e, 60)).filter(Boolean),
+  })).filter(g => g.id && (GROUPS.includes(g.id) || g.label));
+}
+function promptFor(groups) {
+  const custom = groups.filter(g => !GROUPS.includes(g.id));
+  const customLines = custom.map(g => `  ${g.id} (the user's own group "${g.label}"${g.examples.length ? `, e.g. ${g.examples.slice(-8).join(', ')}` : ''}) — use it for anything that is a "${g.label}" item, rather than "other"\n`).join('');
+  const learned = groups.filter(g => g.examples.length);
+  const learnedText = learned.length
+    ? `\nThe user has sorted these items themselves before. Put the same or similar items in the same group:\n${learned.map(g => `  ${g.id}: ${g.examples.join('; ')}`).join('\n')}\n`
+    : '';
+  return PROMPT.replace('{{CUSTOM}}', customLines).replace('{{LEARNED}}', learnedText);
+}
 
 async function scanReceipt(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
@@ -74,18 +95,21 @@ async function scanReceipt(db, request) {
   const apiKey = snap.exists ? snap.data().key : null;
   if (!apiKey) throw new HttpsError('failed-precondition', 'Receipt scanning needs an Anthropic API key at config/anthropic in Firestore.');
 
+  const groups = userGroups(request.data?.groups);
+  const allIds = [...GROUPS.slice(0, -1), ...groups.filter(g => !GROUPS.includes(g.id)).map(g => g.id), 'other'];
+
   const client = new Anthropic({ apiKey });
   let response;
   try {
     response = await client.messages.create({
       model: 'claude-haiku-5-5', // cheapest model; receipts are a simple read. Switch back to claude-opus-5-5 if it makes mistakes
       max_tokens: 16000,
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA } },
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: schemaFor(allIds) } },
       messages: [{
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mediaType, data: image } },
-          { type: 'text', text: PROMPT },
+          { type: 'text', text: promptFor(groups) },
         ],
       }],
     });
@@ -109,7 +133,7 @@ async function scanReceipt(db, request) {
     items: (out.items || []).slice(0, 300).map(i => ({
       name: String(i.name || '').slice(0, 80),
       price: round(i.price),
-      group: GROUPS.includes(i.group) ? i.group : 'other',
+      group: allIds.includes(i.group) ? i.group : 'other',
       taxed: i.taxed === true,
     })),
   };

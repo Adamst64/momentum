@@ -9,6 +9,7 @@ import { db } from '../firebase';
 const META = { includeMetadataChanges: true };
 import { genId } from '../utils/id';
 import { todayStr } from '../utils/dateUtils';
+import { setReceiptGroups, scannerHints } from '../utils/receiptGroups';
 import { accountBalances, mergeCategories, BALANCE_CATEGORY, recurringDates } from '../utils/budget';
 
 // users/{uid}/budgetAccounts/{id}   — { name, type: 'cash'|'debit'|'credit'|'savings', order }
@@ -29,13 +30,14 @@ export function useBudget(userId) {
   const [loaded, setLoaded] = useState({}); // which collections have arrived
 
   useEffect(() => {
-    if (!userId) { setAccountDocs([]); setTxDocs([]); setCategoryDocs([]); setLoaded({}); return; }
+    if (!userId) { setAccountDocs([]); setTxDocs([]); setCategoryDocs([]); setLoaded({}); setReceiptGroups(null, []); return; }
     const rows = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
     const mark = k => setLoaded(l => (l[k] ? l : { ...l, [k]: true }));
     const unsubs = [
       onSnapshot(collection(db, 'users', userId, 'budgetAccounts'), META, s => { setAccountDocs(rows(s)); if (!s.metadata.fromCache) mark('accounts'); }),
       onSnapshot(collection(db, 'users', userId, 'budgetTxs'), META, s => { setTxDocs(rows(s)); if (!s.metadata.fromCache) mark('txs'); }),
       onSnapshot(collection(db, 'users', userId, 'budgetCategories'), s => setCategoryDocs(rows(s))),
+      onSnapshot(collection(db, 'users', userId, 'receiptGroups'), s => setReceiptGroups(userId, rows(s))),
     ];
     return () => unsubs.forEach(u => u());
   }, [userId]);
@@ -220,7 +222,7 @@ export function useBudget(userId) {
   // Photo of a receipt (base64, no data: prefix) → { store, date, total, tax, items: [{ name, price, group }] } in dollars
   const scanReceipt = useCallback(async (image, mediaType) => {
     const fn = httpsCallable(getFunctions(getApp()), 'scanReceipt', { timeout: 180000 });
-    return (await fn({ image, mediaType })).data;
+    return (await fn({ image, mediaType, groups: scannerHints() })).data;
   }, []);
 
   return {

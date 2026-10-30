@@ -5,6 +5,7 @@ import { todayStr } from '../../utils/dateUtils';
 import { money, parseAmount, centsToInput, TOBACCO, shareTax } from '../../utils/budget';
 import { inputStyle, Field, Chips, PrimaryButton } from '../investing/ui';
 import ReceiptItems, { rowsToItems, parseSigned } from './ReceiptItems';
+import { learnReceiptGroups } from '../../utils/receiptGroups';
 
 // Shrinks a camera photo so it uploads fast but the print stays readable → base64 JPEG
 async function prepareImage(file) {
@@ -63,7 +64,7 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
         const itemsSum = (r.items || []).reduce((s, i) => s + i.price, 0);
         setTotal(centsToInput(Math.round((r.total || itemsSum + (r.tax || 0)) * 100)));
         if (r.items?.length) {
-          setRows(r.items.map(i => ({ name: i.name, price: i.price.toFixed(2), group: i.group, taxed: !!i.taxed })));
+          setRows(r.items.map(i => ({ name: i.name, price: i.price.toFixed(2), group: i.group, orig: i.group, taxed: !!i.taxed })));
         } else {
           setNoNames(true);
           setRows([{ name: r.store || 'Groceries', price: (r.total - (r.tax || 0)).toFixed(2), group: 'other', taxed: (r.tax || 0) > 0 }]);
@@ -96,6 +97,7 @@ export default function ReceiptModal({ file, accounts, categories, defaultAccoun
       const base = { type: 'expense', accountId, date, note: store };
       if (split.tobacco) await onSave({ ...base, amount: split.tobacco.amount, category: TOBACCO, items: split.tobacco.items });
       if (split.rest) await onSave({ ...base, amount: split.rest.amount, category, items: split.rest.items });
+      learnReceiptGroups(rows); // your fixes teach the next scan
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');

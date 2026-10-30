@@ -4,11 +4,12 @@ import { useLongPress } from '../../hooks/useLongPress';
 import Modal from '../Modal';
 import { T } from '../../theme';
 import { todayStr, parseDate } from '../../utils/dateUtils';
-import { parseAmount, centsToInput, money, refundedTotal, GROCERY_GROUPS, lookupGroup } from '../../utils/budget';
+import { parseAmount, centsToInput, money, refundedTotal, allGroups, lookupGroup } from '../../utils/budget';
 import RefundSheet, { RefundPanel } from './RefundPanel';
 import { inputStyle, Field, Chips, PrimaryButton, ConfirmDialog, StickyFooter } from '../investing/ui';
 import CategoryForm from './CategoryForm';
 import ReceiptItems, { itemsToRows, rowsToItems, parseSigned } from './ReceiptItems';
+import { learnReceiptGroups } from '../../utils/receiptGroups';
 
 const TYPES = [
   { value: 'expense',  label: 'Expense' },
@@ -131,6 +132,7 @@ export default function TxForm({
           : {}),
         ...(refunded ? { originalAmount: cents } : {}),
       });
+      if (rows.length) learnReceiptGroups(rows); // your fixes teach the next scan
       onClose();
     } catch (e) {
       setError(e.message || 'Could not save. Try again.');
@@ -190,7 +192,7 @@ export default function TxForm({
             {!split ? (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6 }}>
-                  {GROCERY_GROUPS.filter(g => g.id !== 'tobacco').map(g => {
+                  {allGroups().filter(g => g.id !== 'tobacco').map(g => {
                     const on = foodGroup === g.id;
                     return (
                       <button key={g.id} type="button" onClick={() => setFoodGroup(on ? null : g.id)}
