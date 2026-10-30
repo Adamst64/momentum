@@ -1,7 +1,7 @@
 // Budget: accounts hold money, transactions move it.
 // Amounts are stored as whole cents so sums never drift.
 import { emojiColor } from './emojiColor';
-import { customGroups } from './receiptGroups';
+import { customGroups, groupOverrides } from './receiptGroups';
 
 // Built-in categories. The user can rename, re-emoji, recolor or hide these, and
 // add their own; see mergeCategories.
@@ -164,12 +164,16 @@ const OLD_GROUPS = { frozen: 'prepared' };
 export const TAX_GROUP = { id: 'tax', label: 'Tax & fees', emoji: '🧾', color: '#5A5A5E' };
 // Built-in groups plus your own (see utils/receiptGroups), Other last
 const OTHER_GROUP = GROCERY_GROUPS[GROCERY_GROUPS.length - 1];
-export const allGroups = () => [
-  ...GROCERY_GROUPS.slice(0, -1),
+export const allGroups = () => {
+  const own = groupOverrides();
+  const named = g => (own[g.id] ? { ...g, label: own[g.id].label, emoji: own[g.id].emoji || g.emoji, color: emojiColor(own[g.id].emoji) || g.color, renamed: true } : g);
+  return [
+  ...GROCERY_GROUPS.slice(0, -1).map(named),
   ...customGroups().map(g => ({ id: g.id, label: g.label, emoji: g.emoji, custom: true, color: emojiColor(g.emoji) || '#A0A0A8' })),
-  OTHER_GROUP,
-];
-export const lookupGroup = id => allGroups().find(g => g.id === (OLD_GROUPS[id] || id)) || (id === 'tax' ? TAX_GROUP : OTHER_GROUP);
+  named(OTHER_GROUP),
+  ];
+};
+export const lookupGroup = id => allGroups().find(g => g.id === (OLD_GROUPS[id] || id)) || (id === 'tax' ? TAX_GROUP : allGroups()[allGroups().length - 1]);
 
 // Spreads `extra` cents (a receipt's tax and fees) over items by price, so the items
 // add up exactly to what was paid. Only items with taxed: true share it when any are

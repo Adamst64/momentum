@@ -1,10 +1,11 @@
 // Your own receipt groups (e.g. 🌷 Flowers) and what the receipt reader learns from
 // your fixes. users/{uid}/receiptGroups/{id}:
 //   custom group: { custom: true, label, emoji, examples: [item names] }
-//   built-in group (id = its id): { examples } — items you moved into it
+//   built-in group (id = its id): { examples } — items you moved into it — and
+//   label / emoji when you renamed it
 // The scanner gets all of it, so the next receipt uses your groups and fixes.
 import { useSyncExternalStore } from 'react';
-import { doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '../firebase';
 import { genId } from './id';
 
@@ -18,6 +19,8 @@ export function setReceiptGroups(userId, docs) {
   emit();
 }
 export const customGroups = () => state.docs.filter(d => d.custom && d.label);
+// Your names / emoji for built-in groups: { id: { label, emoji } }
+export const groupOverrides = () => Object.fromEntries(state.docs.filter(d => !d.custom && d.label).map(d => [d.id, { label: d.label, emoji: d.emoji }]));
 export const useReceiptGroups = () => useSyncExternalStore(cb => { listeners.add(cb); return () => listeners.delete(cb); }, () => state.docs);
 
 const MAX_EXAMPLES = 30;
@@ -40,6 +43,14 @@ export async function updateReceiptGroup(id, label, emoji) {
   state = { ...state, docs: state.docs.map(d => (d.id === id ? { ...d, ...fields } : d)) };
   emit();
   await setDoc(doc(db, 'users', state.userId, 'receiptGroups', id), fields, { merge: true });
+}
+
+// A built-in group back to its own name and emoji
+export async function resetReceiptGroup(id) {
+  if (!state.userId) return;
+  state = { ...state, docs: state.docs.map(d => (d.id === id ? { ...d, label: undefined, emoji: undefined } : d)) };
+  emit();
+  await setDoc(doc(db, 'users', state.userId, 'receiptGroups', id), { label: deleteField(), emoji: deleteField() }, { merge: true });
 }
 
 // Remove a group (and what was learned for it); its items count as Other

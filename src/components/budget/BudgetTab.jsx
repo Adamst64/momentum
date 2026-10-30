@@ -9,6 +9,7 @@ import CategoriesSheet from './CategoriesSheet';
 import CategoryDetail from './CategoryDetail';
 import CategoryForm from './CategoryForm';
 import ReceiptModal from './ReceiptModal';
+import ReceiptGroupsSheet from './ReceiptGroupsSheet';
 import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
 import SpendHighlights from './SpendHighlights';
@@ -227,6 +228,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [catView, setCatView]       = useState(null); // its chosen period, kept while you look at its transactions
   const [listFromCat, setListFromCat] = useState(null); // the list was opened from this category: back returns there
   const [editingCat, setEditingCat] = useState(null); // category being edited from its detail page
+  const [manageTypes, setManageTypes] = useState(false); // Groceries by type → Manage types
   const [editingAcct, setEditingAcct] = useState(null); // null | 'new' | account
 
   const accountsById = useMemo(() => Object.fromEntries(accounts.map(a => [a.id, a])), [accounts]);
@@ -699,10 +701,14 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           renderExtra={detailCat === 'groceries' ? (startYM, endYM) => {
             const g = groceryBreakdown(txs.filter(t => t.category === 'groceries' && t.date.slice(0, 7) >= startYM && t.date.slice(0, 7) <= endYM
               && (!accountFilter || t.accountId === accountFilter)));
-            if (!g.groups.length) return <div style={{ fontSize: 12, color: T.muted }}>Groceries by type appear here once you scan a receipt or pick a kind for an entry.</div>;
+            const manage = <button onClick={() => setManageTypes(true)} style={{ fontSize: 12, fontWeight: 600, color: T.khaki, flexShrink: 0 }}>Manage types</button>;
+            if (!g.groups.length) return <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}><div style={{ flex: 1, fontSize: 12, color: T.muted }}>Groceries by type appear here once you scan a receipt or pick a kind for an entry.</div>{manage}</div>;
             return (
               <div>
-                <div style={{ fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>Groceries by type · these months</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                  <div style={{ flex: 1, fontSize: 12, fontWeight: 700, color: T.muted, textTransform: 'uppercase', letterSpacing: 0.6 }}>Groceries by type · these months</div>
+                  {manage}
+                </div>
                 <DonutBlock
                   segments={g.groups.map(x => ({ id: x.id, emoji: x.emoji, label: x.label, color: x.color, value: x.total, valueLabel: money(x.total), items: x.items }))}
                   total={g.total} totalLabel="By type" expandable note="Tap a type to see what you bought." />
@@ -714,6 +720,8 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           onClose={() => { setDetailCat(null); setCatView(null); }}
         />
       )}
+
+      {manageTypes && <ReceiptGroupsSheet onClose={() => setManageTypes(false)} />}
 
       {editingCat && (
         <CategoryForm
