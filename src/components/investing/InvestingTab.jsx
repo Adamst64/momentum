@@ -14,6 +14,7 @@ import { stockEvents, EventBell, colorOf } from './PositionCalendar';
 import SymbolInput from './SymbolInput';
 import HoldingModal, { TxList } from './HoldingModal';
 import { ANALYST_COLOR } from './StockInfo';
+import { usePullToRefresh } from '../../hooks/usePullToRefresh';
 
 // Cards in Investing's black look
 const Card = ({ style, ...props }) => <BaseCard {...props} style={{ background: T.card, borderColor: T.cardBorder, ...style }} />;
@@ -70,8 +71,15 @@ let handledLink = null;
 
 // Sparklines anywhere in Investing load today's prices through the hook
 export default function InvestingTab(props) {
+  // Pull down anywhere in Investing (pages and sheets) to update prices
+  const pullIndicator = usePullToRefresh(async () => {
+    const res = await props.hook.refreshPrices();
+    const missed = res?.notFound || [];
+    return missed.length ? `Updated · no price for ${missed.join(', ')}` : null;
+  });
   return (
     <SparkContext.Provider value={props.hook.priceHistory}>
+      {pullIndicator}
       <InvestingTabInner {...props} />
     </SparkContext.Provider>
   );
@@ -265,7 +273,11 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
   const update = useCallback(async () => {
     setUpdating(true);
     setUpdateErr(null);
-    try { await refreshPrices(); }
+    try {
+      const res = await refreshPrices();
+      // A symbol the price services don't know (anymore) keeps its old price: say which
+      if (res?.notFound?.length) setUpdateErr(`No price found for ${res.notFound.join(', ')}. Its price stays as it was.`);
+    }
     catch (e) { setUpdateErr(e.message || 'Could not update prices'); }
     finally { setUpdating(false); }
   }, [refreshPrices]);

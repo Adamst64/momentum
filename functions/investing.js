@@ -195,11 +195,16 @@ async function refreshPrices(db, request) {
 
   const assetsCol = db.collection('users').doc(uid).collection('invAssets');
   const explicit = Array.isArray(request.data?.symbols);
+  // Everything priced automatically (held, watched and sold), oldest price first, so
+  // with more symbols than one update can take, the ones left out go first next time
+  // (it used to take the first 40 alphabetically, so later ones never updated)
   let symbols = explicit
     ? request.data.symbols.map(s => String(s).trim().toUpperCase()).filter(Boolean)
-    : (await assetsCol.where('source', '==', 'finnhub').get()).docs.map(d => d.id);
+    : (await assetsCol.where('source', '==', 'finnhub').get()).docs
+      .sort((a, b) => (a.data().priceUpdatedAt || '').localeCompare(b.data().priceUpdatedAt || ''))
+      .map(d => d.id);
   if (!explicit) symbols.push(BENCHMARK);
-  symbols = [...new Set(symbols)].slice(0, 40);
+  symbols = [...new Set(symbols)].slice(0, 45);
 
   // Free tier allows ~60 calls/minute: quotes first, then profile/earnings
   // refreshes while budget remains (the rest catch up on the next update)
