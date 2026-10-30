@@ -47,7 +47,7 @@ export function eventMark(e) {
 }
 const readGroups = () => { try { return JSON.parse(localStorage.getItem('momentum_chart_events') || '[]'); } catch { return []; } };
 
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = '6mo', events = [] }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = 'i1d', events = [] }) {
   const [groups, setGroupsState] = useState(readGroups);
   const toggleGroup = g => setGroupsState(cur => {
     const next = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];

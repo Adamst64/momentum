@@ -243,7 +243,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           onAddNote={(date, label, note) => addMark(symbol, date, label, note)}
           onUpdateNote={(id, fields) => updateMark(symbol, id, fields)}
           onDeleteNote={id => { const m = (asset.marks || []).find(x => x.id === id); return m ? deleteMark(symbol, m) : null; }}
-          initialRange={sold && sold.date < new Date(Date.now() - 150 * 864e5).toISOString().slice(0, 10) ? '1y' : '6mo'}
+          initialRange="i1d"
         />
 
         <div id="h-calendar" style={JUMP}>
