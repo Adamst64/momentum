@@ -4,7 +4,7 @@
 //   built-in group (id = its id): { examples } — items you moved into it
 // The scanner gets all of it, so the next receipt uses your groups and fixes.
 import { useSyncExternalStore } from 'react';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { genId } from './id';
 
@@ -31,6 +31,23 @@ export async function addReceiptGroup(label, emoji) {
   emit();
   await setDoc(doc(db, 'users', state.userId, 'receiptGroups', id), d);
   return id;
+}
+
+// Fix a group's name or emoji
+export async function updateReceiptGroup(id, label, emoji) {
+  if (!state.userId || !label.trim()) return;
+  const fields = { label: label.trim().slice(0, 40), emoji: (emoji || '').trim() || '🏷️' };
+  state = { ...state, docs: state.docs.map(d => (d.id === id ? { ...d, ...fields } : d)) };
+  emit();
+  await setDoc(doc(db, 'users', state.userId, 'receiptGroups', id), fields, { merge: true });
+}
+
+// Remove a group (and what was learned for it); its items count as Other
+export async function deleteReceiptGroup(id) {
+  if (!state.userId) return;
+  state = { ...state, docs: state.docs.filter(d => d.id !== id) };
+  emit();
+  await deleteDoc(doc(db, 'users', state.userId, 'receiptGroups', id));
 }
 
 // After saving a receipt: items you put in a different group than the reader did
