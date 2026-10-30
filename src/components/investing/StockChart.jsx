@@ -112,6 +112,10 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   const first = pts[0];
   const shown = scrub || pts[pts.length - 1];
   const change = shown && first ? shown.value - first.value : null;
+  // What your shares were worth at the point shown: shares held that day (buys and
+  // sells up to it; on a trade's own day the whole day counts it) × that price
+  const qtyAt = d => Math.max(0, trades.reduce((q, t) => (t.date <= d ? q + (t.type === 'buy' ? t.quantity : t.type === 'sell' ? -t.quantity : 0) : q), 0));
+  const heldThen = shown && trades.length ? qtyAt(shown.date) : 0;
 
   return (
     <div style={noSelect}>
@@ -128,6 +132,13 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
         ) : shown && (
           <>
             <div style={{ fontSize: 20, fontWeight: 800, color: T.text, fontVariantNumeric: 'tabular-nums' }}>{money(shown.value, hide)}</div>
+            {trades.length > 0 && (
+              <div style={{ fontSize: 13, color: T.text, fontVariantNumeric: 'tabular-nums' }}>
+                {heldThen > 0
+                  ? <>Your balance <b>{money(heldThen * shown.value, hide)}</b> <span style={{ color: T.muted }}>· {qtyFmt(heldThen)} share{heldThen === 1 ? '' : 's'}</span></>
+                  : <span style={{ color: T.muted }}>You held none then</span>}
+              </div>
+            )}
             <div style={{ fontSize: 12, color: T.muted }}>
               {scrub ? scrub.label || formatDateYear(scrub.date) : 'Now'}
               {change !== null && shown !== first && (
