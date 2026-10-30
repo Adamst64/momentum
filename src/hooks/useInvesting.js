@@ -23,7 +23,7 @@ import { computePortfolio, CASH_ID, BENCHMARK } from '../utils/investing';
 //   skipped) and 8 AM on the day itself, your time; sentAt / sentDayOf mark each
 // users/{uid}/invAccounts/{id} — { name, order } brokerage accounts; transactions point here via account
 // users/{uid}/invWatchLists/{id} — { name, order } named watchlists; a stock's asset doc lists them in
-//   lists: [id] with listAdded.{id}: date and listAddedPrice.{id}: price when added
+//   lists: [id] with listAdded.{id}: date, listAddedAt.{id}: ISO time and listAddedPrice.{id}: price when added
 // Chart marks live on the asset doc: marks: [{ id, date, label }]
 export function useInvesting(userId) {
   const [txs, setTxs]             = useState([]);
@@ -136,7 +136,7 @@ export function useInvesting(userId) {
   const deleteWatchList = useCallback(async (id) => {
     const batch = writeBatch(db);
     assetDocs.filter(a => (a.lists || []).includes(id)).forEach(a => batch.update(ref('invAssets', a.id), {
-      lists: arrayRemove(id), [`listAdded.${id}`]: deleteField(), [`listAddedPrice.${id}`]: deleteField(),
+      lists: arrayRemove(id), [`listAdded.${id}`]: deleteField(), [`listAddedAt.${id}`]: deleteField(), [`listAddedPrice.${id}`]: deleteField(),
     }));
     batch.delete(ref('invWatchLists', id));
     await batch.commit();
@@ -148,6 +148,7 @@ export function useInvesting(userId) {
     ...(listId ? {
       lists: arrayUnion(listId),
       listAdded: { [listId]: toDateStr(new Date()) },
+      listAddedAt: { [listId]: new Date().toISOString() }, // the moment, for 1D / 1W charts
       ...(price ? { listAddedPrice: { [listId]: price } } : {}),
     } : {}),
   }, { merge: true }), [ref]);
@@ -157,7 +158,7 @@ export function useInvesting(userId) {
     const a = assets[symbol] || {};
     const left = (a.lists || []).filter(x => x !== listId);
     return updateDoc(ref('invAssets', symbol), {
-      ...(listId ? { lists: arrayRemove(listId), [`listAdded.${listId}`]: deleteField(), [`listAddedPrice.${listId}`]: deleteField() } : {}),
+      ...(listId ? { lists: arrayRemove(listId), [`listAdded.${listId}`]: deleteField(), [`listAddedAt.${listId}`]: deleteField(), [`listAddedPrice.${listId}`]: deleteField() } : {}),
       ...(left.length === 0 ? { watch: false } : {}),
     });
   }, [assets, ref]);

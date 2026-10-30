@@ -237,7 +237,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
             ...(asset.marks || []),
             ...((asset.lists || []).length ? (asset.lists || []).map(id => {
               const l = watchLists.find(x => x.id === id);
-              return l && asset.listAdded?.[id] ? { id: `list:${id}`, date: asset.listAdded[id], label: `Added to ${l.name}`, auto: true } : null;
+              return l && asset.listAdded?.[id] ? { id: `list:${id}`, date: asset.listAdded[id], at: asset.listAddedAt?.[id] || null, label: `Added to ${l.name}`, auto: true } : null;
             }).filter(Boolean) : []),
           ]}
           onAddNote={(date, label, note) => addMark(symbol, date, label, note)}
