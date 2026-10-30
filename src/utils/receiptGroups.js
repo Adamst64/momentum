@@ -25,7 +25,7 @@ const MAX_EXAMPLES = 30;
 // New group; returns its id
 export async function addReceiptGroup(label, emoji) {
   if (!state.userId) throw new Error('Not signed in');
-  const id = `c${genId().slice(0, 10)}`;
+  const id = `c${genId().replace(/-/g, '').slice(0, 10)}`;
   const d = { custom: true, label: label.trim().slice(0, 40), emoji: (emoji || '').trim() || '🏷️', examples: [] };
   state = { ...state, docs: [...state.docs, { id, ...d }] }; // shows straight away
   emit();
