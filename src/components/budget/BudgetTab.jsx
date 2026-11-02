@@ -14,6 +14,7 @@ import MoneySheet from './MoneySheet';
 import AccountExtras from './AccountExtras';
 import SpendHighlights from './SpendHighlights';
 import BudgetPage from './BudgetPage';
+import BudgetCalendar from './BudgetCalendar';
 import Donut, { DonutLegend } from './Donut';
 import { SERIES } from '../investing/ui';
 import { useBackHandler } from '../../hooks/useBackHandler';
@@ -210,7 +211,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
   const [investTx, setInvestTx] = useState(null); // a bank ↔ investing transfer being looked at
   const [transfer, setTransfer] = useState(false);
   const [receiptFile, setReceiptFile] = useState(null);
-  const [page, setPage] = useState(null); // null | 'where' | 'accounts' | 'groceries' | 'months' | 'list'
+  const [page, setPage] = useState(null); // null | 'where' | 'accounts' | 'groceries' | 'months' | 'list' | 'calendar'
   const [moneyMode, setMoneyMode] = useState(null); // 'in' | 'out' for the account being viewed
   const cameraRef = useRef(null);
   const libraryRef = useRef(null);
@@ -341,6 +342,7 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
           { value: 'overview', label: 'Overview', icon: ICONS.home },
           { value: 'where', label: 'Categories', icon: ICONS.pie },
           { value: 'list', label: 'Transactions', icon: ICONS.receipt },
+          { value: 'calendar', label: 'Calendar', icon: ICONS.calendar },
           { value: 'add', label: 'Add', icon: 'M12 5v14M5 12h14' },
         ]}
         value={editingTx === 'new' ? 'add' : page || 'overview'}
@@ -534,6 +536,19 @@ export default function BudgetTab({ hook, workEnabled, investing }) {
             key={period}
             txs={monthTxs} range={range} year={month.slice(0, 4)} currentYM={todayYM()}
             onOpenMonth={ym => { setMonth(ym); setRange('month'); setCatFilter(null); setPage(null); }}
+          />
+        </BudgetPage>
+      )}
+
+      {page === 'calendar' && (
+        <BudgetPage title="Calendar" subtitle={filteredAccount ? filteredAccount.name : 'All accounts'} onClose={() => setPage(null)}>
+          {/* Opens on the month on screen, or on its year when looking at a year or all time */}
+          <BudgetCalendar
+            txs={accountFilter ? txs.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter) : txs}
+            categories={categories}
+            startYM={month}
+            startView={range === 'month' ? 'month' : 'year'}
+            onOpenTx={t => (t.source === 'investing' ? setInvestTx(t) : setEditingTx(t))}
           />
         </BudgetPage>
       )}
