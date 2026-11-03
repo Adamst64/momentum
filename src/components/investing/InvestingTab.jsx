@@ -773,8 +773,18 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
             {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
             {inAccounts > 1 && <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, background: T.bg, padding: '2px 6px', borderRadius: 8 }}>in {inAccounts} accounts</span>}
           </div>
+          {/* The price right now (pre-market / after hours when that's live), then what you hold */}
+          {(() => {
+            const ext = h.ext && Math.abs(h.ext.change) > 1e-9 ? h.ext : null;
+            return (
+              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {h.price !== null && h.price !== undefined ? money(ext ? ext.price : h.price) : '—'}
+                {ext && <span style={{ fontSize: 11, fontWeight: 400, color: T.muted }}> {ext.label.toLowerCase()}</span>}
+              </div>
+            );
+          })()}
           <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {qtyFmt(h.qty)} × avg {money(h.avgCost, hide)}
+            {qtyFmt(h.qty)} sh · avg {money(h.avgCost, hide)}
           </div>
           {showEarn && showNext && (
             <div style={{ fontSize: 12, color: T.khaki, marginTop: 2 }}>
@@ -1305,7 +1315,7 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
                 {/* The price in a pill colored by today's move, like Robinhood */}
                 <div style={{ fontSize: 14, fontWeight: 700, color: day === null || day === undefined ? T.text : '#000', background: day === null || day === undefined ? T.subtle : gainColor(day), borderRadius: 8, padding: '5px 9px', minWidth: 70, textAlign: 'center' }}>{money(a.price, hide)}</div>
                 <div style={{ fontSize: 12, color: gainColor(day) }}>{pct(day)}</div>
-                {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {pct(ext.pct)}</div>}
+                {ext && <div style={{ fontSize: 11, color: gainColor(ext.pct) }}>{ext.label} {money(ext.price)} {pct(ext.pct)}</div>}
               </div>
               <button
                 onClick={() => setAsking({
