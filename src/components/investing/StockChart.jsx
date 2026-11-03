@@ -95,7 +95,7 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
     const at = n.at && pts[0]?.t ? Date.parse(n.at) / 1000 : null;
     const pt = (at !== null && n.date >= pts[0].date ? pts.find(p => !p.prev && p.t >= at) || (at > last.t ? last : null) : null)
       || pts.find(p => p.date >= n.date) || (last && n.date > last.date ? last : null);
-    return pt ? { ...n, id: `note:${n.id}`, noteId: n.id, type: 'note', date: pt.date, realDate: n.date, price: pt.value, priceThen: pt.value, priceNow: last.value } : null;
+    return pt ? { ...n, id: `note:${n.id}`, noteId: n.id, type: 'note', date: pt.date, realDate: n.date, ...(pt.t ? { atT: pt.t } : {}), price: pt.value, priceThen: pt.value, priceNow: last.value } : null;
   }).filter(Boolean);
   // Events on the chart: each on its day's price; several on one day stack upward
   const lastPt = pts[pts.length - 1];

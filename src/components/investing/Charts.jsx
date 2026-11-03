@@ -86,7 +86,8 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
   const lastDate = points[points.length - 1].date;
   const tradeDots = trades
     .filter(t => t.date >= points[0].date && t.date <= lastDate && t.price > 0)
-    .map(t => ({ ...t, i: points.findIndex(p => p.date >= t.date) }))
+    // A dot tied to one intraday step (atT: that point's time) sits on that step, not the day's first
+    .map(t => ({ ...t, i: t.atT ? points.findIndex(p => p.t === t.atT) : points.findIndex(p => p.date >= t.date) }))
     .filter(t => t.i >= 0);
   const tradeVals = tradeDots.map(t => t.price);
   // Scale to the prices (and trades) themselves, so the line's moves are readable.
