@@ -47,7 +47,7 @@ export function eventMark(e) {
 }
 const readGroups = () => { try { return JSON.parse(localStorage.getItem('momentum_chart_events') || '[]'); } catch { return []; } };
 
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = 'i1d', events = [] }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = 'i1d', events = [], extQuote = null }) {
   const [groups, setGroupsState] = useState(readGroups);
   const toggleGroup = g => setGroupsState(cur => {
     const next = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];
@@ -87,6 +87,19 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
 
   let pts = points || [];
   if (pts.length && livePrice && !range.startsWith('i')) pts = [...pts.slice(0, -1), { ...pts[pts.length - 1], value: livePrice }];
+  // Pre-market / after hours on every range, not just 1D: the latest extended price
+  // goes on the end when the history doesn't reach it yet (daily candles stop at the
+  // close; 1M is hourly without extended hours). Same session coloring as 1D.
+  if (pts.length && extQuote?.price && extQuote.time) {
+    const last = pts[pts.length - 1];
+    const at = Math.floor(Date.parse(extQuote.time) / 1000);
+    const reaches = last.t ? last.t >= at - 600 : false;
+    if (!reaches) {
+      const date = new Date(at * 1000).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+      const time = new Date(at * 1000).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+      pts = [...pts, { date, t: at, value: extQuote.price, ext: extQuote.session, label: `${extQuote.label}, ${time} ET` }];
+    }
+  }
   // Marks sit on the price of their day (or the next trading day)
   const noteDots = notes.map(n => {
     // A mark newer than the last candle (today before close, a weekend) sits on the latest point

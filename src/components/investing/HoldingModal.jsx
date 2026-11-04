@@ -222,6 +222,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           symbol={symbol}
           priceHistory={priceHistory}
           livePrice={asset.source === 'finnhub' ? asset.price : null}
+          extQuote={ext}
           hide={hide}
           refs={[
             held && { value: v.avgCost, label: 'Avg cost', color: T.muted },
