@@ -231,7 +231,7 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
             asset.analyst?.targetMean && { value: asset.analyst.targetMean, label: 'Analysts', color: ANALYST_COLOR },
           ].filter(Boolean)}
           markers={[]}
-          trades={tradeDetails(scoped ? scopeTx : txs, symbol, asset.price || null)}
+          trades={tradeDetails(scoped ? scopeTx : txs, symbol, (ext ? ext.price : asset.price) || null)}
           onDeleteTrade={id => deleteTx(id)}
           onEditTrade={id => { const t = txs.find(x => x.id === id); if (t) editTx(t); }}
           notes={[

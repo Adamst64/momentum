@@ -4,7 +4,7 @@ import { useBackHandler } from '../../hooks/useBackHandler';
 import { T, gainColor } from './theme';
 import { toDateStr, formatShortDate, formatDateYear, addDays } from '../../utils/dateUtils';
 import { isMarketDay, priceDate, marketStatus } from '../../utils/marketCalendar';
-import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice, premarketMove } from '../../utils/investing';
+import { movedToday, dayContext, money, signedMoney, pct, qtyFmt, soldPositions, accountGroups, txEditInit, isLegacyCash, buildValueHistory, sortTx, periodReturn, monthlyFlows, benchmarkReturn, sectorBreakdown, PERIODS, BENCHMARK, extendedPrice, premarketMove, currentPrice } from '../../utils/investing';
 import TabBar, { SubBar, ICONS, scrollToTop, jumpTo } from '../TabBar';
 import { Card as BaseCard, SectionTitle, Chips, inputStyle, noSelect, ConfirmDialog } from './ui';
 import { ValueChart, Sparkline, SparkContext, AllocationDonut, AllocationLegend, allocationSlices, MonthlyFlows, Performers } from './Charts';
@@ -195,8 +195,8 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
   }, [cashSteps]);
 
   // 1D / 1W: the portfolio through the day, rebuilt from intraday prices of what's
-  // held now (5-minute steps for 1D, 15-minute for 1W; regular session only, since
-  // "Now" is valued at the official prices). Funds without intraday
+  // held now (5-minute steps for 1D, 15-minute for 1W; pre-market and after hours
+  // included, like "Now", which counts extended-hours prices). Funds without intraday
   // prices count at their current price. Daily history is shown until these load.
   const intraRange = period === '1D' ? 'i1d' : period === '1W' ? 'i5d' : null;
   const heldKey = portfolio.holdings.filter(h => h.qty > 0).map(h => `${h.symbol}:${h.qty}`).join(',');
@@ -206,13 +206,13 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
     let live = true;
     const key = `${intraRange}|${heldKey}`;
     const held = heldKey.split(',').map(x => { const [symbol, q] = x.split(':'); return { symbol, qty: Number(q) }; });
-    Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts.filter(p => !p.ext && !p.prev)]).catch(() => [h.symbol, []])))
+    Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts.filter(p => !p.prev)]).catch(() => [h.symbol, []])))
       .then(pairs => {
         if (!live) return;
         const series = Object.fromEntries(pairs);
         const times = [...new Set(pairs.flatMap(([, pts]) => pts.map(p => p.t)).filter(Boolean))].sort((a, b) => a - b);
         const labelAt = {};
-        pairs.forEach(([, pts]) => pts.forEach(p => { if (p.t) labelAt[p.t] = { label: p.label, date: p.date }; }));
+        pairs.forEach(([, pts]) => pts.forEach(p => { if (p.t) labelAt[p.t] = { label: p.label, date: p.date, ext: p.ext || labelAt[p.t]?.ext }; }));
         const cursor = {};
         const points = times.map(t => {
           let v = portfolio.cash || 0;
@@ -224,7 +224,7 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
             const price = i >= 0 ? pts[i].value : pts[0]?.value ?? assets[h.symbol]?.price ?? 0;
             v += h.qty * price;
           }
-          return { date: labelAt[t].date, label: labelAt[t].label, value: v };
+          return { date: labelAt[t].date, label: labelAt[t].label, t, ...(labelAt[t].ext ? { ext: labelAt[t].ext } : {}), value: v };
         });
         setIntra({ key, points });
       });
@@ -247,7 +247,7 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
       // Money in or out during the day isn't in these points, so none is subtracted
       const nd = portfolio.netDeposits;
       out = [
-        ...(intraRange === 'i1d' ? [{ date: intraPts[0].date, label: 'Previous close', value: portfolio.value - portfolio.dayChange, netDeposits: nd }] : []),
+        ...(intraRange === 'i1d' ? [{ date: intraPts[0].date, label: 'Previous close', value: portfolio.value - portfolio.dayChange - (portfolio.ext?.change || 0), netDeposits: nd }] : []),
         ...intraPts.map(p => ({ ...p, netDeposits: nd })),
         { date: nowDate, value: portfolio.value, netDeposits: nd, label: 'Now' },
       ];
@@ -265,7 +265,7 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
       const cash = i === out.length - 1 || p.date >= today ? cashNow : cashAt(p.date);
       return { date: p.date, label: p.label, value: p.value + cash, invested: p.value, cash };
     });
-  }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, txs.length, worth, returnsMode, cashAt, cashNow, intra, intraRange, heldKey]);
+  }, [series, period, today, portfolio.value, portfolio.netDeposits, portfolio.dayChange, portfolio.ext, txs.length, worth, returnsMode, cashAt, cashNow, intra, intraRange, heldKey]);
 
   const lastUpdate = Object.values(assets).map(a => a.priceUpdatedAt).filter(Boolean).sort().pop();
   const hasAuto = Object.values(assets).some(a => a.source === 'finnhub');
@@ -1072,7 +1072,7 @@ function AccountPage({ g, hide, onBack, onAdd, onAssign, renderRow, onOpenSold, 
   const cost = g.positions.reduce((t, p) => t + (p.cost || 0), 0);
   const unrealized = g.positions.reduce((t, p) => t + (p.unrealized || 0), 0);
   const total = g.realized + unrealized + g.dividends;
-  const prevValue = g.value - g.dayChange; // yesterday's close of what's held now
+  const prevValue = g.value - g.dayChange - (g.ext?.change || 0); // yesterday's close of what's held now (value includes pre-market / after hours)
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1268,7 +1268,7 @@ function WatchListPage({ hook, listId, items, hide, onBack, onOpen }) {
 
   const since = a => {
     const p0 = a.listAddedPrice?.[listId];
-    return p0 && a.price ? a.price / p0 - 1 : null;
+    return p0 && currentPrice(a) ? currentPrice(a) / p0 - 1 : null;
   };
   const sorted = [...rows].sort((a, b) => {
     if (sort === 'today') return (dayPct(b) ?? -Infinity) - (dayPct(a) ?? -Infinity);

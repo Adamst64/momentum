@@ -158,11 +158,18 @@ export function replay(txs, { byAccount = false } = {}) {
 // the previous day's move.
 export const movedToday = a => !a.priceDate || a.priceDate >= currentSession();
 
+// The price right now: the pre-market / after-hours trade while that session is
+// live, else the regular price. Values, gains and totals use it; price / dayPct stay
+// the regular session's (the extended move is shown on its own as ext).
+export const currentPrice = a => extendedPrice(a)?.price ?? a?.price ?? null;
+
 function priced(x, assets) {
   const a = assets[x.symbol] || {};
   const price = a.price ?? null;
   const prevClose = movedToday(a) ? a.prevClose ?? null : price;
-  const value = price !== null ? x.qty * price : null;
+  const ext = extendedPrice(a);
+  const now = ext ? ext.price : price;
+  const value = now !== null ? x.qty * now : null;
   const unrealized = value !== null ? value - x.cost : null;
   return {
     ...x,
@@ -173,7 +180,7 @@ function priced(x, assets) {
     value, unrealized,
     unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
     dayPct: price && prevClose ? (price - prevClose) / prevClose : null,
-    ext: extendedPrice(a),
+    ext,
   };
 }
 
@@ -253,7 +260,7 @@ export function computePortfolio(txs, assets) {
   const value = cash + holdingsValue;
   return {
     cash, netDeposits, holdingsValue, value, dayChange, realized, dividends, interest,
-    // Pre-market / after-hours move on top of the last close (not part of value)
+    // Pre-market / after-hours move on top of the last close (already in value)
     ext: extLabel ? { label: extLabel, change: extChange } : null,
     totalGain: value - netDeposits,
     holdings: open,
@@ -305,7 +312,7 @@ export function soldPositions(closed, assets) {
     .filter(c => c.lastExit)
     .map(c => {
       const e = c.lastExit;
-      const price = assets[c.symbol]?.price ?? null;
+      const price = currentPrice(assets[c.symbol]);
       const sinceSell = price !== null && e.avgSell > 0 ? price / e.avgSell - 1 : null;
       return {
         symbol: c.symbol, name: c.name, ...e, price,
