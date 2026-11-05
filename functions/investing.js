@@ -1377,6 +1377,42 @@ function dropOutliers(points) {
   }
 }
 
+// Share splits: prices before a split are divided by its ratio, so a 3-for-1 split
+// (ITA, SOXX) isn't a −67% cliff. Yahoo's daily closes are usually adjusted already
+// and its intraday ones aren't, so a split is applied only where the prices
+// around it actually jump by about its ratio. Also catches a split Yahoo hasn't
+// listed yet: a jump of about 2×, 3×, 4×, 5×, 10×… (or the reverse) between two
+// neighbouring prices that the prices after it keep.
+const RATIOS = [2, 3, 4, 5, 8, 10, 20, 1 / 2, 1 / 3, 1 / 4, 1 / 5, 1 / 8, 1 / 10, 1 / 20];
+function adjustSplits(points, splits) {
+  if (points.length < 3) return;
+  const when = p => (p.t ? p.t : Date.parse(p.date + 'T16:00:00Z') / 1000);
+  const near = (a, b) => Math.abs(a / b - 1) < 0.12;
+  const apply = (i, ratio) => { for (let k = 0; k < i; k++) points[k].value = Math.round((points[k].value / ratio) * 1e4) / 1e4; };
+  // The step at i: the few prices before vs the few after (medians, so one odd trade
+  // can't fake it), counted only where the jump itself happens (i-1 → i)
+  const med = a => { const s = a.map(p => p.value).sort((x, y) => x - y); return s[s.length >> 1]; };
+  const stepAt = i => {
+    const b = med(points.slice(Math.max(0, i - 5), i)), a = med(points.slice(i, i + 5));
+    const raw = points[i].value > 0 ? points[i - 1].value / points[i].value : 1;
+    const step = a > 0 ? b / a : 1;
+    return near(raw, step) ? step : 1;
+  };
+  const listed = Object.values(splits || {})
+    .map(x => ({ at: Number(x.date), ratio: Number(x.numerator) / Number(x.denominator) }))
+    .filter(x => x.at && x.ratio > 0 && Math.abs(x.ratio - 1) > 0.05);
+  for (const sp of listed) {
+    const i = points.findIndex(p => when(p) >= sp.at);
+    if (i > 0 && near(stepAt(i), sp.ratio)) apply(i, sp.ratio);
+  }
+  for (let i = 1; i < points.length; i++) {
+    const step = stepAt(i);
+    if (Math.abs(Math.log(step)) < Math.log(1.6)) continue; // ordinary moves
+    const ratio = RATIOS.find(r => Math.abs(step / r - 1) < 0.03); // unlisted: only an almost exact ratio
+    if (ratio) apply(i, ratio);
+  }
+}
+
 async function priceHistory(db, request) {
   if (!request.auth?.uid) throw new HttpsError('unauthenticated', 'Must be signed in');
   const sym = String(request.data?.symbol || '').trim().toUpperCase();
@@ -1389,7 +1425,7 @@ async function priceHistory(db, request) {
   const intraday = range.startsWith('i');
   const prePost = range === 'i1d' || range === 'i5d';
   const res = await fetch(
-    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${yRange}${prePost ? '&includePrePost=true' : ''}`,
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=${interval}&range=${yRange}&events=split${prePost ? '&includePrePost=true' : ''}`,
     { headers: { 'User-Agent': 'Mozilla/5.0' } });
   if (res.status === 404) return { points: [] };
   if (!res.ok) throw new HttpsError('unavailable', 'Price history is unavailable right now.');
@@ -1415,6 +1451,7 @@ async function priceHistory(db, request) {
     if (points.length && points[points.length - 1].date === date) points[points.length - 1].value = value;
     else points.push({ date, value });
   }
+  adjustSplits(points, r?.events?.splits);
   if (prePost) { dropSpikes(points); dropOutliers(points); }
   // 1D starts from yesterday's official close (4 PM), so the change matches the
   // day's move. The chart's own "previous close" can be the last after-hours
