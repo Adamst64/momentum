@@ -1431,6 +1431,16 @@ async function priceHistory(db, request) {
       }
     } catch { /* fall back below */ }
     if (!prevClose) prevClose = r?.meta?.previousClose ?? r?.meta?.chartPreviousClose;
+    // Sanity check: the daily candles can disagree badly with today's prices (an ETF
+    // right after a split, a thin listing). When the close found is far from where
+    // today started, take whichever close Yahoo gives that's nearest to it.
+    const open = points.find(p => !p.ext)?.value ?? points[0].value;
+    const off = v => (v > 0 ? Math.abs(v / open - 1) : Infinity);
+    if (off(prevClose) > 0.25) {
+      const best = [prevClose, r?.meta?.previousClose, r?.meta?.chartPreviousClose].filter(v => v > 0).sort((a, b) => off(a) - off(b))[0];
+      if (best && off(best) < off(prevClose)) prevClose = best;
+      if (off(prevClose) > 0.25) prevClose = null; // still nonsense: start from today's first price instead
+    }
   }
   if (range === 'i1d' && points.length && prevClose > 0) {
     points.unshift({ date: points[0].date, t: points[0].t - 1, value: Math.round(prevClose * 1e4) / 1e4, label: 'Previous close', prev: true });

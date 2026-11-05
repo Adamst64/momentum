@@ -47,7 +47,7 @@ export function eventMark(e) {
 }
 const readGroups = () => { try { return JSON.parse(localStorage.getItem('momentum_chart_events') || '[]'); } catch { return []; } };
 
-export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = 'i1d', events = [], extQuote = null }) {
+export default function StockChart({ symbol, priceHistory, livePrice, refs, markers, trades = [], onDeleteTrade, onEditTrade, notes = [], onAddNote, onUpdateNote, onDeleteNote, hide, initialRange = 'i1d', events = [], extQuote = null, quote = null }) {
   const [groups, setGroupsState] = useState(readGroups);
   const toggleGroup = g => setGroupsState(cur => {
     const next = cur.includes(g) ? cur.filter(x => x !== g) : [...cur, g];
@@ -86,6 +86,12 @@ export default function StockChart({ symbol, priceHistory, livePrice, refs, mark
   }, [symbol, range, priceHistory]);
 
   let pts = points || [];
+  // 1D starts from the previous close. When the chart's one is far off the quote's
+  // (same session), trust the quote, so "since previous close" can't show a fake -68%
+  if (pts[0]?.prev && quote?.prevClose > 0 && quote.priceDate && pts[1]?.date === quote.priceDate
+    && Math.abs(pts[0].value / quote.prevClose - 1) > 0.15) {
+    pts = [{ ...pts[0], value: quote.prevClose }, ...pts.slice(1)];
+  }
   if (pts.length && livePrice && !range.startsWith('i')) pts = [...pts.slice(0, -1), { ...pts[pts.length - 1], value: livePrice }];
   // Pre-market / after hours on every range, not just 1D: the latest extended price
   // goes on the end when the history doesn't reach it yet (daily candles stop at the
