@@ -68,7 +68,7 @@ export default function TabBar({ items, value, onChange }) {
   return (
     <>
     <nav style={{
-      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430,
+      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 'var(--app-w)',
       ...(kb
         ? { top: `calc(var(--vv-top, 0px) + var(--vv-height, 100vh) - ${TABBAR_H}px)` }
         : { bottom: 0, paddingBottom: 'env(safe-area-inset-bottom)' }),
@@ -98,7 +98,7 @@ function KeepOrClear({ onKeep, onClear, onCancel }) {
   return ReactDOM.createPortal(
     <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 400, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'flex-end' }}>
       <div onClick={e => e.stopPropagation()} style={{
-        width: '100%', maxWidth: 430, margin: '0 auto', boxSizing: 'border-box', background: T.card, borderRadius: '20px 20px 0 0',
+        width: '100%', maxWidth: 'var(--app-w)', margin: '0 auto', boxSizing: 'border-box', background: T.card, borderRadius: '20px 20px 0 0',
         padding: '20px 20px calc(20px + env(safe-area-inset-bottom))', display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         <div style={{ fontSize: 17, fontWeight: 700, color: T.text }}>Unsaved entry</div>
@@ -213,7 +213,7 @@ export function SubBar({ items, value, onChange }) {
   if (!shown) return null;
   return (
     <nav style={{
-      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 430, height: SUBBAR_H, boxSizing: 'border-box',
+      position: 'fixed', zIndex: 300, left: 0, right: 0, margin: '0 auto', maxWidth: 'var(--app-w)', height: SUBBAR_H, boxSizing: 'border-box',
       ...(kb
         ? { top: `calc(var(--vv-top, 0px) + var(--vv-height, 100vh) - ${TABBAR_H + SUBBAR_H}px)` }
         : { bottom: `calc(env(safe-area-inset-bottom) + ${TABBAR_H}px)` }),

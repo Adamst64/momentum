@@ -28,6 +28,16 @@ export function extSession(p) {
 
 export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers = [], trades = [], selectedTrade = null, onTradeTap, emptyText, zeroSplit = false }) {
   const [hover, setHoverState] = useState(null);
+  // As wide as the space it's in (a laptop's wider column too); 340 until measured
+  const [W, setW] = useState(340);
+  const wrap = useRef(null);
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w > 0) setW(Math.max(280, w)); });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [points.length >= 2]); // eslint-disable-line react-hooks/exhaustive-deps
   const gradId = useId().replace(/[^a-zA-Z0-9]/g, '');
   const setHover = i => { setHoverState(i); if (onScrub) onScrub(i === null ? null : points[i]); };
   const [range, setRangeState] = useState(null); // [fromIndex, toIndex]
@@ -79,7 +89,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     );
   }
 
-  const W = 340, H = 260, PAD = 4;
+  const H = 260, PAD = 4;
   const vals = points.map(p => p.value);
   const refVals = refs.filter(r => r.value > 0).map(r => r.value);
   // Trades inside the chart's dates, each placed on its day (or the next point)
@@ -230,7 +240,7 @@ export function ValueChart({ points, hide, onScrub, onRange, refs = [], markers 
     }
   }
   return (
-    <div style={{ position: 'relative', ...noSelect }}>
+    <div ref={wrap} style={{ position: 'relative', ...noSelect }}>
       {!onScrub && <div style={{ height: 34, fontSize: 12, color: T.muted }}>
         {hp ? (
           <>

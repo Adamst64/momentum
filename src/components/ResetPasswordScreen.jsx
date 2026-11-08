@@ -43,7 +43,7 @@ export default function ResetPasswordScreen({ oobCode, verifyResetCode, applyPas
 
   return (
     <div style={{
-      background: T.bg, minHeight: '100dvh', maxWidth: 430,
+      background: T.bg, minHeight: '100dvh', maxWidth: 'var(--app-w)',
       margin: '0 auto', display: 'flex', flexDirection: 'column',
       justifyContent: 'center', padding: '0 24px',
     }}>

@@ -15,7 +15,7 @@ export default function BudgetPage({ title, subtitle, onClose, children }) {
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
         padding: 'calc(52px + env(safe-area-inset-top)) 20px 14px',
-        borderBottom: `1px solid ${T.cardBorder}`, maxWidth: 430, width: '100%', margin: '0 auto', boxSizing: 'border-box',
+        borderBottom: `1px solid ${T.cardBorder}`, maxWidth: 'var(--app-w)', width: '100%', margin: '0 auto', boxSizing: 'border-box',
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 18, fontWeight: 800, color: T.text }}>{title}</div>
@@ -23,7 +23,7 @@ export default function BudgetPage({ title, subtitle, onClose, children }) {
         </div>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <div style={{ maxWidth: 430, margin: '0 auto', padding: '18px 16px calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 32px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ maxWidth: 'var(--app-w)', margin: '0 auto', padding: '18px 16px calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 32px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
           {children}
         </div>
       </div>

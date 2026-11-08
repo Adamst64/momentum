@@ -33,7 +33,7 @@ export default function AuthScreen({ onSignIn, onSignUp, onResetPassword }) {
     <div style={{
       background: T.bg,
       minHeight: '100dvh',
-      maxWidth: 430,
+      maxWidth: 'var(--app-w)',
       margin: '0 auto',
       display: 'flex',
       flexDirection: 'column',

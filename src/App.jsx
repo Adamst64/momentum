@@ -329,7 +329,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ background: pageBg, minHeight: '100dvh', maxWidth: 430, margin: '0 auto', position: 'relative' }}>
+    <div style={{ background: pageBg, minHeight: '100dvh', maxWidth: 'var(--app-w)', margin: '0 auto', position: 'relative' }}>
       <header style={{
         position: 'sticky', top: 0, zIndex: 40,
         padding: '52px 20px 14px',
@@ -471,7 +471,7 @@ export default function App() {
           style={{
             position: 'fixed', zIndex: 46,
             // Above a section's switcher bar when it has one (see TabBar)
-            right: 'max(20px, calc(50vw - 195px))', bottom: 'calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 18px)',
+            right: 'max(20px, calc(50vw - var(--app-w) / 2 + 20px))', bottom: 'calc(env(safe-area-inset-bottom) + var(--bars-h, 0px) + 18px)',
             width: 58, height: 58, borderRadius: 29,
             background: T.card, border: `1px solid ${T.subtle}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -505,7 +505,7 @@ function BackButton({ show, onBack }) {
       style={{
         position: 'fixed', zIndex: 2000,
         // Pinned to the visible screen, so the keyboard never pushes it out of reach
-        top: 'calc(var(--vv-top, 0px) + env(safe-area-inset-top) + 8px)', left: 'max(12px, calc(50vw - 203px))',
+        top: 'calc(var(--vv-top, 0px) + env(safe-area-inset-top) + 8px)', left: 'max(12px, calc(50vw - var(--app-w) / 2 + 12px))',
         width: 40, height: 40, borderRadius: 20,
         background: 'rgba(44,44,46,0.85)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
         border: `1px solid ${T.subtle}`, boxShadow: '0 4px 14px rgba(0,0,0,0.45)',

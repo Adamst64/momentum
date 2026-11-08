@@ -63,7 +63,7 @@ export default function Modal({ title, onClose, children, full = true, bg }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%',
+          width: '100%', maxWidth: 'var(--app-w)', margin: '0 auto',
           background: bg || T.card,
           borderRadius: full ? 0 : '20px 20px 0 0',
           padding: full
