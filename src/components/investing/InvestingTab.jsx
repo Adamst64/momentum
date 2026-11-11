@@ -206,6 +206,14 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
     let live = true;
     const key = `${intraRange}|${heldKey}`;
     const held = heldKey.split(',').map(x => { const [symbol, q] = x.split(':'); return { symbol, qty: Number(q) }; });
+    // Today's buys and sells, at the time they were entered: before a buy its shares
+    // aren't counted (the money was still cash), so they don't gain from the open
+    const session = priceDate();
+    const todays = txs.filter(t => t.symbol && (t.type === 'buy' || t.type === 'sell') && t.date >= session)
+      .map(t => ({ symbol: t.symbol, at: Date.parse(t.createdAt || '') / 1000 || 0, dq: t.type === 'buy' ? t.quantity : -t.quantity,
+        cash: t.type === 'buy' ? t.quantity * t.price + (t.fee || 0) : -(t.quantity * t.price - (t.fee || 0)) }));
+    // Sold out today: held until the sale, so it's part of the line before that
+    todays.forEach(x => { if (!held.some(h => h.symbol === x.symbol)) held.push({ symbol: x.symbol, qty: 0 }); });
     Promise.all(held.map(h => hook.priceHistory(h.symbol, intraRange).then(pts => [h.symbol, pts.filter(p => !p.prev)]).catch(() => [h.symbol, []])))
       .then(pairs => {
         if (!live) return;
@@ -222,14 +230,16 @@ function InvestingTabInner({ hook, userId, budget, requested }) {
             while (i + 1 < pts.length && pts[i + 1].t <= t) i++;
             cursor[h.symbol] = i;
             const price = i >= 0 ? pts[i].value : pts[0]?.value ?? assets[h.symbol]?.price ?? 0;
-            v += h.qty * price;
+            let q = h.qty;
+            for (const x of todays) if (x.symbol === h.symbol && x.at > t) { q -= x.dq; v += x.cash; }
+            v += Math.max(0, q) * price;
           }
           return { date: labelAt[t].date, label: labelAt[t].label, t, ...(labelAt[t].ext ? { ext: labelAt[t].ext } : {}), value: v };
         });
         setIntra({ key, points });
       });
     return () => { live = false; };
-  }, [intraRange, heldKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [intraRange, heldKey, txs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Chart: the value history in the selected period, plus "now". Only market
   // days, so weekends and holidays don't show up as flat stretches. "Now" stands
@@ -803,7 +813,8 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
           {(() => {
             const dc = dayContext();
             // A fund whose new price isn't out yet has no move to show
-            const day = h.dayPct !== null && h.prevClose && Math.abs(h.price - h.prevClose) > 1e-9 ? { change: h.qty * (h.price - h.prevClose), pct: h.dayPct } : null;
+            // Your move today: shares bought today count from their price, not yesterday's close
+            const day = h.dayChange !== null && h.dayChange !== undefined && Math.abs(h.dayChange) > 0.005 ? { change: h.dayChange, pct: h.dayChangePct } : null;
             const ext = h.ext ? { change: h.qty * h.ext.change, pct: h.ext.pct, label: h.ext.label.toLowerCase() } : null;
             const line = (m, label, color, size = 11) => (
               <div style={{ fontSize: size, color }}>{signedMoney(m.change, hide)} ({pct(m.pct)}) {label}</div>

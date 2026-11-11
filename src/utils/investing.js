@@ -88,13 +88,17 @@ export function replay(txs, { byAccount = false } = {}) {
   const h = {};
   const hold = sym => {
     const k = byAccount ? `${curAcct}|${sym}` : sym;
-    return (h[k] = h[k] || { key: k, symbol: sym, account: byAccount ? curAcct : null, qty: 0, cost: 0, realized: 0, soldBasis: 0, dividends: 0, firstDate: null, lot: null, lastExit: null });
+    return (h[k] = h[k] || { key: k, symbol: sym, account: byAccount ? curAcct : null, qty: 0, cost: 0, realized: 0, soldBasis: 0, dividends: 0, firstDate: null, lot: null, lastExit: null,
+      today: { boughtQty: 0, boughtCost: 0, soldQty: 0, soldProceeds: 0 } });
   };
   let curAcct = '';
   const addCash = n => { cash += n; cashBy[curAcct] = (cashBy[curAcct] || 0) + n; };
   // lot: the current position since it last opened from zero (cost basis in, sells out).
   // lastExit: that lot's summary once it's fully sold — for the "Sold" list.
   const problems = [];
+  // Trades in the current session: today's change counts shares bought today from
+  // their price, not from yesterday's close (see priced)
+  const session = currentSession();
 
   for (const t of sortTx(txs)) {
     curAcct = acctOf(t);
@@ -109,6 +113,7 @@ export function replay(txs, { byAccount = false } = {}) {
       else addCash(-total);
       if (x.qty < 1e-9) x.lot = { start: t.date, cost: 0, sold: 0, proceeds: 0, realized: 0 };
       x.lot.cost += total;
+      if (t.date >= session) { x.today.boughtQty += t.quantity; x.today.boughtCost += total; }
       x.qty += t.quantity;
       x.cost += total;
       x.firstDate = x.firstDate || t.date;
@@ -121,6 +126,7 @@ export function replay(txs, { byAccount = false } = {}) {
       const proceeds = t.quantity * t.price - (t.fee || 0);
       if (t.toCash === false) netDeposits -= proceeds;
       else addCash(proceeds);
+      if (t.date >= session) { x.today.soldQty += sold; x.today.soldProceeds += proceeds; }
       x.realized += sold * (t.price - avg) - (t.fee || 0);
       x.soldBasis += avg * sold;
       if (x.lot) {
@@ -171,6 +177,13 @@ function priced(x, assets) {
   const now = ext ? ext.price : price;
   const value = now !== null ? x.qty * now : null;
   const unrealized = value !== null ? value - x.cost : null;
+  // Today's change (regular session): what's held now at today's price, minus what was
+  // held at the last close, minus what today's buys cost, plus what today's sells
+  // brought in. Shares bought at 11:30 gain only from their price, not from the open.
+  const td = x.today || { boughtQty: 0, boughtCost: 0, soldQty: 0, soldProceeds: 0 };
+  const qtyPrev = Math.max(0, x.qty - td.boughtQty + td.soldQty);
+  const dayBase = qtyPrev * (prevClose || 0) + td.boughtCost;
+  const dayChange = price !== null && prevClose ? x.qty * price - qtyPrev * prevClose - td.boughtCost + td.soldProceeds : null;
   return {
     ...x,
     name: a.name || null,
@@ -179,7 +192,10 @@ function priced(x, assets) {
     avgCost: x.qty > 0 ? x.cost / x.qty : null,
     value, unrealized,
     unrealizedPct: unrealized !== null && x.cost > 0 ? unrealized / x.cost : null,
-    dayPct: price && prevClose ? (price - prevClose) / prevClose : null,
+    dayPct: price && prevClose ? (price - prevClose) / prevClose : null, // the stock's own move
+    dayChange, // your money's move today
+    dayChangePct: dayChange !== null && dayBase > 0 ? dayChange / dayBase : null,
+    qtyPrev,
     ext,
   };
 }
@@ -219,7 +235,8 @@ export function accountGroups(txs, assets, accounts = []) {
         soldBasis: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.soldBasis, 0),
         dividends: Object.values(r.holdings).filter(x => x.account === id).reduce((t, x) => t + x.dividends, 0),
         value: cash + ps.reduce((t, p) => t + (p.value || 0), 0),
-        dayChange: ps.reduce((t, p) => t + (p.prevClose && p.price ? p.qty * (p.price - p.prevClose) : 0), 0),
+        // Open positions plus ones sold out today (their sale is part of today's move)
+        dayChange: [...ps, ...closed.filter(p => p.account === id)].reduce((t, p) => t + (p.dayChange || 0), 0),
         // Pre-market / after-hours move of what's held (stocks and ETFs; funds don't trade then)
         ext: (() => {
           const withExt = ps.filter(p => p.ext);
@@ -248,9 +265,9 @@ export function computePortfolio(txs, assets) {
     const row = priced(x, assets);
     realized += x.realized;
     dividends += x.dividends;
+    dayChange += row.dayChange || 0; // sold out today counts too
     if (x.qty > 0 && row.value !== null) {
       holdingsValue += row.value;
-      if (row.prevClose) dayChange += x.qty * (row.price - row.prevClose);
       if (row.ext) { extChange += x.qty * row.ext.change; extLabel = row.ext.label; }
     }
     return row;
