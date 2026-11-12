@@ -41,7 +41,11 @@ export function extendedPrice(a, now = new Date()) {
   if (!session) return null;
   const n = easternDate(now);
   // Pre-market: same day, before the open. After hours: no session has opened since that day.
-  const current = session === 'pre' ? n.date === t.date && n.minutes < OPEN : currentSession(now) === t.date;
+  // Pre-market stays current past 9:30 until today's first regular price has come in,
+  // so the move carries straight on into "today" instead of dropping to 0 for a moment
+  const current = session === 'pre'
+    ? n.date === t.date && (n.minutes < OPEN || (!!a.priceDate && a.priceDate < n.date))
+    : currentSession(now) === t.date;
   if (!current) return null;
   return {
     price: a.extPrice,
