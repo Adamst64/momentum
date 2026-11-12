@@ -267,10 +267,14 @@ export default function HoldingModal({ hook, budget, symbol, account, hide, user
           <div id="h-position" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, ...JUMP }}>
             {stat(scoped ? 'Shares' : multi ? 'Total shares' : 'Shares', qtyFmt(v.qty))}
             {stat('Avg cost / share', money(v.avgCost, hide))}
-            {stat('Price', money(v.price, hide))}
+            {/* The price the value and gains use: the after-hours / pre-market trade while
+                that's live (with the regular close under it), else the regular price */}
+            {stat(ext ? `Price · ${ext.label.toLowerCase()}` : 'Price', ext
+              ? <>{money(ext.price, hide)}<span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: T.muted }}>Close {money(v.price, hide)}</span></>
+              : money(v.price, hide))}
             {stat(scoped || !multi ? 'Value' : 'Total value', money(v.value, hide))}
             {stat('Unrealized', `${signedMoney(v.unrealized, hide)} (${pct(v.unrealizedPct)})`, gainColor(v.unrealized))}
-            {stat('Today', pct(v.dayPct), gainColor(v.dayPct))}
+            {stat('Today', <>{pct(v.dayPct)}{ext && <span style={{ display: 'block', fontSize: 11, fontWeight: 400, color: gainColor(ext.pct) }}>{pct(ext.pct)} {ext.label.toLowerCase()}</span>}</>, gainColor(v.dayPct))}
             {stat('Realized (sells)', signedMoney(v.realized, hide), gainColor(v.realized))}
             {stat('Dividends', money(v.dividends, hide), v.dividends > 0 ? T.green : T.text)}
           </div>

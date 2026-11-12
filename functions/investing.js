@@ -100,7 +100,14 @@ async function extendedQuote(symbol) {
     const when = new Date(ts[i] * 1000);
     const { minutes: m, today } = easternNow(when);
     const session = m < 9 * 60 + 30 ? 'pre' : m >= closeMinutes(today) ? 'post' : null;
-    return session ? { extPrice: Math.round(closes[i] * 1e4) / 1e4, extSession: session, extTime: when.toISOString() } : null;
+    if (!session) return null;
+    // Extended-hours trades are thin and the very last one can be an odd lot far off
+    // the market: take the middle of the last few trades in the 15 minutes before it
+    const recent = [];
+    for (let k = i; k >= 0 && recent.length < 5 && ts[i] - ts[k] <= 15 * 60; k--) if (closes[k] > 0) recent.push(closes[k]);
+    recent.sort((a, b) => a - b);
+    const price = recent.length >= 3 ? recent[recent.length >> 1] : closes[i];
+    return { extPrice: Math.round(price * 1e4) / 1e4, extSession: session, extTime: when.toISOString() };
   }
   return null;
 }
