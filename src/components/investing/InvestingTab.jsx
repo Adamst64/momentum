@@ -781,33 +781,24 @@ function HoldingRow({ h, first, share, inAccounts, assets, today, soonDate, late
               </span>
             )}
             {h.source === 'manual' && <span style={{ fontSize: 10, color: T.muted, fontWeight: 400 }}>manual</span>}
-            {inAccounts > 1 && <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, background: T.bg, padding: '2px 6px', borderRadius: 8 }}>in {inAccounts} accounts</span>}
+            {inAccounts > 1 && <span style={{ fontSize: 10, fontWeight: 600, color: T.muted, background: T.bg, padding: '2px 6px', borderRadius: 8, whiteSpace: 'nowrap' }}>{inAccounts} accounts</span>}
           </div>
-          {/* The price right now (pre-market / after hours when that's live), then what you hold */}
-          {(() => {
-            const ext = h.ext && Math.abs(h.ext.change) > 1e-9 ? h.ext : null;
-            return (
-              <div style={{ fontSize: 14, fontWeight: 600, color: T.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                {h.price !== null && h.price !== undefined ? money(ext ? ext.price : h.price) : '—'}
-                {ext && <span style={{ fontSize: 11, fontWeight: 400, color: T.muted }}> {ext.label.toLowerCase()}</span>}
-              </div>
-            );
-          })()}
-          <div style={{ fontSize: 12, color: T.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {qtyFmt(h.qty)} sh · avg {money(h.avgCost, hide)}
+          {/* Just the price right now (the after-hours / pre-market one while that's live);
+              shares, average cost and targets are on the stock's page */}
+          <div style={{ fontSize: 14, fontWeight: 600, color: T.text, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {h.price !== null && h.price !== undefined ? money(h.ext ? h.ext.price : h.price) : '—'}
           </div>
           {showEarn && showNext && (
             <div style={{ fontSize: 12, color: T.khaki, marginTop: 2 }}>
               {next.kind === 'earnings' ? 'Earnings report' : next.label} · {formatDateYear(next.date)}
             </div>
           )}
-          <TargetLine target={assets[h.symbol]?.priceTarget} analyst={assets[h.symbol]?.analyst?.targetMean} price={h.price} hide={hide} />
         </div>
         <Sparkline symbol={h.symbol} />
         <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
           <div style={{ fontSize: 15, color: T.text, fontWeight: 600 }}>{money(h.value, hide)}</div>
           {/* Total gain, then the day's move: live (today / pre-market / after hours) in color, the last session's in grey */}
-          <div style={{ fontSize: 12, color: gainColor(h.unrealized) }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: gainColor(h.unrealized), margin: '1px 0 2px' }}>
             {signedMoney(h.unrealized, hide)}{h.unrealizedPct !== null ? ` (${pct(h.unrealizedPct)})` : ''}
           </div>
           {(() => {
